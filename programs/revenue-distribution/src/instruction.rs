@@ -54,8 +54,6 @@ pub enum RevenueDistributionInstructionData {
     InitializeJournal,
     InitializeDistribution,
     ConfigureDistribution(ConfigureDistributionData),
-    // SweepToDistribution,
-    // DistributeRevenue,
 }
 
 impl From<AdminKey> for RevenueDistributionInstructionData {
@@ -114,14 +112,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_journal");
     pub const INITIALIZE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_distribution");
-    pub const CONFIGURE_EPOCH_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::configure_epoch_distribution");
-    // pub const UPDATE_CONTRIBUTOR_PROPORTION: [u8; DISCRIMINATOR_LEN] =
-    //     sha2_discriminator(b"dz::ix::set_contributor_proportion");
-    // pub const SWEEP_TO_DISTRIBUTION: [u8; DISCRIMINATOR_LEN] =
-    //     sha2_discriminator(b"dz::ix::sweep_to_distribution");
-    // pub const DISTRIBUTE_REVENUE: [u8; DISCRIMINATOR_LEN] =
-    //     sha2_discriminator(b"dz::ix::distribute_revenue");
+    pub const CONFIGURE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::configure_distribution");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -134,12 +126,9 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             }
             Self::INITIALIZE_JOURNAL => Ok(Self::InitializeJournal),
             Self::INITIALIZE_DISTRIBUTION => Ok(Self::InitializeDistribution),
-            Self::CONFIGURE_EPOCH_DISTRIBUTION => {
+            Self::CONFIGURE_DISTRIBUTION => {
                 ConfigureDistributionData::deserialize_reader(reader).map(Into::into)
             }
-            // Self::UPDATE_CONTRIBUTOR_PROPORTION => Ok(Self::SetContributorProportion),
-            // Self::SWEEP_TO_DISTRIBUTION => Ok(Self::SweepToDistribution),
-            // Self::DISTRIBUTE_REVENUE => Ok(Self::DistributeRevenue),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid discriminator",
@@ -163,7 +152,7 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             Self::InitializeJournal => Self::INITIALIZE_JOURNAL.serialize(writer),
             Self::InitializeDistribution => Self::INITIALIZE_DISTRIBUTION.serialize(writer),
             Self::ConfigureDistribution(data) => {
-                Self::CONFIGURE_EPOCH_DISTRIBUTION.serialize(writer)?;
+                Self::CONFIGURE_DISTRIBUTION.serialize(writer)?;
                 data.serialize(writer)
             } // Self::Create2zFeeAccount => Self::CREATE_2Z_FEE_ACCOUNT.serialize(writer),
               // Self::SetSolSwapProgram => Self::SET_SOL_SWAP_PROGRAM.serialize(writer),

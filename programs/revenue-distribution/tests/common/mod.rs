@@ -1,11 +1,13 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
-use doublezero_revenue_distribution::instruction::ConfigureDistributionData;
 use doublezero_revenue_distribution::{
     state::Distribution,
     types::DoubleZeroEpoch,
     {
-        instruction::{AdminKey, ConfigureProgramSetting, RevenueDistributionInstructionData},
+        instruction::{
+            AdminKey, ConfigureDistributionData, ConfigureProgramSetting,
+            RevenueDistributionInstructionData,
+        },
         state::{self, Journal, ProgramConfig},
         DOUBLEZERO_MINT, ID,
     },

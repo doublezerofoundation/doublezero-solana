@@ -1,8 +1,7 @@
-use std::ops::{DerefMut, Range};
 use std::{
     cell::{Ref, RefMut},
     iter::Enumerate,
-    ops::Deref,
+    ops::{Deref, DerefMut, Range},
     slice::Iter,
 };
 

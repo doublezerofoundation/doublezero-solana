@@ -4,9 +4,12 @@ mod upgrade_authority;
 pub use iter::*;
 pub use upgrade_authority::*;
 
+//
+
+use std::cell::{Ref, RefMut};
+
 use solana_account_info::AccountInfo;
 use solana_program_error::ProgramError;
-use std::cell::{Ref, RefMut};
 
 /// A silly (but effective) way to make sure we get Ref<[u8]> because
 /// [AccountInfo::try_borrow_data] returns Ref<&mut [u8]>.
