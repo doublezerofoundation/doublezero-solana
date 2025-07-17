@@ -259,8 +259,7 @@ async fn test_initialize_distribution() {
     );
 
     let dz_epoch = DoubleZeroEpoch::new(0);
-    let (distribution_key, distribution, distribution_custody) =
-        test_setup.fetch_distribution(dz_epoch).await;
+    let (_, distribution, distribution_custody) = test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
     expected_distribution.dz_epoch = dz_epoch;
