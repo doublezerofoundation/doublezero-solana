@@ -5,8 +5,7 @@ use doublezero_revenue_distribution::{
     types::DoubleZeroEpoch,
     {
         instruction::{
-            AdminKey, ConfigureDistributionData, ConfigureProgramSetting,
-            RevenueDistributionInstructionData,
+            ConfigureDistributionData, ConfigureProgramSetting, RevenueDistributionInstructionData,
         },
         state::{self, Journal, ProgramConfig},
         DOUBLEZERO_MINT, ID,
@@ -119,7 +118,7 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn set_admin(&mut self, admin_key: AdminKey) -> Result<&mut Self, BanksClientError> {
+    pub async fn set_admin(&mut self, admin_key: Pubkey) -> Result<&mut Self, BanksClientError> {
         let owner_signer = &self.owner_signer;
         let payer_signer = &self.payer_signer;
 
@@ -130,7 +129,9 @@ impl ProgramTestWithOwner {
                 AccountMeta::new_readonly(owner_signer.pubkey(), true),
                 AccountMeta::new(ProgramConfig::find_address().0, false),
             ],
-            data: admin_key.try_into().unwrap(),
+            data: RevenueDistributionInstructionData::SetAdmin(admin_key)
+                .try_into()
+                .unwrap(),
         };
 
         let new_blockhash = process_instructions_for_test(
@@ -161,7 +162,9 @@ impl ProgramTestWithOwner {
                     AccountMeta::new(ProgramConfig::find_address().0, false),
                     AccountMeta::new_readonly(admin_signer.pubkey(), true),
                 ],
-                data: setting.try_into().unwrap(),
+                data: RevenueDistributionInstructionData::ConfigureProgram(setting)
+                    .try_into()
+                    .unwrap(),
             })
             .collect::<Vec<_>>();
 
@@ -277,7 +280,9 @@ impl ProgramTestWithOwner {
                     AccountMeta::new_readonly(accountant_signer.pubkey(), true),
                     AccountMeta::new(Distribution::find_address(dz_epoch).0, false),
                 ],
-                data: data.try_into().unwrap(),
+                data: RevenueDistributionInstructionData::ConfigureDistribution(data)
+                    .try_into()
+                    .unwrap(),
             })
             .collect::<Vec<_>>();
 

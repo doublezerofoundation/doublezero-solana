@@ -61,6 +61,9 @@ fn process_instruction(
         Ok(RevenueDistributionInstructionData::ConfigureDistribution(data)) => {
             process_configure_distribution(accounts, data)
         }
+        Ok(RevenueDistributionInstructionData::InitializePrepaidUser(prepaid_user_key)) => {
+            process_initialize_prepaid_user(accounts, prepaid_user_key)
+        }
     }
 }
 
@@ -629,6 +632,13 @@ fn process_configure_distribution(
     }
 
     Ok(())
+}
+
+fn process_initialize_prepaid_user(
+    _accounts: &[AccountInfo],
+    _prepaid_user_key: Pubkey,
+) -> ProgramResult {
+    todo!();
 }
 
 //

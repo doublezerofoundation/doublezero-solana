@@ -5,7 +5,7 @@ use doublezero_revenue_distribution::{
     instruction::ConfigureFlag,
     types::{BurnRate, DoubleZeroEpoch},
     {
-        instruction::{AdminKey, ConfigureDistributionData, ConfigureProgramSetting},
+        instruction::{ConfigureDistributionData, ConfigureProgramSetting},
         state::{self, CommunityBurnRateParameters, Distribution, Journal, ProgramConfig},
         types::ValidatorFee,
         DOUBLEZERO_MINT,
@@ -62,7 +62,7 @@ async fn test_set_admin() {
         .initialize_program()
         .await
         .unwrap()
-        .set_admin(AdminKey::new(admin_signer.pubkey()))
+        .set_admin(admin_signer.pubkey())
         .await
         .unwrap();
 
@@ -105,7 +105,7 @@ async fn test_configure_program() {
         .initialize_program()
         .await
         .unwrap()
-        .set_admin(AdminKey::new(admin_signer.pubkey()))
+        .set_admin(admin_signer.pubkey())
         .await
         .unwrap()
         .configure_program(
@@ -219,7 +219,7 @@ async fn test_initialize_distribution() {
         .initialize_program()
         .await
         .unwrap()
-        .set_admin(AdminKey::new(admin_signer.pubkey()))
+        .set_admin(admin_signer.pubkey())
         .await
         .unwrap()
         .configure_program(
@@ -347,7 +347,7 @@ async fn test_configure_distribution() {
         .initialize_program()
         .await
         .unwrap()
-        .set_admin(AdminKey::new(admin_signer.pubkey()))
+        .set_admin(admin_signer.pubkey())
         .await
         .unwrap()
         .configure_program(

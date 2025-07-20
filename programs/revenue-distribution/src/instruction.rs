@@ -5,15 +5,6 @@ use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
 use solana_hash::Hash;
 use solana_pubkey::Pubkey;
 
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Copy, Default, PartialEq, Eq)]
-pub struct AdminKey(Pubkey);
-
-impl AdminKey {
-    pub fn new(pubkey: Pubkey) -> Self {
-        Self(pubkey)
-    }
-}
-
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq)]
 pub enum ConfigureProgramSetting {
     Flag(ConfigureFlag),
@@ -54,49 +45,13 @@ pub enum RevenueDistributionInstructionData {
     InitializeJournal,
     InitializeDistribution,
     ConfigureDistribution(ConfigureDistributionData),
+    InitializePrepaidUser(Pubkey),
 }
 
-impl From<AdminKey> for RevenueDistributionInstructionData {
-    fn from(key: AdminKey) -> Self {
-        Self::SetAdmin(key.0)
-    }
-}
-
-impl TryFrom<AdminKey> for Vec<u8> {
+impl TryFrom<RevenueDistributionInstructionData> for Vec<u8> {
     type Error = io::Error;
 
-    fn try_from(key: AdminKey) -> Result<Self, Self::Error> {
-        let ix_data = RevenueDistributionInstructionData::from(key);
-        borsh::to_vec(&ix_data)
-    }
-}
-
-impl From<ConfigureProgramSetting> for RevenueDistributionInstructionData {
-    fn from(setting: ConfigureProgramSetting) -> Self {
-        Self::ConfigureProgram(setting)
-    }
-}
-
-impl TryFrom<ConfigureProgramSetting> for Vec<u8> {
-    type Error = io::Error;
-
-    fn try_from(setting: ConfigureProgramSetting) -> Result<Self, Self::Error> {
-        let ix_data = RevenueDistributionInstructionData::from(setting);
-        borsh::to_vec(&ix_data)
-    }
-}
-
-impl From<ConfigureDistributionData> for RevenueDistributionInstructionData {
-    fn from(data: ConfigureDistributionData) -> Self {
-        Self::ConfigureDistribution(data)
-    }
-}
-
-impl TryFrom<ConfigureDistributionData> for Vec<u8> {
-    type Error = io::Error;
-
-    fn try_from(data: ConfigureDistributionData) -> Result<Self, Self::Error> {
-        let ix_data = RevenueDistributionInstructionData::from(data);
+    fn try_from(ix_data: RevenueDistributionInstructionData) -> Result<Self, Self::Error> {
         borsh::to_vec(&ix_data)
     }
 }
@@ -114,20 +69,24 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_distribution");
     pub const CONFIGURE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_distribution");
+    pub const INITIALIZE_PREPAID_USER: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::initialize_prepaid_user");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
     fn deserialize_reader<R: io::Read>(reader: &mut R) -> std::io::Result<Self> {
         match Discriminator::deserialize_reader(reader)? {
             Self::INITIALIZE_PROGRAM => Ok(Self::InitializeProgram),
-            Self::SET_ADMIN => AdminKey::deserialize_reader(reader).map(Into::into),
+            Self::SET_ADMIN => Pubkey::deserialize_reader(reader).map(Self::SetAdmin),
             Self::CONFIGURE_PROGRAM => {
-                ConfigureProgramSetting::deserialize_reader(reader).map(Into::into)
+                ConfigureProgramSetting::deserialize_reader(reader).map(Self::ConfigureProgram)
             }
             Self::INITIALIZE_JOURNAL => Ok(Self::InitializeJournal),
             Self::INITIALIZE_DISTRIBUTION => Ok(Self::InitializeDistribution),
-            Self::CONFIGURE_DISTRIBUTION => {
-                ConfigureDistributionData::deserialize_reader(reader).map(Into::into)
+            Self::CONFIGURE_DISTRIBUTION => ConfigureDistributionData::deserialize_reader(reader)
+                .map(Self::ConfigureDistribution),
+            Self::INITIALIZE_PREPAID_USER => {
+                Pubkey::deserialize_reader(reader).map(Self::InitializePrepaidUser)
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -154,12 +113,11 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             Self::ConfigureDistribution(data) => {
                 Self::CONFIGURE_DISTRIBUTION.serialize(writer)?;
                 data.serialize(writer)
-            } // Self::Create2zFeeAccount => Self::CREATE_2Z_FEE_ACCOUNT.serialize(writer),
-              // Self::SetSolSwapProgram => Self::SET_SOL_SWAP_PROGRAM.serialize(writer),
-              // Self::InitializeDistribution => Self::INITIALIZE_DISTRIBUTION.serialize(writer),
-              // Self::SetContributorProportion => Self::UPDATE_CONTRIBUTOR_PROPORTION.serialize(writer),
-              // Self::SweepToDistribution => Self::SWEEP_TO_DISTRIBUTION.serialize(writer),
-              // Self::DistributeRevenue => Self::DISTRIBUTE_REVENUE.serialize(writer),
+            }
+            Self::InitializePrepaidUser(key) => {
+                Self::INITIALIZE_PREPAID_USER.serialize(writer)?;
+                key.serialize(writer)
+            }
         }
     }
 }
