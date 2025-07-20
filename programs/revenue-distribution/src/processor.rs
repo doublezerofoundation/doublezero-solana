@@ -25,7 +25,7 @@ use crate::{
         CUSTODIED_2Z_SEED_PREFIX,
     },
     types::{BurnRate, ValidatorFee},
-    DOUBLEZERO_MINT, ID,
+    DOUBLEZERO_MINT_KEY, ID,
 };
 
 solana_program_entrypoint::entrypoint!(process_instruction);
@@ -383,7 +383,7 @@ fn process_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // Enforce this account location.
-    if spl_2z_mint_info.key != &DOUBLEZERO_MINT {
+    if spl_2z_mint_info.key != &DOUBLEZERO_MINT_KEY {
         msg!("Invalid address for 2Z mint (account {})", account_index);
         return Err(ProgramError::InvalidAccountData);
     }
@@ -404,7 +404,7 @@ fn process_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     let initialize_token_account_ix = spl_token::instruction::initialize_account3(
         &spl_token::ID,
         &expected_custodied_2z_key,
-        &DOUBLEZERO_MINT,
+        &DOUBLEZERO_MINT_KEY,
         &expected_journal_key,
     )
     .unwrap();
@@ -559,7 +559,7 @@ fn process_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // Enforce this account location.
-    if spl_2z_mint_info.key != &DOUBLEZERO_MINT {
+    if spl_2z_mint_info.key != &DOUBLEZERO_MINT_KEY {
         msg!("Invalid address for 2Z mint (account {})", account_index);
         return Err(ProgramError::InvalidAccountData);
     }
@@ -580,7 +580,7 @@ fn process_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     let initialize_token_account_ix = spl_token::instruction::initialize_account3(
         &spl_token::ID,
         &expected_custodied_2z_key,
-        &DOUBLEZERO_MINT,
+        &DOUBLEZERO_MINT_KEY,
         &expected_distribution_key,
     )
     .unwrap();

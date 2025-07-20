@@ -1,14 +1,21 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
-use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
+use doublezero_program_tools::{
+    instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
+};
 use doublezero_revenue_distribution::{
     state::Distribution,
     types::DoubleZeroEpoch,
     {
         instruction::{
+            account::{
+                ConfigureDistributionAccounts, ConfigureProgramAccounts,
+                InitializeDistributionAccounts, InitializeJournalAccounts,
+                InitializeProgramAccounts, SetAdminAccounts,
+            },
             ConfigureDistributionData, ConfigureProgramSetting, RevenueDistributionInstructionData,
         },
         state::{self, Journal, ProgramConfig},
-        DOUBLEZERO_MINT, ID,
+        DOUBLEZERO_MINT_KEY, ID,
     },
 };
 use solana_loader_v3_interface::{get_program_data_address, state::UpgradeableLoaderState};
@@ -18,7 +25,7 @@ use solana_pubkey::Pubkey;
 use solana_sdk::{
     account::Account,
     hash::Hash,
-    instruction::{AccountMeta, Instruction},
+    instruction::Instruction,
     message::{v0::Message, VersionedMessage},
     signature::{Keypair, Signer},
     transaction::VersionedTransaction,
@@ -59,7 +66,7 @@ pub async fn start_test_with_accounts<const N: usize>(
         data: BASE64_STANDARD.decode("AAAAAE1jnR8S73ewuG1cltefhmHehgZSBXMl+4ukrwX7lnXwAADBb/KGIwAGAQAAAABNY50fEu93sLhtXJbXn4Zh3oYGUgVzJfuLpK8F+5Z18A==").unwrap(),
         ..Default::default()
     };
-    program_test.add_account(DOUBLEZERO_MINT, mint_acct);
+    program_test.add_account(DOUBLEZERO_MINT_KEY, mint_acct);
 
     for (key, account) in accounts.into_iter() {
         program_test.add_account(key, account);
@@ -88,15 +95,12 @@ impl ProgramTestWithOwner {
         let payer_signer = &self.payer_signer;
         let program_config_key = ProgramConfig::find_address().0;
 
-        let initialize_program_ix = Instruction {
-            program_id: ID,
-            accounts: vec![
-                AccountMeta::new(payer_signer.pubkey(), true),
-                AccountMeta::new(program_config_key, false),
-                AccountMeta::new_readonly(solana_system_interface::program::ID, false),
-            ],
-            data: borsh::to_vec(&RevenueDistributionInstructionData::InitializeProgram).unwrap(),
-        };
+        let initialize_program_ix = try_build_instruction(
+            &ID,
+            InitializeProgramAccounts::new(payer_signer.pubkey()),
+            &RevenueDistributionInstructionData::InitializeProgram,
+        )
+        .unwrap();
 
         // TODO: Remove from here and use this for happy path testing.
         let remove_me_ix = solana_system_interface::instruction::transfer(
@@ -122,17 +126,12 @@ impl ProgramTestWithOwner {
         let owner_signer = &self.owner_signer;
         let payer_signer = &self.payer_signer;
 
-        let set_admin_ix = Instruction {
-            program_id: ID,
-            accounts: vec![
-                AccountMeta::new_readonly(program_data_key(), false),
-                AccountMeta::new_readonly(owner_signer.pubkey(), true),
-                AccountMeta::new(ProgramConfig::find_address().0, false),
-            ],
-            data: RevenueDistributionInstructionData::SetAdmin(admin_key)
-                .try_into()
-                .unwrap(),
-        };
+        let set_admin_ix = try_build_instruction(
+            &ID,
+            SetAdminAccounts::new(program_data_key(), owner_signer.pubkey()),
+            &RevenueDistributionInstructionData::SetAdmin(admin_key),
+        )
+        .unwrap();
 
         let new_blockhash = process_instructions_for_test(
             &self.banks_client,
@@ -156,15 +155,13 @@ impl ProgramTestWithOwner {
 
         let configure_program_ixs = settings
             .into_iter()
-            .map(|setting| Instruction {
-                program_id: ID,
-                accounts: vec![
-                    AccountMeta::new(ProgramConfig::find_address().0, false),
-                    AccountMeta::new_readonly(admin_signer.pubkey(), true),
-                ],
-                data: RevenueDistributionInstructionData::ConfigureProgram(setting)
-                    .try_into()
-                    .unwrap(),
+            .map(|setting| {
+                try_build_instruction(
+                    &ID,
+                    ConfigureProgramAccounts::new(admin_signer.pubkey()),
+                    &RevenueDistributionInstructionData::ConfigureProgram(setting),
+                )
+                .unwrap()
             })
             .collect::<Vec<_>>();
 
@@ -185,18 +182,12 @@ impl ProgramTestWithOwner {
         let payer_signer = &self.payer_signer;
         let journal_key = Journal::find_address().0;
 
-        let initialize_journal_ix = Instruction {
-            program_id: ID,
-            accounts: vec![
-                AccountMeta::new(payer_signer.pubkey(), true),
-                AccountMeta::new(journal_key, false),
-                AccountMeta::new(state::find_custodied_2z_address(&journal_key).0, false),
-                AccountMeta::new_readonly(DOUBLEZERO_MINT, false),
-                AccountMeta::new_readonly(spl_token::ID, false),
-                AccountMeta::new_readonly(solana_system_interface::program::ID, false),
-            ],
-            data: borsh::to_vec(&RevenueDistributionInstructionData::InitializeJournal).unwrap(),
-        };
+        let initialize_journal_ix = try_build_instruction(
+            &ID,
+            InitializeJournalAccounts::new(payer_signer.pubkey()),
+            &RevenueDistributionInstructionData::InitializeJournal,
+        )
+        .unwrap();
 
         // TODO: Remove from here and use this for happy path testing.
         let remove_me_ix =
@@ -221,39 +212,23 @@ impl ProgramTestWithOwner {
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let (program_config_key, program_config) = self.fetch_program_config().await;
-        let epoch_distribution_key = Distribution::find_address(program_config.next_dz_epoch).0;
+        let (_, program_config) = self.fetch_program_config().await;
 
-        let initialize_epoch_distribution_ix = Instruction {
-            program_id: ID,
-            accounts: vec![
-                AccountMeta::new(program_config_key, false),
-                AccountMeta::new_readonly(accountant_signer.pubkey(), true),
-                AccountMeta::new(payer_signer.pubkey(), true),
-                AccountMeta::new(epoch_distribution_key, false),
-                AccountMeta::new(
-                    state::find_custodied_2z_address(&epoch_distribution_key).0,
-                    false,
-                ),
-                AccountMeta::new_readonly(DOUBLEZERO_MINT, false),
-                AccountMeta::new_readonly(spl_token::ID, false),
-                AccountMeta::new_readonly(solana_system_interface::program::ID, false),
-            ],
-            data: borsh::to_vec(&RevenueDistributionInstructionData::InitializeDistribution)
-                .unwrap(),
-        };
-
-        // TODO: Remove from here and use this for happy path testing.
-        let remove_me_ix = solana_system_interface::instruction::transfer(
-            &payer_signer.pubkey(),
-            &epoch_distribution_key,
-            1,
-        );
+        let initialize_distribution_ix = try_build_instruction(
+            &ID,
+            InitializeDistributionAccounts::new(
+                accountant_signer.pubkey(),
+                payer_signer.pubkey(),
+                program_config.next_dz_epoch,
+            ),
+            &RevenueDistributionInstructionData::InitializeDistribution,
+        )
+        .unwrap();
 
         let new_blockhash = process_instructions_for_test(
             &self.banks_client,
             self.recent_blockhash,
-            &[remove_me_ix, initialize_epoch_distribution_ix],
+            &[initialize_distribution_ix],
             &[payer_signer, accountant_signer],
         )
         .await?;
@@ -273,16 +248,13 @@ impl ProgramTestWithOwner {
 
         let configure_program_ixs = data
             .into_iter()
-            .map(|data| Instruction {
-                program_id: ID,
-                accounts: vec![
-                    AccountMeta::new_readonly(ProgramConfig::find_address().0, false),
-                    AccountMeta::new_readonly(accountant_signer.pubkey(), true),
-                    AccountMeta::new(Distribution::find_address(dz_epoch).0, false),
-                ],
-                data: RevenueDistributionInstructionData::ConfigureDistribution(data)
-                    .try_into()
-                    .unwrap(),
+            .map(|data| {
+                try_build_instruction(
+                    &ID,
+                    ConfigureDistributionAccounts::new(accountant_signer.pubkey(), dz_epoch),
+                    &RevenueDistributionInstructionData::ConfigureDistribution(data),
+                )
+                .unwrap()
             })
             .collect::<Vec<_>>();
 

@@ -1,3 +1,7 @@
+pub mod account;
+
+//
+
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -5,7 +9,7 @@ use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
 use solana_hash::Hash;
 use solana_pubkey::Pubkey;
 
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ConfigureProgramSetting {
     Flag(ConfigureFlag),
     Accountant(Pubkey),
@@ -20,12 +24,12 @@ pub enum ConfigureProgramSetting {
     },
 }
 
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ConfigureFlag {
     IsPaused(bool),
 }
 
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ConfigureDistributionData {
     SolanaValidatorPayments {
         total_owed: u64,
@@ -37,7 +41,7 @@ pub enum ConfigureDistributionData {
     },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RevenueDistributionInstructionData {
     InitializeProgram,
     SetAdmin(Pubkey),
@@ -46,14 +50,6 @@ pub enum RevenueDistributionInstructionData {
     InitializeDistribution,
     ConfigureDistribution(ConfigureDistributionData),
     InitializePrepaidUser(Pubkey),
-}
-
-impl TryFrom<RevenueDistributionInstructionData> for Vec<u8> {
-    type Error = io::Error;
-
-    fn try_from(ix_data: RevenueDistributionInstructionData) -> Result<Self, Self::Error> {
-        borsh::to_vec(&ix_data)
-    }
 }
 
 impl RevenueDistributionInstructionData {
@@ -71,6 +67,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::configure_distribution");
     pub const INITIALIZE_PREPAID_USER: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_prepaid_user");
+    pub const TERMINATE_PREPAID_USER: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::terminate_prepaid_user");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {

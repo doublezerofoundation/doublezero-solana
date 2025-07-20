@@ -2,14 +2,11 @@ mod common;
 
 use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
 use doublezero_revenue_distribution::{
-    instruction::ConfigureFlag,
+    instruction::{ConfigureDistributionData, ConfigureFlag, ConfigureProgramSetting},
+    state::{self, CommunityBurnRateParameters, Distribution, Journal, ProgramConfig},
+    types::ValidatorFee,
     types::{BurnRate, DoubleZeroEpoch},
-    {
-        instruction::{ConfigureDistributionData, ConfigureProgramSetting},
-        state::{self, CommunityBurnRateParameters, Distribution, Journal, ProgramConfig},
-        types::ValidatorFee,
-        DOUBLEZERO_MINT,
-    },
+    DOUBLEZERO_MINT_KEY,
 };
 use solana_hash::Hash;
 use solana_program_pack::Pack;
@@ -185,7 +182,7 @@ async fn test_initialize_journal() {
     let custodied_2z_token_account =
         TokenAccount::unpack(&custodied_2z_token_account_data).unwrap();
     let expected_custodied_2z_token_account = TokenAccount {
-        mint: DOUBLEZERO_MINT,
+        mint: DOUBLEZERO_MINT_KEY,
         owner: journal_key,
         state: SplTokenAccountState::Initialized,
         ..Default::default()
