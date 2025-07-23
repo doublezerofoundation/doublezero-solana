@@ -1,11 +1,10 @@
-use crate::types::FlagsBitmap;
-use crate::{
-    state::StorageGap,
-    types::{DoubleZeroEpoch, Flags},
-};
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
 use solana_pubkey::Pubkey;
+
+use crate::types::{DoubleZeroEpoch, Flags, FlagsBitmap};
+
+use super::StorageGap;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C, align(8))]
@@ -56,5 +55,15 @@ impl PrepaidConnection {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_size() {
+        assert_eq!(size_of::<PrepaidConnection>(), 336);
     }
 }

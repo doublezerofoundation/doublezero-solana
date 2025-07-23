@@ -5,6 +5,8 @@ use solana_pubkey::Pubkey;
 
 use crate::types::{BurnRate, DoubleZeroEpoch, Flags, FlagsBitmap, ValidatorFee};
 
+use super::StorageGap;
+
 /// Account representing distribution information for a given DoubleZero epoch.
 ///
 /// TODO: Do we add a gap? Unused data will cost the accountant a real amount of SOL per epoch.
@@ -51,6 +53,8 @@ pub struct Distribution {
     pub num_contributors_redeemed: u32,
 
     pub prepaid_payments_collected: u64,
+
+    _storage_gap: StorageGap<4>,
 }
 
 impl PrecomputedDiscriminator for Distribution {
@@ -67,5 +71,15 @@ impl Distribution {
     #[inline]
     pub fn flags_bitmap(&self) -> FlagsBitmap {
         FlagsBitmap::from_value(self.flags)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_size() {
+        assert_eq!(size_of::<Distribution>(), 248);
     }
 }

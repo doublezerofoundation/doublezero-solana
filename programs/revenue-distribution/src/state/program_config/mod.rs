@@ -90,3 +90,13 @@ impl ProgramConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_size() {
+        assert_eq!(size_of::<ProgramConfig>(), 968);
+    }
+}

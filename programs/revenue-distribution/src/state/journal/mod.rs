@@ -201,6 +201,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_size() {
+        assert_eq!(size_of::<Journal>(), 552);
+    }
+
+    #[test]
     fn test_absolute_max_journal_entries() {
         assert_eq!(absolute_max_journal_entries(), 605);
     }
