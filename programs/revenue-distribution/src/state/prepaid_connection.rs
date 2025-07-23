@@ -58,12 +58,9 @@ impl PrepaidConnection {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//
 
-    #[test]
-    fn test_size() {
-        assert_eq!(size_of::<PrepaidConnection>(), 336);
-    }
-}
+const _: () = assert!(
+    size_of::<PrepaidConnection>() == 336,
+    "`PrepaidConnection` size changed"
+);

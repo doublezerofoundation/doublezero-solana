@@ -74,12 +74,9 @@ impl Distribution {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+//
 
-    #[test]
-    fn test_size() {
-        assert_eq!(size_of::<Distribution>(), 248);
-    }
-}
+const _: () = assert!(
+    size_of::<Distribution>() == 248,
+    "`Distribution` size changed"
+);

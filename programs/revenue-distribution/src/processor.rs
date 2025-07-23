@@ -980,7 +980,7 @@ fn process_load_prepaid_connection(
     // Account 5 must be the journal's 2Z token account. This account will receive payment.
     let (_, journal_2z_token_pda_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
-        &journal.info.key,
+        journal.info.key,
         "journal's",
         Some(journal.token_2z_pda_bump_seed),
     )?;

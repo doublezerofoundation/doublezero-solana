@@ -12,11 +12,6 @@ use solana_pubkey::Pubkey;
 
 use crate::{state::StorageGap, types::DoubleZeroEpoch};
 
-const _: () = assert!(
-    (Journal::MAX_CONFIGURABLE_ENTRIES as usize) <= absolute_max_journal_entries(),
-    "Journal entries size is too large"
-);
-
 pub const fn absolute_max_journal_entries() -> usize {
     let remaining_size = MAX_PERMITTED_DATA_INCREASE - size_of::<Journal>() - 4;
     remaining_size / size_of::<JournalEntry>()
@@ -174,9 +169,8 @@ impl JournalEntries {
         // Find the last epoch so we can push the cost-per-epoch as new entries.
         let last_dz_epoch = entries
             .last()
-            .map(|entry| entry.dz_epoch)
-            .unwrap_or(next_dz_epoch)
-            .saturating_add_duration(1);
+            .map(|entry| entry.dz_epoch.saturating_add_duration(1))
+            .unwrap_or(next_dz_epoch);
 
         if last_dz_epoch <= valid_through_dz_epoch {
             for epoch_value in last_dz_epoch.value()..=valid_through_dz_epoch.value() {
@@ -195,6 +189,20 @@ impl JournalEntries {
 fn checked_pow_10(decimals: u8) -> Option<u64> {
     u64::checked_pow(10, decimals.into())
 }
+
+//
+
+const _: () = assert!(size_of::<Journal>() == 552, "`Journal` size changed");
+
+const _: () = assert!(
+    absolute_max_journal_entries() == 605,
+    "Absolute max journal entries changed"
+);
+
+const _: () = assert!(
+    (Journal::MAX_CONFIGURABLE_ENTRIES as usize) <= absolute_max_journal_entries(),
+    "Journal entries size is too large"
+);
 
 #[cfg(test)]
 mod tests {

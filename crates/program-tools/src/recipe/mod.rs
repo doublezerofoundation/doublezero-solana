@@ -12,7 +12,7 @@ pub enum Invoker<'a, 'b> {
     },
 }
 
-impl<'a, 'b> Invoker<'a, 'b> {
+impl Invoker<'_, '_> {
     pub fn key(&self) -> &Pubkey {
         match self {
             Invoker::Signer(key) => key,

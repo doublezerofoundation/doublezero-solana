@@ -314,20 +314,15 @@ impl ProgramTestWithOwner {
         &mut self,
         settings: [JournalConfiguration; N],
         admin_signer: &Keypair,
-        use_payer: bool,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
-        let payer_key = payer_signer.pubkey();
 
         let configure_program_ixs = settings
             .into_iter()
             .map(|setting| {
                 try_build_instruction(
                     &ID,
-                    ConfigureJournalAccounts::new(
-                        &admin_signer.pubkey(),
-                        if use_payer { Some(&payer_key) } else { None },
-                    ),
+                    ConfigureJournalAccounts::new(&admin_signer.pubkey()),
                     &RevenueDistributionInstructionData::ConfigureJournal(setting),
                 )
                 .unwrap()
@@ -440,7 +435,7 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             self.recent_blockhash,
             &[initialize_prepaid_connection_ix],
-            &[payer_signer, &token_transfer_authority_signer],
+            &[payer_signer, token_transfer_authority_signer],
         )
         .await?;
 
@@ -477,7 +472,7 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             self.recent_blockhash,
             &[initialize_prepaid_connection_ix],
-            &[payer_signer, &token_transfer_authority_signer],
+            &[payer_signer, token_transfer_authority_signer],
         )
         .await?;
 
@@ -521,18 +516,6 @@ impl ProgramTestWithOwner {
     //
     // Account fetchers.
     //
-
-    pub async fn fetch_mint(&self, mint_key: &Pubkey) -> Result<Mint, BanksClientError> {
-        let mint_account_data = self
-            .banks_client
-            .get_account(*mint_key)
-            .await
-            .unwrap()
-            .unwrap_or_default()
-            .data;
-
-        Mint::unpack(&mint_account_data).map_err(|_| BanksClientError::ClientError("not SPL mint"))
-    }
 
     pub async fn fetch_token_account(
         &self,
@@ -594,7 +577,7 @@ impl ProgramTestWithOwner {
         let (journal, remaining_data) =
             checked_from_bytes_with_discriminator(&program_config_account_data).unwrap();
 
-        let journal_entries = Journal::checked_journal_entries(&remaining_data).unwrap();
+        let journal_entries = Journal::checked_journal_entries(remaining_data).unwrap();
 
         let token_pda_key = state::find_2z_token_pda_address(&journal_key).0;
         let journal_2z_token_pda_data = self

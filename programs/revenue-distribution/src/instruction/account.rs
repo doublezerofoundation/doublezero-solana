@@ -154,7 +154,7 @@ pub struct ConfigureJournalAccounts {
 }
 
 impl ConfigureJournalAccounts {
-    pub fn new(admin_key: &Pubkey, payer_key: Option<&Pubkey>) -> Self {
+    pub fn new(admin_key: &Pubkey) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
             admin_key: *admin_key,
