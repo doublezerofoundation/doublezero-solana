@@ -157,11 +157,12 @@ async fn test_configure_program() {
     expected_program_config.accountant_key = accountant_key;
     expected_program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;
 
-    let distribution_parameters = &mut expected_program_config.distribution_parameters;
-    distribution_parameters.calculation_grace_period_seconds = calculation_grace_period_seconds;
-    distribution_parameters.current_solana_validator_fee =
+    let expected_distribution_params = &mut expected_program_config.distribution_parameters;
+    expected_distribution_params.calculation_grace_period_seconds =
+        calculation_grace_period_seconds;
+    expected_distribution_params.current_solana_validator_fee =
         ValidatorFee::new(solana_validator_fee).unwrap();
-    distribution_parameters.community_burn_rate_parameters = CommunityBurnRateParameters::new(
+    expected_distribution_params.community_burn_rate_parameters = CommunityBurnRateParameters::new(
         BurnRate::new(initial_cbr).unwrap(),
         BurnRate::new(cbr_limit).unwrap(),
         dz_epochs_to_increasing_cbr,
@@ -169,8 +170,8 @@ async fn test_configure_program() {
     )
     .unwrap();
 
-    let relay_parameters = &mut expected_program_config.relay_parameters;
-    relay_parameters.prepaid_connection_termination_lamports =
+    let expected_relay_params = &mut expected_program_config.relay_parameters;
+    expected_relay_params.prepaid_connection_termination_lamports =
         prepaid_connection_termination_relay_lamports;
     assert_eq!(program_config, expected_program_config);
 }
@@ -284,8 +285,10 @@ async fn test_configure_journal() {
     let mut expected_journal = Journal::default();
     expected_journal.bump_seed = journal_bump;
     expected_journal.token_2z_pda_bump_seed = state::find_2z_token_pda_address(&journal_key).1;
-    expected_journal.activation_cost = prepaid_connection_activation_cost;
-    expected_journal.cost_per_dz_epoch = prepaid_connection_cost_per_dz_epoch;
+
+    let expected_prepaid_params = &mut expected_journal.prepaid_connection_parameters;
+    expected_prepaid_params.activation_cost = prepaid_connection_activation_cost;
+    expected_prepaid_params.cost_per_dz_epoch = prepaid_connection_cost_per_dz_epoch;
     assert_eq!(journal, &expected_journal);
 
     let epoch_payments = Journal::checked_journal_entries(remaining_data).unwrap();
@@ -397,10 +400,10 @@ async fn test_initialize_distribution() {
     expected_program_config.next_dz_epoch = DoubleZeroEpoch::new(1);
     expected_program_config.accountant_key = accountant_signer.pubkey();
 
-    let distribution_parameters = &mut expected_program_config.distribution_parameters;
-    distribution_parameters.current_solana_validator_fee =
+    let expected_distribution_params = &mut expected_program_config.distribution_parameters;
+    expected_distribution_params.current_solana_validator_fee =
         ValidatorFee::new(solana_validator_fee).unwrap();
-    distribution_parameters.community_burn_rate_parameters = cbr_params;
+    expected_distribution_params.community_burn_rate_parameters = cbr_params;
     assert_eq!(program_config, expected_program_config);
 
     // Create another distribution.
@@ -441,10 +444,10 @@ async fn test_initialize_distribution() {
     expected_program_config.next_dz_epoch = DoubleZeroEpoch::new(2);
     expected_program_config.accountant_key = accountant_signer.pubkey();
 
-    let distribution_parameters = &mut expected_program_config.distribution_parameters;
-    distribution_parameters.current_solana_validator_fee =
+    let expected_distribution_params = &mut expected_program_config.distribution_parameters;
+    expected_distribution_params.current_solana_validator_fee =
         ValidatorFee::new(solana_validator_fee).unwrap();
-    distribution_parameters.community_burn_rate_parameters = cbr_params;
+    expected_distribution_params.community_burn_rate_parameters = cbr_params;
     assert_eq!(program_config, expected_program_config);
 }
 

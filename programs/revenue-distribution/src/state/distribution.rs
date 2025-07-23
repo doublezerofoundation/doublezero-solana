@@ -49,6 +49,8 @@ pub struct Distribution {
     ///
     /// [total_contributors]: Self::total_contributors
     pub num_contributors_redeemed: u32,
+
+    pub prepaid_payments_collected: u64,
 }
 
 impl PrecomputedDiscriminator for Distribution {

@@ -465,12 +465,18 @@ fn process_configure_journal(
 
     match setting {
         JournalConfiguration::ActivationCost(activation_cost) => {
-            msg!("Set activation_cost: {}", activation_cost);
-            journal.activation_cost = activation_cost;
+            msg!(
+                "Set prepaid_connection_parameters.activation_cost: {}",
+                activation_cost
+            );
+            journal.prepaid_connection_parameters.activation_cost = activation_cost;
         }
         JournalConfiguration::CostPerDoubleZeroEpoch(cost_per_dz_epoch) => {
-            msg!("Set cost_per_dz_epoch: {}", cost_per_dz_epoch);
-            journal.cost_per_dz_epoch = cost_per_dz_epoch;
+            msg!(
+                "Set prepaid_connection_parameters.cost_per_dz_epoch: {}",
+                cost_per_dz_epoch
+            );
+            journal.prepaid_connection_parameters.cost_per_dz_epoch = cost_per_dz_epoch;
         }
         JournalConfiguration::EntryBoundaries {
             minimum_prepaid_dz_epochs,
@@ -495,13 +501,18 @@ fn process_configure_journal(
             }
 
             msg!(
-                "Set minimum_prepaid_dz_epochs: {}",
+                "Set prepaid_connection_parameters.minimum_prepaid_dz_epochs: {}",
                 minimum_prepaid_dz_epochs
             );
-            journal.minimum_allowed_dz_epochs = minimum_prepaid_dz_epochs;
+            journal
+                .prepaid_connection_parameters
+                .minimum_allowed_dz_epochs = minimum_prepaid_dz_epochs;
 
-            msg!("Set maximum_entries: {}", maximum_entries);
-            journal.maximum_entries = maximum_entries;
+            msg!(
+                "Set prepaid_connection_parameters.maximum_entries: {}",
+                maximum_entries
+            );
+            journal.prepaid_connection_parameters.maximum_entries = maximum_entries;
         }
     }
 
@@ -732,7 +743,7 @@ fn process_initialize_prepaid_connection(
     let journal = ZeroCopyAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     let activation_cost = journal
-        .checked_activation_cost(decimals)
+        .checked_activation_cost_amount(decimals)
         .unwrap_or_default();
 
     // There should be a non-zero activation cost.
@@ -915,12 +926,13 @@ fn process_load_prepaid_connection(
     // We trust the remaining data of the journal account is serialized correctly.
     let mut journal_entries = Journal::checked_journal_entries(&journal.remaining_data).unwrap();
 
+    let cost_per_dz_epoch = journal.checked_cost_per_dz_epoch().ok_or_else(|| {
+        msg!("Cost per DZ epoch is misconfigured");
+        ProgramError::InvalidAccountData
+    })?;
+
     let num_entries = journal_entries
-        .update(
-            next_dz_epoch,
-            valid_through_dz_epoch,
-            journal.cost_per_dz_epoch,
-        )
+        .update(next_dz_epoch, valid_through_dz_epoch, cost_per_dz_epoch)
         .ok_or_else(|| {
             msg!(
                 "Failed to update journal entries for DZ epochs from {} through {}",
@@ -950,7 +962,7 @@ fn process_load_prepaid_connection(
     // Next, we need to transfer the total service cost to the journal and update its balance.
 
     let transfer_amount = journal
-        .checked_duration_cost(num_entries, decimals)
+        .checked_cost_per_dz_epoch_amount(num_entries, decimals)
         .unwrap_or_default();
 
     if transfer_amount == 0 {

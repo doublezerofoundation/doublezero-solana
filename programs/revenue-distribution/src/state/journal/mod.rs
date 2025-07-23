@@ -1,3 +1,9 @@
+mod prepaid_connection;
+
+pub use prepaid_connection::*;
+
+//
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
@@ -7,10 +13,14 @@ use solana_pubkey::Pubkey;
 use crate::{state::StorageGap, types::DoubleZeroEpoch};
 
 const _: () = assert!(
-    (Journal::MAX_CONFIGURABLE_ENTRIES as usize) * size_of::<JournalEntry>()
-        <= MAX_PERMITTED_DATA_INCREASE - size_of::<Journal>() - 4,
+    (Journal::MAX_CONFIGURABLE_ENTRIES as usize) <= absolute_max_journal_entries(),
     "Journal entries size is too large"
 );
+
+pub const fn absolute_max_journal_entries() -> usize {
+    let remaining_size = MAX_PERMITTED_DATA_INCREASE - size_of::<Journal>() - 4;
+    remaining_size / size_of::<JournalEntry>()
+}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C)]
@@ -22,8 +32,7 @@ pub struct Journal {
     pub token_2z_pda_bump_seed: u8,
     _bump_seed_padding: [u8; 2],
 
-    pub minimum_allowed_dz_epochs: u16,
-    pub maximum_entries: u16,
+    pub prepaid_connection_parameters: PrepaidConnectionParameters,
 
     pub total_sol_balance: u64,
 
@@ -33,9 +42,6 @@ pub struct Journal {
     /// do something with the excess amount in this token account, we can simply compute the
     /// difference between the token account balance and this.
     pub total_2z_balance: u64,
-
-    pub activation_cost: u32,
-    pub cost_per_dz_epoch: u32,
 
     /// 8 * 32 bytes of a storage gap in case we need more fields.
     _storage_gap: StorageGap<8>,
@@ -55,25 +61,30 @@ impl Journal {
     /// Each entry represents one DZ epoch's payment. If the maximum entries value is configured to
     /// be 200 DZ epochs for example, this value equates to roughly 400 days worth of payments. It
     /// is unlikely that the configured maximum entries value will ever be this large.
-    pub const MAX_CONFIGURABLE_ENTRIES: u16 = 512;
+    pub const MAX_CONFIGURABLE_ENTRIES: u16 = 200;
 
     pub fn find_address() -> (Pubkey, u8) {
         Pubkey::find_program_address(&[Self::SEED_PREFIX], &crate::ID)
     }
 
     pub fn checked_maximum_entries(&self) -> Option<u16> {
-        if self.maximum_entries == 0 {
+        let maximum_entries = self.prepaid_connection_parameters.maximum_entries;
+
+        if maximum_entries == 0 {
             None
         } else {
-            Some(self.maximum_entries)
+            Some(maximum_entries)
         }
     }
 
     pub fn checked_minimum_allowed_dz_epochs(&self) -> Option<u16> {
-        if self.minimum_allowed_dz_epochs == 0 {
+        let minimum_allowed_dz_epochs =
+            self.prepaid_connection_parameters.minimum_allowed_dz_epochs;
+
+        if minimum_allowed_dz_epochs == 0 {
             None
         } else {
-            Some(self.minimum_allowed_dz_epochs)
+            Some(minimum_allowed_dz_epochs)
         }
     }
 
@@ -81,16 +92,37 @@ impl Journal {
         BorshDeserialize::deserialize(&mut data).ok()
     }
 
-    pub fn checked_activation_cost(&self, decimals: u8) -> Option<u64> {
-        checked_pow_10(decimals)?.checked_mul(self.activation_cost.into())
+    pub fn checked_activation_cost(&self) -> Option<u32> {
+        let activation_cost = self.prepaid_connection_parameters.activation_cost;
+
+        if activation_cost == 0 {
+            None
+        } else {
+            Some(activation_cost)
+        }
     }
 
-    pub fn checked_cost_per_dz_epoch(&self, decimals: u8) -> Option<u64> {
-        checked_pow_10(decimals)?.checked_mul(self.cost_per_dz_epoch.into())
+    pub fn checked_activation_cost_amount(&self, decimals: u8) -> Option<u64> {
+        let activation_cost = self.checked_activation_cost()?;
+
+        checked_pow_10(decimals)?.checked_mul(activation_cost.into())
     }
 
-    pub fn checked_duration_cost(&self, num_entries: u16, decimals: u8) -> Option<u64> {
-        self.checked_cost_per_dz_epoch(decimals)?
+    pub fn checked_cost_per_dz_epoch(&self) -> Option<u32> {
+        let cost_per_dz_epoch = self.prepaid_connection_parameters.cost_per_dz_epoch;
+
+        if cost_per_dz_epoch == 0 {
+            None
+        } else {
+            Some(cost_per_dz_epoch)
+        }
+    }
+
+    pub fn checked_cost_per_dz_epoch_amount(&self, num_entries: u16, decimals: u8) -> Option<u64> {
+        let cost_per_epoch = self.checked_cost_per_dz_epoch()?;
+
+        checked_pow_10(decimals)?
+            .checked_mul(cost_per_epoch.into())?
             .checked_mul(num_entries.into())
     }
 }
@@ -167,6 +199,11 @@ fn checked_pow_10(decimals: u8) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_absolute_max_journal_entries() {
+        assert_eq!(absolute_max_journal_entries(), 605);
+    }
 
     #[test]
     fn test_journal_entries_update_full_overlap() {
