@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::Add};
+use std::fmt::Display;
 
 use bitmaps::Bitmap;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -42,14 +42,6 @@ impl DoubleZeroEpoch {
 impl Display for DoubleZeroEpoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-impl Add<u64> for DoubleZeroEpoch {
-    type Output = Self;
-
-    fn add(self, rhs: u64) -> Self::Output {
-        Self(self.0 + rhs)
     }
 }
 

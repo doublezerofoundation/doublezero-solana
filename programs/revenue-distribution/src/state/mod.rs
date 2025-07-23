@@ -11,7 +11,6 @@ pub use program_config::*;
 //
 
 use bytemuck::{Pod, Zeroable};
-use solana_program_error::ProgramError;
 use solana_pubkey::Pubkey;
 
 use crate::ID;
@@ -22,15 +21,12 @@ pub fn find_2z_token_pda_address(token_owner: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(&[TOKEN_2Z_PDA_SEED_PREFIX, token_owner.as_ref()], &ID)
 }
 
-pub fn create_2z_token_pda_address(
-    token_owner: &Pubkey,
-    bump_seed: u8,
-) -> Result<Pubkey, ProgramError> {
+pub fn checked_2z_token_pda_address(token_owner: &Pubkey, bump_seed: u8) -> Option<Pubkey> {
     Pubkey::create_program_address(
         &[TOKEN_2Z_PDA_SEED_PREFIX, token_owner.as_ref(), &[bump_seed]],
         &ID,
     )
-    .map_err(Into::into)
+    .ok()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

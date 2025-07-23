@@ -112,7 +112,7 @@ impl From<ConfigureProgramAccounts> for Vec<AccountMeta> {
 pub struct InitializeJournalAccounts {
     pub payer_key: Pubkey,
     pub new_journal_key: Pubkey,
-    pub journal_token_2z_pda_key: Pubkey,
+    pub journal_2z_token_pda_key: Pubkey,
 }
 
 impl InitializeJournalAccounts {
@@ -122,7 +122,7 @@ impl InitializeJournalAccounts {
         Self {
             payer_key: *payer_key,
             new_journal_key,
-            journal_token_2z_pda_key: find_2z_token_pda_address(&new_journal_key).0,
+            journal_2z_token_pda_key: find_2z_token_pda_address(&new_journal_key).0,
         }
     }
 }
@@ -132,13 +132,13 @@ impl From<InitializeJournalAccounts> for Vec<AccountMeta> {
         let InitializeJournalAccounts {
             payer_key,
             new_journal_key,
-            journal_token_2z_pda_key,
+            journal_2z_token_pda_key,
         } = accounts;
 
         vec![
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_journal_key, false),
-            AccountMeta::new(journal_token_2z_pda_key, false),
+            AccountMeta::new(journal_2z_token_pda_key, false),
             AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new_readonly(solana_system_interface::program::ID, false),
@@ -151,7 +151,6 @@ pub struct ConfigureJournalAccounts {
     pub program_config_key: Pubkey,
     pub admin_key: Pubkey,
     pub journal_key: Pubkey,
-    pub payer_key: Option<Pubkey>,
 }
 
 impl ConfigureJournalAccounts {
@@ -160,7 +159,6 @@ impl ConfigureJournalAccounts {
             program_config_key: ProgramConfig::find_address().0,
             admin_key: *admin_key,
             journal_key: Journal::find_address().0,
-            payer_key: payer_key.copied(),
         }
     }
 }
@@ -171,20 +169,13 @@ impl From<ConfigureJournalAccounts> for Vec<AccountMeta> {
             program_config_key,
             admin_key,
             journal_key,
-            payer_key,
         } = accounts;
 
-        let mut account_metas = vec![
+        vec![
             AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new_readonly(admin_key, true),
             AccountMeta::new(journal_key, false),
-        ];
-
-        if let Some(payer_key) = payer_key {
-            account_metas.push(AccountMeta::new(payer_key, true));
-        }
-
-        account_metas
+        ]
     }
 }
 
@@ -194,7 +185,7 @@ pub struct InitializeDistributionAccounts {
     pub accountant_key: Pubkey,
     pub payer_key: Pubkey,
     pub new_distribution_key: Pubkey,
-    pub distribution_token_2z_pda_key: Pubkey,
+    pub distribution_2z_token_pda_key: Pubkey,
 }
 
 impl InitializeDistributionAccounts {
@@ -206,7 +197,7 @@ impl InitializeDistributionAccounts {
             accountant_key: *accountant_key,
             payer_key: *payer_key,
             new_distribution_key,
-            distribution_token_2z_pda_key: find_2z_token_pda_address(&new_distribution_key).0,
+            distribution_2z_token_pda_key: find_2z_token_pda_address(&new_distribution_key).0,
         }
     }
 }
@@ -218,7 +209,7 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
             accountant_key,
             payer_key,
             new_distribution_key,
-            distribution_token_2z_pda_key,
+            distribution_2z_token_pda_key,
         } = accounts;
 
         vec![
@@ -226,7 +217,7 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
             AccountMeta::new_readonly(accountant_key, true),
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_distribution_key, false),
-            AccountMeta::new(distribution_token_2z_pda_key, false),
+            AccountMeta::new(distribution_2z_token_pda_key, false),
             AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new_readonly(solana_system_interface::program::ID, false),
@@ -322,6 +313,60 @@ impl From<InitializePrepaidConnectionAccounts> for Vec<AccountMeta> {
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_prepaid_connection_key, false),
             AccountMeta::new_readonly(solana_system_interface::program::ID, false),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoadPrepaidConnectionAccounts {
+    pub program_config_key: Pubkey,
+    pub journal_key: Pubkey,
+    pub prepaid_connection_key: Pubkey,
+    pub source_2z_token_account_key: Pubkey,
+    pub journal_2z_token_pda_key: Pubkey,
+    pub token_transfer_authority_key: Pubkey,
+}
+
+impl LoadPrepaidConnectionAccounts {
+    pub fn new(
+        source_2z_token_account_key: &Pubkey,
+        token_transfer_authority_key: &Pubkey,
+        user_key: &Pubkey,
+    ) -> Self {
+        let program_config_key = ProgramConfig::find_address().0;
+        let journal_key = Journal::find_address().0;
+
+        Self {
+            program_config_key,
+            journal_key,
+            prepaid_connection_key: PrepaidConnection::find_address(user_key).0,
+            source_2z_token_account_key: *source_2z_token_account_key,
+            journal_2z_token_pda_key: find_2z_token_pda_address(&journal_key).0,
+            token_transfer_authority_key: *token_transfer_authority_key,
+        }
+    }
+}
+
+impl From<LoadPrepaidConnectionAccounts> for Vec<AccountMeta> {
+    fn from(accounts: LoadPrepaidConnectionAccounts) -> Self {
+        let LoadPrepaidConnectionAccounts {
+            program_config_key,
+            journal_key,
+            prepaid_connection_key,
+            source_2z_token_account_key,
+            journal_2z_token_pda_key,
+            token_transfer_authority_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new(journal_key, false),
+            AccountMeta::new(prepaid_connection_key, false),
+            AccountMeta::new(source_2z_token_account_key, false),
+            AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
+            AccountMeta::new(journal_2z_token_pda_key, false),
+            AccountMeta::new_readonly(token_transfer_authority_key, true),
+            AccountMeta::new_readonly(spl_token::ID, false),
         ]
     }
 }

@@ -49,4 +49,12 @@ impl PrepaidConnection {
         flags_bitmap.set(Self::FLAG_HAS_PAID_BIT, paid);
         self.flags = flags_bitmap.into_value();
     }
+
+    pub fn checked_valid_through_dz_epoch(&self) -> Option<DoubleZeroEpoch> {
+        if self.has_paid() {
+            Some(self.valid_through_dz_epoch)
+        } else {
+            None
+        }
+    }
 }

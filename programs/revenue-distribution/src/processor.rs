@@ -9,7 +9,7 @@ use doublezero_program_tools::{
     },
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
 };
-use solana_account_info::AccountInfo;
+use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
 use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
@@ -392,11 +392,8 @@ fn process_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     // We declare this because Rent will be used multiple times in this instruction.
     let rent_sysvar = Rent::get().unwrap();
 
-    const JOURNAL_LEN: usize = {
-        zero_copy::data_end::<Journal>() // header length
-            + 4 // Reserved 4 bytes for encoding Vec::len()
-    };
-
+    // NOTE: We are creating the journal account with the max allowable size for CPI (10kb). By
+    // doing this, we avoid having to realloc when the journal entries size changes.
     try_create_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
@@ -404,7 +401,7 @@ fn process_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
             signer_seeds: &[Journal::SEED_PREFIX, &[journal_bump]],
         },
         new_journal_info.lamports(),
-        JOURNAL_LEN,
+        MAX_PERMITTED_DATA_INCREASE,
         &ID,
         accounts,
         Some(&rent_sysvar),
@@ -459,7 +456,6 @@ fn process_configure_journal(
     // - 0: Program config.
     // - 1: Admin.
     // - 2: Journal.
-    // - 4: Payer (optional).
     let mut accounts_iter = accounts.iter().enumerate();
 
     VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Admin)?;
@@ -490,13 +486,21 @@ fn process_configure_journal(
                 return Err(ProgramError::InvalidInstructionData);
             }
 
+            if maximum_entries > Journal::MAX_CONFIGURABLE_ENTRIES {
+                msg!(
+                    "Maximum entries cannot be greater than {}",
+                    Journal::MAX_CONFIGURABLE_ENTRIES
+                );
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
             msg!(
                 "Set minimum_prepaid_dz_epochs: {}",
-                minimum_prepaid_dz_epochs,
+                minimum_prepaid_dz_epochs
             );
-            journal.minimum_prepaid_dz_epochs = minimum_prepaid_dz_epochs;
+            journal.minimum_allowed_dz_epochs = minimum_prepaid_dz_epochs;
 
-            msg!("Set maximum_entries: {}", maximum_entries,);
+            msg!("Set maximum_entries: {}", maximum_entries);
             journal.maximum_entries = maximum_entries;
         }
     }
@@ -571,7 +575,7 @@ fn process_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         })?;
 
     // Uptick the program config's next epoch.
-    program_config.next_dz_epoch = dz_epoch + 1;
+    program_config.next_dz_epoch = dz_epoch.saturating_add_duration(1);
 
     // We no longer need the program config for anything.
     drop(program_config);
@@ -739,7 +743,7 @@ fn process_initialize_prepaid_connection(
 
     // Account 1 must be the source of 2Z tokens. The activation amount will be burned from this
     // token account.
-    let (_, source_2z_token_account_info) =
+    let (_, src_2z_token_account_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // Account 2 must be the 2Z mint.
@@ -765,7 +769,7 @@ fn process_initialize_prepaid_connection(
     // Transfer the activation fee to the reserve account.
     let token_transfer_checked_ix = token_instruction::transfer_checked(
         &spl_token::ID,
-        source_2z_token_account_info.key,
+        src_2z_token_account_info.key,
         &DOUBLEZERO_MINT_KEY,
         reserve_2z_info.key,
         token_transfer_authority_info.key,
@@ -823,6 +827,7 @@ fn process_initialize_prepaid_connection(
     prepaid_connection.user_key = user_key;
     prepaid_connection.termination_beneficiary_key = *payer_info.key;
 
+    msg!("Paid {} to initialize user {}", activation_cost, user_key);
     Ok(())
 }
 
@@ -836,81 +841,94 @@ fn process_load_prepaid_connection(
     // We expect the following accounts for this instruction:
     // - 0: Program config.
     // - 1: Journal.
-    // - 2: Source 2Z token account.
-    // - 3: Journal's 2Z token account.
-    // - 4: SPL Token program.
-    // - 5: Prepaid connection.
+    // - 2: Prepaid connection.
+    // - 3: Source 2Z token account.
+    // - 4: 2Z mint.
+    // - 5: Journal's 2Z token account.
+    // - 6: Token transfer authority.
+    // - 7: SPL Token program.
     let mut accounts_iter = accounts.iter().enumerate();
 
+    // Account 0 must be the program config. We will only be reading the next DZ epoch from this
+    // account because many calculations require this value.
     let program_config =
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    // Account 1 must be the journal. The journal specifies the min and max entry constraints. When
+    // the constraint checks pass, we update the existing journal entries to reflect the payment.
     let mut journal =
         ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    let next_dz_epoch = program_config.next_dz_epoch;
+    let maximum_entries = journal.checked_maximum_entries().ok_or_else(|| {
+        msg!("Maximum entries misconfigured");
+        ProgramError::InvalidAccountData
+    })?;
 
-    let max_dz_epoch = next_dz_epoch.saturating_add_duration(journal.maximum_entries.into());
+    let global_dz_epoch = program_config.next_dz_epoch;
+
+    // We constrain that the new service cannot exceed however many entries from the global epoch.
+    let max_dz_epoch = global_dz_epoch.saturating_add_duration(maximum_entries.into());
+
     if valid_through_dz_epoch > max_dz_epoch {
-        msg!("End DZ epoch is beyond maximum DZ epoch: {}", max_dz_epoch);
+        msg!(
+            "Specified DZ epoch is beyond maximum DZ epoch allowed: {}",
+            max_dz_epoch
+        );
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let min_dz_epoch =
-        next_dz_epoch.saturating_add_duration(journal.minimum_prepaid_dz_epochs.into());
-    if valid_through_dz_epoch < min_dz_epoch {
-        msg!("End DZ epoch is below minimum DZ epoch: {}", min_dz_epoch);
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    // This operation is safe because we know that the end DZ epoch does not exceed the maximum DZ
-    // epoch, which is calculated by adding a u16 value to the next DZ epoch.
-    let num_entries =
-        u16::try_from(valid_through_dz_epoch.value() - next_dz_epoch.value()).unwrap();
-
+    // Account 2 must be the prepaid connection. We need to determine the next DZ epoch using the
+    // current DZ epoch that this account is valid through.
     let mut prepaid_connection =
         ZeroCopyMutAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    let (_, source_2z_token_account_info) =
-        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+    // If the prepaid connection was freshly created, the valid-through DZ epoch will be zero, so
+    // this value will default to the program config's next DZ epoch. But if service was already
+    // prepaid up through some specified DZ epoch beyond the program config's next DZ epoch, the
+    // service's DZ epoch will be used as a starting point.
+    let next_dz_epoch = prepaid_connection
+        .checked_valid_through_dz_epoch()
+        .map(|epoch| epoch.saturating_add_duration(1))
+        .unwrap_or(global_dz_epoch)
+        .max(global_dz_epoch);
 
-    try_next_2z_mint_info(&mut accounts_iter)?;
+    let minimum_allowed_dz_epochs =
+        journal.checked_minimum_allowed_dz_epochs().ok_or_else(|| {
+            msg!("Minimum allowed DZ epochs misconfigured");
+            ProgramError::InvalidAccountData
+        })?;
 
-    let (_, journal_token_2z_pda_info, _) = try_next_2z_token_pda_info(
-        &mut accounts_iter,
-        &journal.info.key,
-        "journal's",
-        Some(journal.bump_seed),
-    )?;
+    // The minimum DZ epoch is determined by however long the service is currently set up for. So
+    // if the prepaid connection were freshly created, a user must pay for service for at least as
+    // long as the minimum requirement from the global epoch. Otherwise, it needs to be at least as
+    // long from when service was already paid for.
+    let min_dz_epoch = next_dz_epoch.saturating_add_duration(minimum_allowed_dz_epochs.into());
 
-    let transfer_amount = journal
-        .checked_duration_cost(num_entries, decimals)
-        .unwrap_or_default();
+    if valid_through_dz_epoch < min_dz_epoch {
+        msg!(
+            "Specified DZ epoch is below minimum DZ epoch allowed: {}",
+            min_dz_epoch
+        );
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
-    if transfer_amount == 0 {
-        msg!("Cost per DZ epoch is misconfigured");
-        return Err(ProgramError::InvalidAccountData);
-    };
-
-    // First transfer 2Z from funder to journal.
-    let token_transfer_checked_ix = token_instruction::transfer_checked(
-        &spl_token::ID,
-        source_2z_token_account_info.key,
-        &DOUBLEZERO_MINT_KEY,
-        journal_token_2z_pda_info.key,
-        journal.info.key,
-        &[], // signer_pubkeys
-        transfer_amount,
-        decimals,
-    )
-    .unwrap();
-
-    invoke_signed_unchecked(&token_transfer_checked_ix, accounts, &[])?;
-
-    // TODO: Update journal entries.
-    //
     // We trust the remaining data of the journal account is serialized correctly.
     let mut journal_entries = Journal::checked_journal_entries(&journal.remaining_data).unwrap();
+
+    let num_entries = journal_entries
+        .update(
+            next_dz_epoch,
+            valid_through_dz_epoch,
+            journal.cost_per_dz_epoch,
+        )
+        .ok_or_else(|| {
+            msg!(
+                "Failed to update journal entries for DZ epochs from {} through {}",
+                next_dz_epoch,
+                valid_through_dz_epoch
+            );
+            ProgramError::InvalidInstructionData
+        })?;
 
     // Serialize back into remaining data.
     borsh::to_writer(&mut journal.remaining_data[..], &journal_entries).map_err(|e| {
@@ -919,10 +937,67 @@ fn process_load_prepaid_connection(
     })?;
 
     msg!(
-        "Activate prepaid connection through DZ epoch: {}",
+        "Loaded from DZ epoch {} through {}",
+        next_dz_epoch,
         valid_through_dz_epoch
     );
     prepaid_connection.valid_through_dz_epoch = valid_through_dz_epoch;
+
+    // By setting this flag, we are now allowing anyone to terminate the prepaid connection once
+    // the service's DZ epoch exceeds the next DZ epoch in the program config.
+    prepaid_connection.set_has_paid(true);
+
+    // Next, we need to transfer the total service cost to the journal and update its balance.
+
+    let transfer_amount = journal
+        .checked_duration_cost(num_entries, decimals)
+        .unwrap_or_default();
+
+    if transfer_amount == 0 {
+        msg!("Transfer amount cannot be computed because cost per DZ epoch is misconfigured");
+        return Err(ProgramError::InvalidAccountData);
+    };
+
+    // Account 3 must be the source token account where 2Z will be transferred from.
+    let (_, src_2z_token_account_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // Account 4 must be the 2Z mint to perform the transfer checked CPI call.
+    try_next_2z_mint_info(&mut accounts_iter)?;
+
+    // Account 5 must be the journal's 2Z token account. This account will receive payment.
+    let (_, journal_2z_token_pda_info, _) = try_next_2z_token_pda_info(
+        &mut accounts_iter,
+        &journal.info.key,
+        "journal's",
+        Some(journal.token_2z_pda_bump_seed),
+    )?;
+
+    // Account 6 must be the token transfer authority. The token transfer will fail if this account
+    // is not a signer.
+    let (_, token_transfer_authority_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // First transfer 2Z from funder to journal.
+    let token_transfer_checked_ix = token_instruction::transfer_checked(
+        &spl_token::ID,
+        src_2z_token_account_info.key,
+        &DOUBLEZERO_MINT_KEY,
+        journal_2z_token_pda_info.key,
+        token_transfer_authority_info.key,
+        &[], // signer_pubkeys
+        transfer_amount,
+        decimals,
+    )
+    .unwrap();
+
+    invoke_signed_unchecked(&token_transfer_checked_ix, accounts, &[])?;
+
+    // Finally, update the journal to reflect the new balance.
+    let new_balance = journal.total_2z_balance.saturating_add(transfer_amount);
+
+    msg!("New journal 2Z balance: {}", new_balance);
+    journal.total_2z_balance = new_balance;
 
     Ok(())
 }
@@ -1131,8 +1206,8 @@ fn try_next_2z_token_pda_info<'a, 'b>(
 
     let (expected_token_pda_key, token_pda_bump) = match token_pda_bump {
         Some(bump_seed) => {
-            let expected_pda_key = state::create_2z_token_pda_address(token_owner, bump_seed)
-                .map_err(|_| {
+            let expected_pda_key = state::checked_2z_token_pda_address(token_owner, bump_seed)
+                .ok_or_else(|| {
                     msg!(
                         "Failed to create {} 2Z token PDA address with bump seed (account {})",
                         token_pda_name,

@@ -1,12 +1,16 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
+use solana_account_info::MAX_PERMITTED_DATA_INCREASE;
 use solana_pubkey::Pubkey;
 
-use crate::{
-    state::StorageGap,
-    types::{DoubleZeroEpoch, EpochDuration},
-};
+use crate::{state::StorageGap, types::DoubleZeroEpoch};
+
+const _: () = assert!(
+    (Journal::MAX_CONFIGURABLE_ENTRIES as usize) * size_of::<JournalEntry>()
+        <= MAX_PERMITTED_DATA_INCREASE - size_of::<Journal>() - 4,
+    "Journal entries size is too large"
+);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C)]
@@ -18,7 +22,7 @@ pub struct Journal {
     pub token_2z_pda_bump_seed: u8,
     _bump_seed_padding: [u8; 2],
 
-    pub minimum_prepaid_dz_epochs: u16,
+    pub minimum_allowed_dz_epochs: u16,
     pub maximum_entries: u16,
 
     pub total_sol_balance: u64,
@@ -44,12 +48,37 @@ impl PrecomputedDiscriminator for Journal {
 impl Journal {
     pub const SEED_PREFIX: &'static [u8] = b"journal";
 
+    /// Max allowable entries. Due to the CPI constraint of 10kb when creating the Journal account
+    /// (and to avoid performing a realloc for this PDA), we do not allow the maximum entries field
+    /// to be configured beyond this maximum value.
+    ///
+    /// Each entry represents one DZ epoch's payment. If the maximum entries value is configured to
+    /// be 200 DZ epochs for example, this value equates to roughly 400 days worth of payments. It
+    /// is unlikely that the configured maximum entries value will ever be this large.
+    pub const MAX_CONFIGURABLE_ENTRIES: u16 = 512;
+
     pub fn find_address() -> (Pubkey, u8) {
         Pubkey::find_program_address(&[Self::SEED_PREFIX], &crate::ID)
     }
 
-    pub fn checked_journal_entries(data: &[u8]) -> Option<JournalEntries> {
-        BorshDeserialize::try_from_slice(data).ok()
+    pub fn checked_maximum_entries(&self) -> Option<u16> {
+        if self.maximum_entries == 0 {
+            None
+        } else {
+            Some(self.maximum_entries)
+        }
+    }
+
+    pub fn checked_minimum_allowed_dz_epochs(&self) -> Option<u16> {
+        if self.minimum_allowed_dz_epochs == 0 {
+            None
+        } else {
+            Some(self.minimum_allowed_dz_epochs)
+        }
+    }
+
+    pub fn checked_journal_entries(mut data: &[u8]) -> Option<JournalEntries> {
+        BorshDeserialize::deserialize(&mut data).ok()
     }
 
     pub fn checked_activation_cost(&self, decimals: u8) -> Option<u64> {
@@ -69,7 +98,7 @@ impl Journal {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Copy, PartialEq, Eq)]
 pub struct JournalEntry {
     pub dz_epoch: DoubleZeroEpoch,
-    pub amount: u64,
+    pub amount: u32,
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Default, PartialEq, Eq)]
@@ -80,34 +109,26 @@ impl JournalEntries {
         self.0.last().map(|entry| entry.dz_epoch)
     }
 
-    pub fn extend(
-        &mut self,
-        next_dz_epoch: DoubleZeroEpoch,
-        maximum_epoch_duration_to_load: EpochDuration,
-    ) {
-        let end_dz_epoch = self
-            .last_dz_epoch()
-            .unwrap_or(next_dz_epoch)
-            .saturating_add_duration(1);
-
-        let new_last_dz_epoch =
-            end_dz_epoch.saturating_add_duration(maximum_epoch_duration_to_load);
-
-        if end_dz_epoch < new_last_dz_epoch {
-            for epoch_value in end_dz_epoch.value()..=new_last_dz_epoch.value() {
-                self.0.push(JournalEntry {
-                    dz_epoch: DoubleZeroEpoch::new(epoch_value),
-                    amount: 0,
-                });
-            }
-        }
-    }
     pub fn update(
         &mut self,
         next_dz_epoch: DoubleZeroEpoch,
         valid_through_dz_epoch: DoubleZeroEpoch,
-        cost_per_epoch: u64,
-    ) {
+        cost_per_epoch: u32,
+    ) -> Option<u16> {
+        // If we want to add service between the next DZ epoch and the DZ epoch where service is
+        // valid through, we take the difference and add one because service should be active
+        // starting at the next DZ epoch.
+        let num_epochs = valid_through_dz_epoch
+            .value()
+            .checked_sub(next_dz_epoch.value())?
+            .saturating_add(1);
+
+        // Do nothing if the difference between epochs is too large. The maximum entries parameter
+        // in the journal is configured as u16.
+        if num_epochs > u16::MAX as u64 {
+            return None;
+        }
+
         let entries = &mut self.0;
 
         // First, add amounts to existing entries where we need to allocate 2Z to specific DZ epochs.
@@ -133,6 +154,8 @@ impl JournalEntries {
                 });
             }
         }
+
+        Some(num_epochs as u16)
     }
 }
 

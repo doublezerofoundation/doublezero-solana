@@ -1,23 +1,23 @@
 use doublezero_program_tools::{
     instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
 };
-use doublezero_revenue_distribution::instruction::account::ConfigureJournalAccounts;
-use doublezero_revenue_distribution::instruction::{JournalConfiguration, ProgramConfiguration};
-use doublezero_revenue_distribution::state::JournalEntries;
+use doublezero_revenue_distribution::state::PrepaidConnection;
 use doublezero_revenue_distribution::{
     state::Distribution,
     types::DoubleZeroEpoch,
     {
         instruction::{
             account::{
-                ConfigureDistributionAccounts, ConfigureProgramAccounts,
+                ConfigureDistributionAccounts, ConfigureJournalAccounts, ConfigureProgramAccounts,
                 InitializeDistributionAccounts, InitializeJournalAccounts,
-                InitializePrepaidConnectionAccounts, InitializeProgramAccounts, SetAdminAccounts,
+                InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
+                LoadPrepaidConnectionAccounts, SetAdminAccounts,
                 TerminatePrepaidConnectionAccounts,
             },
-            DistributionConfiguration, RevenueDistributionInstructionData,
+            DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
+            RevenueDistributionInstructionData,
         },
-        state::{self, Journal, ProgramConfig},
+        state::{self, Journal, JournalEntries, ProgramConfig},
         DOUBLEZERO_MINT_KEY, ID,
     },
 };
@@ -353,7 +353,7 @@ impl ProgramTestWithOwner {
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let (_, program_config) = self.fetch_program_config().await;
+        let (_, program_config, _) = self.fetch_program_config().await;
 
         let initialize_distribution_ix = try_build_instruction(
             &ID,
@@ -449,6 +449,43 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
+    pub async fn load_prepaid_connection(
+        &mut self,
+        token_transfer_authority_signer: &Keypair,
+        source_2z_token_account_key: &Pubkey,
+        user_key: &Pubkey,
+        valid_through_dz_epoch: DoubleZeroEpoch,
+        decimals: u8,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let initialize_prepaid_connection_ix = try_build_instruction(
+            &ID,
+            LoadPrepaidConnectionAccounts::new(
+                source_2z_token_account_key,
+                &token_transfer_authority_signer.pubkey(),
+                user_key,
+            ),
+            &RevenueDistributionInstructionData::LoadPrepaidConnection {
+                valid_through_dz_epoch,
+                decimals,
+            },
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[initialize_prepaid_connection_ix],
+            &[payer_signer, &token_transfer_authority_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
     pub async fn terminate_prepaid_connection(
         &mut self,
         user_key: &Pubkey,
@@ -512,7 +549,7 @@ impl ProgramTestWithOwner {
             .map_err(|_| BanksClientError::ClientError("not SPL token account"))
     }
 
-    pub async fn fetch_program_config(&self) -> (Pubkey, ProgramConfig) {
+    pub async fn fetch_program_config(&self) -> (Pubkey, ProgramConfig, TokenAccount) {
         let program_config_key = ProgramConfig::find_address().0;
 
         let program_config_account_data = self
@@ -523,15 +560,27 @@ impl ProgramTestWithOwner {
             .unwrap()
             .data;
 
+        let token_pda_key = state::find_2z_token_pda_address(&program_config_key).0;
+        let reserve_2z_data = self
+            .banks_client
+            .get_account(token_pda_key)
+            .await
+            .unwrap()
+            .unwrap()
+            .data;
+
+        let token_pda = TokenAccount::unpack(&reserve_2z_data).unwrap();
+
         (
             program_config_key,
             *checked_from_bytes_with_discriminator(&program_config_account_data)
                 .unwrap()
                 .0,
+            token_pda,
         )
     }
 
-    pub async fn fetch_journal(&self) -> (Pubkey, Journal, JournalEntries) {
+    pub async fn fetch_journal(&self) -> (Pubkey, Journal, JournalEntries, TokenAccount) {
         let journal_key = Journal::find_address().0;
 
         let program_config_account_data = self
@@ -547,7 +596,18 @@ impl ProgramTestWithOwner {
 
         let journal_entries = Journal::checked_journal_entries(&remaining_data).unwrap();
 
-        (journal_key, *journal, journal_entries)
+        let token_pda_key = state::find_2z_token_pda_address(&journal_key).0;
+        let journal_2z_token_pda_data = self
+            .banks_client
+            .get_account(token_pda_key)
+            .await
+            .unwrap()
+            .unwrap()
+            .data;
+
+        let token_pda = TokenAccount::unpack(&journal_2z_token_pda_data).unwrap();
+
+        (journal_key, *journal, journal_entries, token_pda)
     }
 
     pub async fn fetch_distribution(
@@ -568,19 +628,37 @@ impl ProgramTestWithOwner {
             .unwrap()
             .0;
 
-        let custodied_2z_key = state::find_2z_token_pda_address(&distribution_key).0;
-        let distribution_custody_account_data = self
+        let token_pda_key = state::find_2z_token_pda_address(&distribution_key).0;
+        let distribution_2z_token_pda_data = self
             .banks_client
-            .get_account(custodied_2z_key)
+            .get_account(token_pda_key)
             .await
             .unwrap()
             .unwrap()
             .data;
 
-        let custodied_2z_token_account =
-            TokenAccount::unpack(&distribution_custody_account_data).unwrap();
+        let token_pda = TokenAccount::unpack(&distribution_2z_token_pda_data).unwrap();
 
-        (distribution_key, distribution, custodied_2z_token_account)
+        (distribution_key, distribution, token_pda)
+    }
+
+    pub async fn fetch_prepaid_connection(&self, user_key: &Pubkey) -> (Pubkey, PrepaidConnection) {
+        let prepaid_connection_key = PrepaidConnection::find_address(user_key).0;
+
+        let prepaid_connection_account_data = self
+            .banks_client
+            .get_account(prepaid_connection_key)
+            .await
+            .unwrap()
+            .unwrap()
+            .data;
+
+        (
+            prepaid_connection_key,
+            *checked_from_bytes_with_discriminator(&prepaid_connection_account_data)
+                .unwrap()
+                .0,
+        )
     }
 }
 

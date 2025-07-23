@@ -70,7 +70,7 @@ async fn test_set_admin() {
         .await
         .unwrap();
 
-    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config, _) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
     expected_program_config.bump_seed = ProgramConfig::find_address().1;
@@ -146,7 +146,7 @@ async fn test_configure_program() {
         .await
         .unwrap();
 
-    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config, _) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
     expected_program_config.bump_seed = ProgramConfig::find_address().1;
@@ -387,7 +387,7 @@ async fn test_initialize_distribution() {
     assert_eq!(distribution, expected_distribution);
     assert_eq!(distribution_custody.amount, 0);
 
-    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config, _) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
     expected_program_config.bump_seed = ProgramConfig::find_address().1;
@@ -431,7 +431,7 @@ async fn test_initialize_distribution() {
     assert_eq!(distribution, expected_distribution);
     assert_eq!(distribution_custody.amount, 0);
 
-    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config, _) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
     expected_program_config.bump_seed = ProgramConfig::find_address().1;
@@ -586,12 +586,12 @@ async fn test_initialize_prepaid_connection() {
         .await
         .unwrap();
 
-    let balance_before = test_setup
+    let src_balance = test_setup
         .fetch_token_account(&source_token_account_key)
         .await
         .unwrap()
         .amount;
-    assert_eq!(balance_before, expected_activation_cost);
+    assert_eq!(src_balance, expected_activation_cost);
 
     // Test inputs.
 
@@ -607,32 +607,165 @@ async fn test_initialize_prepaid_connection() {
         .await
         .unwrap();
 
-    // Activation fee must have been burned from the source token account.
-    let balance_after = test_setup
+    // Activation fee must have been transferred from the source token account.
+    let src_balance = test_setup
         .fetch_token_account(&source_token_account_key)
         .await
         .unwrap()
         .amount;
-    assert_eq!(balance_after, 0);
+    assert_eq!(src_balance, 0);
 
-    let prepaid_connection_key = PrepaidConnection::find_address(&user_key).0;
-    let prepaid_connection_account_data = test_setup
-        .banks_client
-        .get_account(prepaid_connection_key)
-        .await
-        .unwrap()
-        .unwrap()
-        .data;
+    // Did the tokens arrive in the reserve account?
+    let (_, _, reserve_2z) = test_setup.fetch_program_config().await;
+    assert_eq!(reserve_2z.amount, expected_activation_cost);
 
-    let (prepaid_connection, remaining_data) = checked_from_bytes_with_discriminator::<
-        PrepaidConnection,
-    >(&prepaid_connection_account_data)
-    .unwrap();
+    let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_key).await;
 
     let mut expected_prepaid_connection = PrepaidConnection::default();
     expected_prepaid_connection.user_key = user_key;
     expected_prepaid_connection.termination_beneficiary_key = test_setup.payer_signer.pubkey();
-    assert_eq!(prepaid_connection, &expected_prepaid_connection);
+    assert_eq!(prepaid_connection, expected_prepaid_connection);
+}
+
+//
+// Load prepaid connection.
+//
+
+#[tokio::test]
+async fn test_load_prepaid_connection() {
+    let burn_authority_signer = Keypair::new();
+
+    let bootstrapped_accounts = common::generate_token_accounts_for_test(
+        &DOUBLEZERO_MINT_KEY,
+        &[burn_authority_signer.pubkey()],
+    );
+    let source_token_account_key = bootstrapped_accounts.first().unwrap().key;
+
+    let mut test_setup = common::start_test_with_accounts(bootstrapped_accounts).await;
+
+    let admin_signer = Keypair::new();
+
+    // Prepaid connection settings.
+    let prepaid_activation_cost = 20_000;
+    let prepaid_cost_per_dz_epoch = 10_000;
+
+    let prepaid_minimum_prepaid_dz_epochs = 1;
+    let prepaid_maximum_entries = 10;
+
+    let user_key = Pubkey::new_unique();
+
+    test_setup
+        .transfer_2z(&source_token_account_key, 1_000_000 * u64::pow(10, 8))
+        .await
+        .unwrap()
+        .initialize_program()
+        .await
+        .unwrap()
+        .initialize_journal()
+        .await
+        .unwrap()
+        .set_admin(admin_signer.pubkey())
+        .await
+        .unwrap()
+        .configure_journal(
+            [
+                JournalConfiguration::ActivationCost(prepaid_activation_cost),
+                JournalConfiguration::CostPerDoubleZeroEpoch(prepaid_cost_per_dz_epoch),
+                JournalConfiguration::EntryBoundaries {
+                    minimum_prepaid_dz_epochs: prepaid_minimum_prepaid_dz_epochs,
+                    maximum_entries: prepaid_maximum_entries,
+                },
+            ],
+            &admin_signer,
+            false, // use_payer
+        )
+        .await
+        .unwrap()
+        .initialize_prepaid_connection(
+            &burn_authority_signer,
+            &source_token_account_key,
+            &user_key,
+            8,
+        )
+        .await
+        .unwrap();
+
+    // Test input
+    let starting_balance = test_setup
+        .fetch_token_account(&source_token_account_key)
+        .await
+        .unwrap()
+        .amount;
+
+    // Test inputs.
+
+    let valid_through_dz_epoch = DoubleZeroEpoch::new(5);
+
+    test_setup
+        .load_prepaid_connection(
+            &burn_authority_signer,
+            &source_token_account_key,
+            &user_key,
+            valid_through_dz_epoch,
+            8,
+        )
+        .await
+        .unwrap();
+
+    let ending_balance = test_setup
+        .fetch_token_account(&source_token_account_key)
+        .await
+        .unwrap()
+        .amount;
+
+    // Compute the total cost. Because global DZ epoch is 0, we needed to have paid for 6 epochs.
+    let expected_total_payment = (valid_through_dz_epoch.value() + 1)
+        * u64::from(prepaid_cost_per_dz_epoch)
+        * u64::pow(10, 8);
+    assert_eq!(starting_balance - ending_balance, expected_total_payment);
+
+    let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_key).await;
+
+    let mut expected_prepaid_connection = PrepaidConnection::default();
+    expected_prepaid_connection.user_key = user_key;
+    expected_prepaid_connection.set_has_paid(true);
+    expected_prepaid_connection.valid_through_dz_epoch = valid_through_dz_epoch;
+    expected_prepaid_connection.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    assert_eq!(prepaid_connection, expected_prepaid_connection);
+
+    // Load again.
+
+    let starting_balance = ending_balance;
+
+    let valid_through_dz_epoch = DoubleZeroEpoch::new(7);
+
+    test_setup
+        .load_prepaid_connection(
+            &burn_authority_signer,
+            &source_token_account_key,
+            &user_key,
+            valid_through_dz_epoch,
+            8,
+        )
+        .await
+        .unwrap();
+
+    let ending_balance = test_setup
+        .fetch_token_account(&source_token_account_key)
+        .await
+        .unwrap()
+        .amount;
+
+    // Compute the total cost. Because we have already paid through DZ epoch 5, we needed to have
+    // paid for 2 more epochs.
+    let expected_total_payment = (valid_through_dz_epoch.value() - 5)
+        * u64::from(prepaid_cost_per_dz_epoch)
+        * u64::pow(10, 8);
+    assert_eq!(starting_balance - ending_balance, expected_total_payment);
+
+    let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_key).await;
+    expected_prepaid_connection.valid_through_dz_epoch = valid_through_dz_epoch;
+    assert_eq!(prepaid_connection, expected_prepaid_connection);
 }
 
 //
