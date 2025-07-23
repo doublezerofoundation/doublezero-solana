@@ -1,10 +1,10 @@
 mod common;
 
 use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
-use doublezero_revenue_distribution::instruction::PrepaidConnectionProgramSetting;
+use doublezero_revenue_distribution::instruction::JournalConfiguration;
 use doublezero_revenue_distribution::state::PrepaidConnection;
 use doublezero_revenue_distribution::{
-    instruction::{ConfigureFlag, DistributionConfiguration, ProgramConfiguration},
+    instruction::{DistributionConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
     state::{self, CommunityBurnRateParameters, Distribution, Journal, ProgramConfig},
     types::ValidatorFee,
     types::{BurnRate, DoubleZeroEpoch},
@@ -91,6 +91,14 @@ async fn test_configure_program() {
 
     let admin_signer = Keypair::new();
 
+    test_setup
+        .initialize_program()
+        .await
+        .unwrap()
+        .set_admin(admin_signer.pubkey())
+        .await
+        .unwrap();
+
     // Test inputs.
 
     // Flags.
@@ -110,23 +118,13 @@ async fn test_configure_program() {
     let dz_epochs_to_increasing_cbr = 10;
     let dz_epochs_to_cbr_limit = 20;
 
-    // Prepaid connection settings.
-    let prepaid_connection_activation_cost = 10_000;
-    let prepaid_connection_cost_per_dz_epoch = 6_969;
-
     // Relay settings.
     let prepaid_connection_termination_relay_lamports = 8 * 6_960;
 
     test_setup
-        .initialize_program()
-        .await
-        .unwrap()
-        .set_admin(admin_signer.pubkey())
-        .await
-        .unwrap()
         .configure_program(
             [
-                ProgramConfiguration::Flag(ConfigureFlag::IsPaused(should_pause)),
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(should_pause)),
                 ProgramConfiguration::Accountant(accountant_key),
                 ProgramConfiguration::CalculationGracePeriodSeconds(
                     calculation_grace_period_seconds,
@@ -139,18 +137,7 @@ async fn test_configure_program() {
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-            ],
-            &admin_signer,
-        )
-        .await
-        .unwrap()
-        .configure_program(
-            [
-                PrepaidConnectionProgramSetting::ActivationCost(prepaid_connection_activation_cost),
-                PrepaidConnectionProgramSetting::CostPerDoubleZeroEpoch(
-                    prepaid_connection_cost_per_dz_epoch,
-                ),
-                PrepaidConnectionProgramSetting::TerminationRelayLamports(
+                ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(
                     prepaid_connection_termination_relay_lamports,
                 ),
             ],
@@ -181,10 +168,6 @@ async fn test_configure_program() {
         dz_epochs_to_cbr_limit,
     )
     .unwrap();
-
-    let prepaid_connection_parameters = &mut expected_program_config.prepaid_connection_parameters;
-    prepaid_connection_parameters.activation_cost = prepaid_connection_activation_cost;
-    prepaid_connection_parameters.cost_per_dz_epoch = prepaid_connection_cost_per_dz_epoch;
 
     let relay_parameters = &mut expected_program_config.relay_parameters;
     relay_parameters.prepaid_connection_termination_lamports =
@@ -222,7 +205,91 @@ async fn test_initialize_journal() {
     assert_eq!(journal, &expected_journal);
 
     let epoch_payments = Journal::checked_journal_entries(remaining_data).unwrap();
-    assert!(epoch_payments.is_empty());
+    assert!(epoch_payments.0.is_empty());
+
+    let custodied_2z_token_account_data = test_setup
+        .banks_client
+        .get_account(state::find_2z_token_pda_address(&journal_key).0)
+        .await
+        .unwrap()
+        .unwrap()
+        .data;
+    let custodied_2z_token_account =
+        TokenAccount::unpack(&custodied_2z_token_account_data).unwrap();
+    let expected_custodied_2z_token_account = TokenAccount {
+        mint: DOUBLEZERO_MINT_KEY,
+        owner: journal_key,
+        state: SplTokenAccountState::Initialized,
+        ..Default::default()
+    };
+    assert_eq!(
+        custodied_2z_token_account,
+        expected_custodied_2z_token_account
+    );
+}
+
+//
+// Configure journal.
+//
+
+#[tokio::test]
+async fn test_configure_journal() {
+    let mut test_setup = common::start_test().await;
+
+    let admin_signer = Keypair::new();
+
+    test_setup
+        .initialize_program()
+        .await
+        .unwrap()
+        .initialize_journal()
+        .await
+        .unwrap()
+        .set_admin(admin_signer.pubkey())
+        .await
+        .unwrap();
+
+    // Test inputs.
+
+    // Prepaid connection settings.
+    let prepaid_connection_activation_cost = 10_000;
+    let prepaid_connection_cost_per_dz_epoch = 6_969;
+
+    test_setup
+        .configure_journal(
+            [
+                JournalConfiguration::ActivationCost(prepaid_connection_activation_cost),
+                JournalConfiguration::CostPerDoubleZeroEpoch(prepaid_connection_cost_per_dz_epoch),
+            ],
+            &admin_signer,
+            false, // use_payer
+        )
+        .await
+        .unwrap();
+
+    let journal_key = Journal::find_address().0;
+    let journal_account_data = test_setup
+        .banks_client
+        .get_account(journal_key)
+        .await
+        .unwrap()
+        .unwrap()
+        .data;
+
+    let (journal, remaining_data) =
+        checked_from_bytes_with_discriminator::<Journal>(&journal_account_data).unwrap();
+
+    let (journal_key, journal_bump) = Journal::find_address();
+
+    let mut expected_journal = Journal::default();
+    expected_journal.bump_seed = journal_bump;
+    expected_journal.token_2z_pda_bump_seed = state::find_2z_token_pda_address(&journal_key).1;
+    expected_journal.activation_cost = prepaid_connection_activation_cost;
+    expected_journal.cost_per_dz_epoch = prepaid_connection_cost_per_dz_epoch;
+    assert_eq!(journal, &expected_journal);
+
+    let epoch_payments = Journal::checked_journal_entries(remaining_data).unwrap();
+    assert!(epoch_payments.0.is_empty());
 
     let custodied_2z_token_account_data = test_setup
         .banks_client
@@ -281,7 +348,7 @@ async fn test_initialize_distribution() {
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-                ProgramConfiguration::Flag(ConfigureFlag::IsPaused(false)),
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
             &admin_signer,
         )
@@ -427,7 +494,7 @@ async fn test_configure_distribution() {
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-                ProgramConfiguration::Flag(ConfigureFlag::IsPaused(false)),
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
             &admin_signer,
         )
@@ -503,14 +570,18 @@ async fn test_initialize_prepaid_connection() {
         .initialize_program()
         .await
         .unwrap()
+        .initialize_journal()
+        .await
+        .unwrap()
         .set_admin(admin_signer.pubkey())
         .await
         .unwrap()
-        .configure_program(
-            [PrepaidConnectionProgramSetting::ActivationCost(
+        .configure_journal(
+            [JournalConfiguration::ActivationCost(
                 prepaid_connection_activation_cost,
             )],
             &admin_signer,
+            false, // use_payer
         )
         .await
         .unwrap();
@@ -602,15 +673,19 @@ async fn test_terminate_prepaid_connection() {
         .await
         .unwrap()
         .configure_program(
-            [PrepaidConnectionProgramSetting::TerminationRelayLamports(
-                prepaid_connection_termination_relay_lamports,
-            )],
+            [
+                ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(
+                    prepaid_connection_termination_relay_lamports,
+                ),
+            ],
             &admin_signer,
         )
         .await
         .unwrap()
         .configure_program(
-            [ProgramConfiguration::Flag(ConfigureFlag::IsPaused(false))],
+            [ProgramConfiguration::Flag(
+                ProgramFlagConfiguration::IsPaused(false),
+            )],
             &admin_signer,
         )
         .await

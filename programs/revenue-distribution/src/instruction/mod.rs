@@ -9,7 +9,7 @@ use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
 use solana_hash::Hash;
 use solana_pubkey::Pubkey;
 
-use crate::types::EpochDuration;
+use crate::types::{DoubleZeroEpoch, EpochDuration};
 
 pub trait ConfigureProgramInstructionData {
     fn into_instruction_data(self) -> RevenueDistributionInstructionData;
@@ -17,7 +17,7 @@ pub trait ConfigureProgramInstructionData {
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ProgramConfiguration {
-    Flag(ConfigureFlag),
+    Flag(ProgramFlagConfiguration),
     Accountant(Pubkey),
     Sol2zSwapProgram(Pubkey),
     SolanaValidatorFee(u16),
@@ -28,29 +28,21 @@ pub enum ProgramConfiguration {
         dz_epochs_to_limit: EpochDuration,
         initial_rate: Option<u32>,
     },
-}
-
-impl ConfigureProgramInstructionData for ProgramConfiguration {
-    fn into_instruction_data(self) -> RevenueDistributionInstructionData {
-        RevenueDistributionInstructionData::ConfigureProgram(self)
-    }
+    PrepaidConnectionTerminationRelayLamports(u32),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
-pub enum PrepaidConnectionProgramSetting {
+pub enum JournalConfiguration {
     ActivationCost(u32),
     CostPerDoubleZeroEpoch(u32),
-    TerminationRelayLamports(u32),
-}
-
-impl ConfigureProgramInstructionData for PrepaidConnectionProgramSetting {
-    fn into_instruction_data(self) -> RevenueDistributionInstructionData {
-        RevenueDistributionInstructionData::ConfigurePrepaidConnectionProgramSetting(self)
-    }
+    EntryBoundaries {
+        minimum_prepaid_dz_epochs: u16,
+        maximum_entries: u16,
+    },
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
-pub enum ConfigureFlag {
+pub enum ProgramFlagConfiguration {
     IsPaused(bool),
 }
 
@@ -71,8 +63,8 @@ pub enum RevenueDistributionInstructionData {
     InitializeProgram,
     SetAdmin(Pubkey),
     ConfigureProgram(ProgramConfiguration),
-    ConfigurePrepaidConnectionProgramSetting(PrepaidConnectionProgramSetting),
     InitializeJournal,
+    ConfigureJournal(JournalConfiguration),
     InitializeDistribution,
     ConfigureDistribution(DistributionConfiguration),
     InitializePrepaidConnection {
@@ -80,7 +72,7 @@ pub enum RevenueDistributionInstructionData {
         decimals: u8,
     },
     LoadPrepaidConnection {
-        dz_epoch_duration: EpochDuration,
+        valid_through_dz_epoch: DoubleZeroEpoch,
         decimals: u8,
     },
     TerminatePrepaidConnection,
@@ -93,10 +85,10 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::set_admin");
     pub const CONFIGURE_PROGRAM: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_program");
-    pub const CONFIGURE_PREPAID_CONNECTION_PROGRAM_SETTING: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::configure_prepaid_connection_program_setting");
     pub const INITIALIZE_JOURNAL: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_journal");
+    pub const CONFIGURE_JOURNAL: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::configure_journal");
     pub const INITIALIZE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_distribution");
     pub const CONFIGURE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
@@ -117,9 +109,8 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             Self::CONFIGURE_PROGRAM => {
                 BorshDeserialize::deserialize_reader(reader).map(Self::ConfigureProgram)
             }
-            Self::CONFIGURE_PREPAID_CONNECTION_PROGRAM_SETTING => {
-                BorshDeserialize::deserialize_reader(reader)
-                    .map(Self::ConfigurePrepaidConnectionProgramSetting)
+            Self::CONFIGURE_JOURNAL => {
+                BorshDeserialize::deserialize_reader(reader).map(Self::ConfigureJournal)
             }
             Self::INITIALIZE_JOURNAL => Ok(Self::InitializeJournal),
             Self::INITIALIZE_DISTRIBUTION => Ok(Self::InitializeDistribution),
@@ -132,11 +123,11 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 Ok(Self::InitializePrepaidConnection { user_key, decimals })
             }
             Self::LOAD_PREPAID_CONNECTION => {
-                let dz_epoch_duration = BorshDeserialize::deserialize_reader(reader)?;
+                let valid_through_dz_epoch = BorshDeserialize::deserialize_reader(reader)?;
                 let decimals = BorshDeserialize::deserialize_reader(reader)?;
 
                 Ok(Self::LoadPrepaidConnection {
-                    dz_epoch_duration,
+                    valid_through_dz_epoch,
                     decimals,
                 })
             }
@@ -161,8 +152,8 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::CONFIGURE_PROGRAM.serialize(writer)?;
                 setting.serialize(writer)
             }
-            Self::ConfigurePrepaidConnectionProgramSetting(setting) => {
-                Self::CONFIGURE_PREPAID_CONNECTION_PROGRAM_SETTING.serialize(writer)?;
+            Self::ConfigureJournal(setting) => {
+                Self::CONFIGURE_JOURNAL.serialize(writer)?;
                 setting.serialize(writer)
             }
             Self::InitializeJournal => Self::INITIALIZE_JOURNAL.serialize(writer),
@@ -177,11 +168,11 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 decimals.serialize(writer)
             }
             Self::LoadPrepaidConnection {
-                dz_epoch_duration,
+                valid_through_dz_epoch,
                 decimals,
             } => {
                 Self::LOAD_PREPAID_CONNECTION.serialize(writer)?;
-                dz_epoch_duration.serialize(writer)?;
+                valid_through_dz_epoch.serialize(writer)?;
                 decimals.serialize(writer)
             }
             Self::TerminatePrepaidConnection => {

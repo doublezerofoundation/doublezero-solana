@@ -79,11 +79,6 @@ impl From<SetAdminAccounts> for Vec<AccountMeta> {
     }
 }
 
-/// These accounts can be used for the following instructions:
-/// - Configure program.
-/// - Configure prepaid connection program setting.
-///
-/// TODO: Fix this docstring to reflect other config instructions.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigureProgramAccounts {
     pub program_config_key: Pubkey,
@@ -148,6 +143,48 @@ impl From<InitializeJournalAccounts> for Vec<AccountMeta> {
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new_readonly(solana_system_interface::program::ID, false),
         ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigureJournalAccounts {
+    pub program_config_key: Pubkey,
+    pub admin_key: Pubkey,
+    pub journal_key: Pubkey,
+    pub payer_key: Option<Pubkey>,
+}
+
+impl ConfigureJournalAccounts {
+    pub fn new(admin_key: &Pubkey, payer_key: Option<&Pubkey>) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            admin_key: *admin_key,
+            journal_key: Journal::find_address().0,
+            payer_key: payer_key.copied(),
+        }
+    }
+}
+
+impl From<ConfigureJournalAccounts> for Vec<AccountMeta> {
+    fn from(accounts: ConfigureJournalAccounts) -> Self {
+        let ConfigureJournalAccounts {
+            program_config_key,
+            admin_key,
+            journal_key,
+            payer_key,
+        } = accounts;
+
+        let mut account_metas = vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new_readonly(admin_key, true),
+            AccountMeta::new(journal_key, false),
+        ];
+
+        if let Some(payer_key) = payer_key {
+            account_metas.push(AccountMeta::new(payer_key, true));
+        }
+
+        account_metas
     }
 }
 
@@ -233,6 +270,7 @@ impl From<ConfigureDistributionAccounts> for Vec<AccountMeta> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitializePrepaidConnectionAccounts {
     pub program_config_key: Pubkey,
+    pub journal_key: Pubkey,
     pub source_2z_token_account_key: Pubkey,
     pub token_transfer_authority_key: Pubkey,
     pub reserve_2z_key: Pubkey,
@@ -251,6 +289,7 @@ impl InitializePrepaidConnectionAccounts {
 
         Self {
             program_config_key,
+            journal_key: Journal::find_address().0,
             source_2z_token_account_key: *source_2z_token_account_key,
             token_transfer_authority_key: *token_transfer_authority_key,
             reserve_2z_key: find_2z_token_pda_address(&program_config_key).0,
@@ -264,6 +303,7 @@ impl From<InitializePrepaidConnectionAccounts> for Vec<AccountMeta> {
     fn from(accounts: InitializePrepaidConnectionAccounts) -> Self {
         let InitializePrepaidConnectionAccounts {
             program_config_key,
+            journal_key,
             source_2z_token_account_key,
             token_transfer_authority_key,
             reserve_2z_key,
@@ -273,6 +313,7 @@ impl From<InitializePrepaidConnectionAccounts> for Vec<AccountMeta> {
 
         vec![
             AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new_readonly(journal_key, false),
             AccountMeta::new(source_2z_token_account_key, false),
             AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
             AccountMeta::new(reserve_2z_key, false),

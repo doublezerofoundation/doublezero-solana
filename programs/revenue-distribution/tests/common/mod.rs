@@ -1,7 +1,9 @@
 use doublezero_program_tools::{
     instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
 };
-use doublezero_revenue_distribution::instruction::ConfigureProgramInstructionData;
+use doublezero_revenue_distribution::instruction::account::ConfigureJournalAccounts;
+use doublezero_revenue_distribution::instruction::{JournalConfiguration, ProgramConfiguration};
+use doublezero_revenue_distribution::state::JournalEntries;
 use doublezero_revenue_distribution::{
     state::Distribution,
     types::DoubleZeroEpoch,
@@ -250,7 +252,7 @@ impl ProgramTestWithOwner {
 
     pub async fn configure_program<const N: usize>(
         &mut self,
-        settings: [impl ConfigureProgramInstructionData; N],
+        settings: [ProgramConfiguration; N],
         admin_signer: &Keypair,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
@@ -261,7 +263,7 @@ impl ProgramTestWithOwner {
                 try_build_instruction(
                     &ID,
                     ConfigureProgramAccounts::new(&admin_signer.pubkey()),
-                    &setting.into_instruction_data(),
+                    &RevenueDistributionInstructionData::ConfigureProgram(setting),
                 )
                 .unwrap()
             })
@@ -308,6 +310,43 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
+    pub async fn configure_journal<const N: usize>(
+        &mut self,
+        settings: [JournalConfiguration; N],
+        admin_signer: &Keypair,
+        use_payer: bool,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+        let payer_key = payer_signer.pubkey();
+
+        let configure_program_ixs = settings
+            .into_iter()
+            .map(|setting| {
+                try_build_instruction(
+                    &ID,
+                    ConfigureJournalAccounts::new(
+                        &admin_signer.pubkey(),
+                        if use_payer { Some(&payer_key) } else { None },
+                    ),
+                    &RevenueDistributionInstructionData::ConfigureJournal(setting),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &configure_program_ixs,
+            &[payer_signer, admin_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
     pub async fn initialize_distribution(
         &mut self,
         accountant_signer: &Keypair,
@@ -343,18 +382,18 @@ impl ProgramTestWithOwner {
     pub async fn configure_distribution<const N: usize>(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        data: [DistributionConfiguration; N],
+        setting: [DistributionConfiguration; N],
         accountant_signer: &Keypair,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let configure_program_ixs = data
+        let configure_program_ixs = setting
             .into_iter()
-            .map(|data| {
+            .map(|setting| {
                 try_build_instruction(
                     &ID,
                     ConfigureDistributionAccounts::new(&accountant_signer.pubkey(), dz_epoch),
-                    &RevenueDistributionInstructionData::ConfigureDistribution(data),
+                    &RevenueDistributionInstructionData::ConfigureDistribution(setting),
                 )
                 .unwrap()
             })
@@ -490,6 +529,25 @@ impl ProgramTestWithOwner {
                 .unwrap()
                 .0,
         )
+    }
+
+    pub async fn fetch_journal(&self) -> (Pubkey, Journal, JournalEntries) {
+        let journal_key = Journal::find_address().0;
+
+        let program_config_account_data = self
+            .banks_client
+            .get_account(journal_key)
+            .await
+            .unwrap()
+            .unwrap()
+            .data;
+
+        let (journal, remaining_data) =
+            checked_from_bytes_with_discriminator(&program_config_account_data).unwrap();
+
+        let journal_entries = Journal::checked_journal_entries(&remaining_data).unwrap();
+
+        (journal_key, *journal, journal_entries)
     }
 
     pub async fn fetch_distribution(

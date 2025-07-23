@@ -1,19 +1,18 @@
 mod community_burn_rate;
 mod distribution;
-mod prepaid_connection;
 mod relay;
 
 pub use community_burn_rate::*;
-pub use prepaid_connection::*;
+pub use distribution::*;
 pub use relay::*;
 
 //
 
-use crate::state::program_config::distribution::DistributionParameters;
-use crate::types::{DoubleZeroEpoch, Flags, FlagsBitmap, ValidatorFee};
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
 use solana_pubkey::Pubkey;
+
+use crate::types::{DoubleZeroEpoch, Flags, FlagsBitmap, ValidatorFee};
 
 use super::StorageGap;
 
@@ -46,8 +45,7 @@ pub struct ProgramConfig {
 
     pub distribution_parameters: DistributionParameters,
 
-    pub prepaid_connection_parameters: PrepaidConnectionParameters,
-
+    //pub prepaid_connection_parameters: PrepaidConnectionParameters,
     pub relay_parameters: RelayParameters,
 
     /// 16 * 32 bytes of a storage gap in case more fields need to be added.

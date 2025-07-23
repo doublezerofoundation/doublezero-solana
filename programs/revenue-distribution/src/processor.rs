@@ -19,14 +19,14 @@ use spl_token::instruction as token_instruction;
 
 use crate::{
     instruction::{
-        ConfigureFlag, DistributionConfiguration, PrepaidConnectionProgramSetting,
-        ProgramConfiguration, RevenueDistributionInstructionData,
+        DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, CommunityBurnRateParameters, Distribution, Journal, JournalEntry, PrepaidConnection,
-        ProgramConfig, TOKEN_2Z_PDA_SEED_PREFIX,
+        self, CommunityBurnRateParameters, Distribution, Journal, PrepaidConnection, ProgramConfig,
+        TOKEN_2Z_PDA_SEED_PREFIX,
     },
-    types::{BurnRate, DoubleZeroEpoch, EpochDuration, ValidatorFee},
+    types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
     DOUBLEZERO_MINT_KEY, ID,
 };
 
@@ -56,11 +56,11 @@ fn process_instruction(
         RevenueDistributionInstructionData::ConfigureProgram(setting) => {
             process_configure_program(accounts, setting)
         }
-        RevenueDistributionInstructionData::ConfigurePrepaidConnectionProgramSetting(setting) => {
-            process_configure_prepaid_connection_program_setting(accounts, setting)
-        }
         RevenueDistributionInstructionData::InitializeJournal => {
             process_initialize_journal(accounts)
+        }
+        RevenueDistributionInstructionData::ConfigureJournal(setting) => {
+            process_configure_journal(accounts, setting)
         }
         RevenueDistributionInstructionData::InitializeDistribution => {
             process_initialize_distribution(accounts)
@@ -72,9 +72,9 @@ fn process_instruction(
             process_initialize_prepaid_connection(accounts, user_key, decimals)
         }
         RevenueDistributionInstructionData::LoadPrepaidConnection {
-            dz_epoch_duration,
+            valid_through_dz_epoch,
             decimals,
-        } => process_load_prepaid_connection(accounts, dz_epoch_duration, decimals),
+        } => process_load_prepaid_connection(accounts, valid_through_dz_epoch, decimals),
         RevenueDistributionInstructionData::TerminatePrepaidConnection => {
             process_terminate_prepaid_connection(accounts)
         }
@@ -214,7 +214,7 @@ fn process_configure_program(
         ProgramConfiguration::Flag(configure_flag) => {
             msg!("Set flag");
             match configure_flag {
-                ConfigureFlag::IsPaused(should_pause) => {
+                ProgramFlagConfiguration::IsPaused(should_pause) => {
                     msg!("is_paused: {}", should_pause);
                     program_config.set_is_paused(should_pause);
                 }
@@ -345,44 +345,7 @@ fn process_configure_program(
                 }
             }
         }
-    }
-
-    Ok(())
-}
-
-fn process_configure_prepaid_connection_program_setting(
-    accounts: &[AccountInfo],
-    setting: PrepaidConnectionProgramSetting,
-) -> ProgramResult {
-    msg!("Configure prepaid connection program setting");
-
-    // We expect the following accounts for this instruction:
-    // - 0: Program config.
-    // - 1: Admin.
-    let mut accounts_iter = accounts.iter().enumerate();
-
-    let authorized_use =
-        VerifiedProgramAuthorityMut::try_next_accounts(&mut accounts_iter, Authority::Admin)?;
-    let mut program_config = authorized_use.program_config;
-
-    match setting {
-        PrepaidConnectionProgramSetting::ActivationCost(activation_cost) => {
-            msg!(
-                "Set prepaid_connection_parameters.activation_cost: {}",
-                activation_cost
-            );
-            program_config.prepaid_connection_parameters.activation_cost = activation_cost;
-        }
-        PrepaidConnectionProgramSetting::CostPerDoubleZeroEpoch(cost_per_dz_epoch) => {
-            msg!(
-                "Set prepaid_connection_parameters.cost_per_dz_epoch: {}",
-                cost_per_dz_epoch
-            );
-            program_config
-                .prepaid_connection_parameters
-                .cost_per_dz_epoch = cost_per_dz_epoch;
-        }
-        PrepaidConnectionProgramSetting::TerminationRelayLamports(lamports) => {
+        ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(lamports) => {
             msg!(
                 "Set relay_parameters.prepaid_connection_termination_lamports: {}",
                 lamports
@@ -482,6 +445,61 @@ fn process_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     let (mut journal, _) = zero_copy::try_initialize::<Journal>(new_journal_info, None)?;
     journal.bump_seed = journal_bump;
     journal.token_2z_pda_bump_seed = journal_2z_token_pda_bump;
+
+    Ok(())
+}
+
+fn process_configure_journal(
+    accounts: &[AccountInfo],
+    setting: JournalConfiguration,
+) -> ProgramResult {
+    msg!("Configure journal");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Admin.
+    // - 2: Journal.
+    // - 4: Payer (optional).
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Admin)?;
+
+    let mut journal =
+        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    match setting {
+        JournalConfiguration::ActivationCost(activation_cost) => {
+            msg!("Set activation_cost: {}", activation_cost);
+            journal.activation_cost = activation_cost;
+        }
+        JournalConfiguration::CostPerDoubleZeroEpoch(cost_per_dz_epoch) => {
+            msg!("Set cost_per_dz_epoch: {}", cost_per_dz_epoch);
+            journal.cost_per_dz_epoch = cost_per_dz_epoch;
+        }
+        JournalConfiguration::EntryBoundaries {
+            minimum_prepaid_dz_epochs,
+            maximum_entries,
+        } => {
+            if minimum_prepaid_dz_epochs == 0 {
+                msg!("Minimum prepaid DZ epochs cannot be zero");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            if maximum_entries < minimum_prepaid_dz_epochs {
+                msg!("Maximum entries cannot be less than minimum prepaid DZ epochs");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            msg!(
+                "Set minimum_prepaid_dz_epochs: {}",
+                minimum_prepaid_dz_epochs,
+            );
+            journal.minimum_prepaid_dz_epochs = minimum_prepaid_dz_epochs;
+
+            msg!("Set maximum_entries: {}", maximum_entries,);
+            journal.maximum_entries = maximum_entries;
+        }
+    }
 
     Ok(())
 }
@@ -690,23 +708,26 @@ fn process_initialize_prepaid_connection(
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Source 2Z token account.
-    // - 2: SPL 2Z mint.
-    // - 3: Reserve 2Z.
-    // - 4: Token transfer authority.
-    // - 5: SPL Token program.
-    // - 6: Payer (funder for new accounts).
-    // - 7: New prepaid connection.
-    // - 8: System program.
+    // - 1: Journal.
+    // - 2: Source 2Z token account.
+    // - 3: SPL 2Z mint.
+    // - 4: Reserve 2Z.
+    // - 5: Token transfer authority.
+    // - 6: SPL Token program.
+    // - 7: Payer (funder for new accounts).
+    // - 8: New prepaid connection.
+    // - 9: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be the program config. We need the activation cost for prepaid connections
-    // from this account.
+    // Account 0 must be the program config. We need the reserve 2Z bump.
     let program_config =
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    let activation_cost = program_config
-        .prepaid_connection_parameters
+    // Account 1 must be the journal. We need the activation cost to determine how much to transfer
+    // to the reserve.
+    let journal = ZeroCopyAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let activation_cost = journal
         .checked_activation_cost(decimals)
         .unwrap_or_default();
 
@@ -728,7 +749,7 @@ fn process_initialize_prepaid_connection(
     // token account effectively to burn them.
     let (_, reserve_2z_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
-        &program_config.info.key,
+        program_config.info.key,
         "reserve",
         Some(program_config.reserve_2z_bump_seed),
     )?;
@@ -807,7 +828,7 @@ fn process_initialize_prepaid_connection(
 
 fn process_load_prepaid_connection(
     accounts: &[AccountInfo],
-    dz_epoch_duration: EpochDuration,
+    valid_through_dz_epoch: DoubleZeroEpoch,
     decimals: u8,
 ) -> ProgramResult {
     msg!("Load prepaid connection");
@@ -824,16 +845,28 @@ fn process_load_prepaid_connection(
     let program_config =
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    let prepaid_connection_settings = &program_config.prepaid_connection_parameters;
+    let mut journal =
+        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    if !prepaid_connection_settings.is_within_activation_boundaries(dz_epoch_duration) {
-        msg!(
-            "DZ epoch duration is not within allowed activation boundaries {} and {}",
-            prepaid_connection_settings.minimum_activation_dz_epochs,
-            prepaid_connection_settings.maximum_activation_dz_epochs
-        );
+    let next_dz_epoch = program_config.next_dz_epoch;
+
+    let max_dz_epoch = next_dz_epoch.saturating_add_duration(journal.maximum_entries.into());
+    if valid_through_dz_epoch > max_dz_epoch {
+        msg!("End DZ epoch is beyond maximum DZ epoch: {}", max_dz_epoch);
         return Err(ProgramError::InvalidInstructionData);
     }
+
+    let min_dz_epoch =
+        next_dz_epoch.saturating_add_duration(journal.minimum_prepaid_dz_epochs.into());
+    if valid_through_dz_epoch < min_dz_epoch {
+        msg!("End DZ epoch is below minimum DZ epoch: {}", min_dz_epoch);
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    // This operation is safe because we know that the end DZ epoch does not exceed the maximum DZ
+    // epoch, which is calculated by adding a u16 value to the next DZ epoch.
+    let num_entries =
+        u16::try_from(valid_through_dz_epoch.value() - next_dz_epoch.value()).unwrap();
 
     let mut prepaid_connection =
         ZeroCopyMutAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
@@ -843,9 +876,6 @@ fn process_load_prepaid_connection(
 
     try_next_2z_mint_info(&mut accounts_iter)?;
 
-    let mut journal =
-        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
-
     let (_, journal_token_2z_pda_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &journal.info.key,
@@ -853,14 +883,14 @@ fn process_load_prepaid_connection(
         Some(journal.bump_seed),
     )?;
 
-    let transfer_amount = prepaid_connection_settings
-        .checked_duration_cost(dz_epoch_duration, decimals)
+    let transfer_amount = journal
+        .checked_duration_cost(num_entries, decimals)
         .unwrap_or_default();
 
     if transfer_amount == 0 {
-        msg!("Cost per DZ epoch misconfigured");
+        msg!("Cost per DZ epoch is misconfigured");
         return Err(ProgramError::InvalidAccountData);
-    }
+    };
 
     // First transfer 2Z from funder to journal.
     let token_transfer_checked_ix = token_instruction::transfer_checked(
@@ -877,41 +907,10 @@ fn process_load_prepaid_connection(
 
     invoke_signed_unchecked(&token_transfer_checked_ix, accounts, &[])?;
 
-    let next_dz_epoch = program_config.next_dz_epoch;
-    let valid_through_dz_epoch = next_dz_epoch.saturating_add_duration(dz_epoch_duration);
-
-    // Update journal entries.
+    // TODO: Update journal entries.
     //
     // We trust the remaining data of the journal account is serialized correctly.
     let mut journal_entries = Journal::checked_journal_entries(&journal.remaining_data).unwrap();
-
-    // Safe to unwrap because we determined that the cost per DZ epoch is configured correctly
-    // with the previous transfer to the journal's 2Z token account.
-    let cost_per_epoch = prepaid_connection_settings
-        .checked_cost_per_dz_epoch(decimals)
-        .unwrap();
-
-    // First, add amounts to existing entries where we need to allocate 2Z to specific DZ epochs.
-    journal_entries
-        .iter_mut()
-        .filter(|entry| entry.epoch >= next_dz_epoch && entry.epoch <= valid_through_dz_epoch)
-        .for_each(|entry| entry.amount = entry.amount.saturating_add(cost_per_epoch));
-
-    // Find the last epoch so we can push the cost-per-epoch as new entries.
-    let last_dz_epoch = journal_entries
-        .last()
-        .map(|entry| entry.epoch)
-        .unwrap_or(next_dz_epoch)
-        .saturating_add_duration(1);
-
-    if last_dz_epoch <= valid_through_dz_epoch {
-        for epoch_value in last_dz_epoch.value()..=valid_through_dz_epoch.value() {
-            journal_entries.push(JournalEntry {
-                epoch: DoubleZeroEpoch::new(epoch_value),
-                amount: cost_per_epoch,
-            });
-        }
-    }
 
     // Serialize back into remaining data.
     borsh::to_writer(&mut journal.remaining_data[..], &journal_entries).map_err(|e| {
@@ -920,8 +919,8 @@ fn process_load_prepaid_connection(
     })?;
 
     msg!(
-        "Activate prepaid connection for {} DZ epochs",
-        dz_epoch_duration
+        "Activate prepaid connection through DZ epoch: {}",
+        valid_through_dz_epoch
     );
     prepaid_connection.valid_through_dz_epoch = valid_through_dz_epoch;
 

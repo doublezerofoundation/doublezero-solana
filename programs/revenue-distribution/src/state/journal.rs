@@ -3,7 +3,10 @@ use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
 use solana_pubkey::Pubkey;
 
-use crate::{state::StorageGap, types::DoubleZeroEpoch};
+use crate::{
+    state::StorageGap,
+    types::{DoubleZeroEpoch, EpochDuration},
+};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C)]
@@ -13,7 +16,10 @@ pub struct Journal {
 
     /// Cache this seed to validate token PDA address.
     pub token_2z_pda_bump_seed: u8,
-    _bump_seed_padding: [u8; 6],
+    _bump_seed_padding: [u8; 2],
+
+    pub minimum_prepaid_dz_epochs: u16,
+    pub maximum_entries: u16,
 
     pub total_sol_balance: u64,
 
@@ -24,7 +30,10 @@ pub struct Journal {
     /// difference between the token account balance and this.
     pub total_2z_balance: u64,
 
-    /// 4 * 32 bytes of a storage gap in case more fields need to be added.
+    pub activation_cost: u32,
+    pub cost_per_dz_epoch: u32,
+
+    /// 8 * 32 bytes of a storage gap in case we need more fields.
     _storage_gap: StorageGap<8>,
 }
 
@@ -39,21 +48,60 @@ impl Journal {
         Pubkey::find_program_address(&[Self::SEED_PREFIX], &crate::ID)
     }
 
-    pub fn checked_journal_entries(data: &[u8]) -> Option<Vec<JournalEntry>> {
+    pub fn checked_journal_entries(data: &[u8]) -> Option<JournalEntries> {
         BorshDeserialize::try_from_slice(data).ok()
+    }
+
+    pub fn checked_activation_cost(&self, decimals: u8) -> Option<u64> {
+        checked_pow_10(decimals)?.checked_mul(self.activation_cost.into())
+    }
+
+    pub fn checked_cost_per_dz_epoch(&self, decimals: u8) -> Option<u64> {
+        checked_pow_10(decimals)?.checked_mul(self.cost_per_dz_epoch.into())
+    }
+
+    pub fn checked_duration_cost(&self, num_entries: u16, decimals: u8) -> Option<u64> {
+        self.checked_cost_per_dz_epoch(decimals)?
+            .checked_mul(num_entries.into())
     }
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Copy, PartialEq, Eq)]
 pub struct JournalEntry {
-    pub epoch: DoubleZeroEpoch,
+    pub dz_epoch: DoubleZeroEpoch,
     pub amount: u64,
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Default, PartialEq, Eq)]
-pub struct JournalEntries(Vec<JournalEntry>);
+pub struct JournalEntries(pub Vec<JournalEntry>);
 
 impl JournalEntries {
+    pub fn last_dz_epoch(&self) -> Option<DoubleZeroEpoch> {
+        self.0.last().map(|entry| entry.dz_epoch)
+    }
+
+    pub fn extend(
+        &mut self,
+        next_dz_epoch: DoubleZeroEpoch,
+        maximum_epoch_duration_to_load: EpochDuration,
+    ) {
+        let end_dz_epoch = self
+            .last_dz_epoch()
+            .unwrap_or(next_dz_epoch)
+            .saturating_add_duration(1);
+
+        let new_last_dz_epoch =
+            end_dz_epoch.saturating_add_duration(maximum_epoch_duration_to_load);
+
+        if end_dz_epoch < new_last_dz_epoch {
+            for epoch_value in end_dz_epoch.value()..=new_last_dz_epoch.value() {
+                self.0.push(JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(epoch_value),
+                    amount: 0,
+                });
+            }
+        }
+    }
     pub fn update(
         &mut self,
         next_dz_epoch: DoubleZeroEpoch,
@@ -65,25 +113,32 @@ impl JournalEntries {
         // First, add amounts to existing entries where we need to allocate 2Z to specific DZ epochs.
         entries
             .iter_mut()
-            .filter(|entry| entry.epoch >= next_dz_epoch && entry.epoch <= valid_through_dz_epoch)
+            .filter(|entry| {
+                entry.dz_epoch >= next_dz_epoch && entry.dz_epoch <= valid_through_dz_epoch
+            })
             .for_each(|entry| entry.amount = entry.amount.saturating_add(cost_per_epoch));
 
         // Find the last epoch so we can push the cost-per-epoch as new entries.
         let last_dz_epoch = entries
             .last()
-            .map(|entry| entry.epoch)
+            .map(|entry| entry.dz_epoch)
             .unwrap_or(next_dz_epoch)
             .saturating_add_duration(1);
 
         if last_dz_epoch <= valid_through_dz_epoch {
             for epoch_value in last_dz_epoch.value()..=valid_through_dz_epoch.value() {
                 entries.push(JournalEntry {
-                    epoch: DoubleZeroEpoch::new(epoch_value),
+                    dz_epoch: DoubleZeroEpoch::new(epoch_value),
                     amount: cost_per_epoch,
                 });
             }
         }
     }
+}
+
+#[inline(always)]
+fn checked_pow_10(decimals: u8) -> Option<u64> {
+    u64::checked_pow(10, decimals.into())
 }
 
 #[cfg(test)]
@@ -99,11 +154,11 @@ mod tests {
 
         let mut journal_entries = JournalEntries(vec![
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(0),
+                dz_epoch: DoubleZeroEpoch::new(0),
                 amount: 100,
             },
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(1),
+                dz_epoch: DoubleZeroEpoch::new(1),
                 amount: 200,
             },
         ]);
@@ -112,27 +167,27 @@ mod tests {
 
         let expected_journal_entries = JournalEntries(vec![
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(0),
+                dz_epoch: DoubleZeroEpoch::new(0),
                 amount: 169,
             },
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(1),
+                dz_epoch: DoubleZeroEpoch::new(1),
                 amount: 269,
             },
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(2),
+                dz_epoch: DoubleZeroEpoch::new(2),
                 amount: 69,
             },
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(3),
+                dz_epoch: DoubleZeroEpoch::new(3),
                 amount: 69,
             },
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(4),
+                dz_epoch: DoubleZeroEpoch::new(4),
                 amount: 69,
             },
             JournalEntry {
-                epoch: DoubleZeroEpoch::new(5),
+                dz_epoch: DoubleZeroEpoch::new(5),
                 amount: 69,
             },
         ]);
