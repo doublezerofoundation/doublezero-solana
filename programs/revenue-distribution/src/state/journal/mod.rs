@@ -23,14 +23,14 @@ pub const fn absolute_max_journal_entries() -> usize {
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
-#[repr(C)]
+#[repr(C, align(8))]
 pub struct Journal {
     /// This seed will be used to sign for token transfers.
     pub bump_seed: u8,
 
     /// Cache this seed to validate token PDA address.
     pub token_2z_pda_bump_seed: u8,
-    _bump_seed_padding: [u8; 2],
+    _bump_seed_padding: [u8; 6],
 
     pub prepaid_connection_parameters: PrepaidConnectionParameters,
 

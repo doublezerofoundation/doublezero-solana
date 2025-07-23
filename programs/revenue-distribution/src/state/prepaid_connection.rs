@@ -8,7 +8,7 @@ use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
 use solana_pubkey::Pubkey;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
-#[repr(C)]
+#[repr(C, align(8))]
 pub struct PrepaidConnection {
     pub user_key: Pubkey,
 

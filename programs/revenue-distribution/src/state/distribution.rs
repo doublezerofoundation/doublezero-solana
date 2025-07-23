@@ -9,7 +9,7 @@ use crate::types::{BurnRate, DoubleZeroEpoch, Flags, FlagsBitmap, ValidatorFee};
 ///
 /// TODO: Do we add a gap? Unused data will cost the accountant a real amount of SOL per epoch.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
-#[repr(C)]
+#[repr(C, align(8))]
 pub struct Distribution {
     /// Taken from the program config account at the time of creation.
     pub dz_epoch: DoubleZeroEpoch,

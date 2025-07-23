@@ -17,7 +17,7 @@ use crate::types::{DoubleZeroEpoch, Flags, FlagsBitmap, ValidatorFee};
 use super::StorageGap;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
-#[repr(C)]
+#[repr(C, align(8))]
 pub struct ProgramConfig {
     pub flags: Flags,
 
