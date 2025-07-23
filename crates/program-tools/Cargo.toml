@@ -24,3 +24,4 @@ solana-program-error.workspace = true
 solana-pubkey.workspace = true
 solana-system-interface.workspace = true
 solana-sysvar = { workspace = true, features = ["bincode"] }
+spl-token.workspace = true

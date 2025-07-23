@@ -1,8 +1,10 @@
 mod common;
 
 use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
+use doublezero_revenue_distribution::instruction::PrepaidConnectionProgramSetting;
+use doublezero_revenue_distribution::state::PrepaidConnection;
 use doublezero_revenue_distribution::{
-    instruction::{ConfigureDistributionData, ConfigureFlag, ConfigureProgramSetting},
+    instruction::{ConfigureFlag, DistributionConfiguration, ProgramConfiguration},
     state::{self, CommunityBurnRateParameters, Distribution, Journal, ProgramConfig},
     types::ValidatorFee,
     types::{BurnRate, DoubleZeroEpoch},
@@ -25,9 +27,11 @@ async fn test_initialize_program() {
 
     test_setup.initialize_program().await.unwrap();
 
+    let (program_config_key, program_config_bump) = ProgramConfig::find_address();
+
     let program_config_account_data = test_setup
         .banks_client
-        .get_account(ProgramConfig::find_address().0)
+        .get_account(program_config_key)
         .await
         .unwrap()
         .unwrap()
@@ -39,6 +43,9 @@ async fn test_initialize_program() {
     assert!(remaining_data.is_empty());
 
     let mut expected_program_config = ProgramConfig::default();
+    expected_program_config.bump_seed = program_config_bump;
+    expected_program_config.reserve_2z_bump_seed =
+        state::find_2z_token_pda_address(&program_config_key).1;
     expected_program_config.set_is_paused(true);
     assert_eq!(program_config, &expected_program_config);
 }
@@ -63,9 +70,12 @@ async fn test_set_admin() {
         .await
         .unwrap();
 
-    let (_, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
+    expected_program_config.bump_seed = ProgramConfig::find_address().1;
+    expected_program_config.reserve_2z_bump_seed =
+        state::find_2z_token_pda_address(&program_config_key).1;
     expected_program_config.set_is_paused(true);
     expected_program_config.admin_key = admin_signer.pubkey();
     assert_eq!(program_config, expected_program_config);
@@ -89,14 +99,23 @@ async fn test_configure_program() {
     // Other settings.
     let accountant_key = Pubkey::new_unique();
     let sol_2z_swap_program_id = Pubkey::new_unique();
+
+    // Distribution settings.
     let solana_validator_fee = 500; // 5%
     let calculation_grace_period_seconds = 6 * 60 * 60;
 
-    // Community burn rate.
+    // -- Community burn rate.
     let initial_cbr = 100_000_000; // 10%
     let cbr_limit = 500_000_000; // 50%
     let dz_epochs_to_increasing_cbr = 10;
     let dz_epochs_to_cbr_limit = 20;
+
+    // Prepaid connection settings.
+    let prepaid_connection_activation_cost = 10_000;
+    let prepaid_connection_cost_per_dz_epoch = 6_969;
+
+    // Relay settings.
+    let prepaid_connection_termination_relay_lamports = 8 * 6_960;
 
     test_setup
         .initialize_program()
@@ -107,14 +126,14 @@ async fn test_configure_program() {
         .unwrap()
         .configure_program(
             [
-                ConfigureProgramSetting::Flag(ConfigureFlag::IsPaused(should_pause)),
-                ConfigureProgramSetting::Accountant(accountant_key),
-                ConfigureProgramSetting::CalculationGracePeriodSeconds(
+                ProgramConfiguration::Flag(ConfigureFlag::IsPaused(should_pause)),
+                ProgramConfiguration::Accountant(accountant_key),
+                ProgramConfiguration::CalculationGracePeriodSeconds(
                     calculation_grace_period_seconds,
                 ),
-                ConfigureProgramSetting::Sol2zSwapProgram(sol_2z_swap_program_id),
-                ConfigureProgramSetting::SolanaValidatorFee(solana_validator_fee),
-                ConfigureProgramSetting::CommunityBurnRateParameters {
+                ProgramConfiguration::Sol2zSwapProgram(sol_2z_swap_program_id),
+                ProgramConfiguration::SolanaValidatorFee(solana_validator_fee),
+                ProgramConfiguration::CommunityBurnRateParameters {
                     limit: cbr_limit,
                     dz_epochs_to_increasing: dz_epochs_to_increasing_cbr,
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
@@ -124,25 +143,52 @@ async fn test_configure_program() {
             &admin_signer,
         )
         .await
+        .unwrap()
+        .configure_program(
+            [
+                PrepaidConnectionProgramSetting::ActivationCost(prepaid_connection_activation_cost),
+                PrepaidConnectionProgramSetting::CostPerDoubleZeroEpoch(
+                    prepaid_connection_cost_per_dz_epoch,
+                ),
+                PrepaidConnectionProgramSetting::TerminationRelayLamports(
+                    prepaid_connection_termination_relay_lamports,
+                ),
+            ],
+            &admin_signer,
+        )
+        .await
         .unwrap();
 
-    let (_, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
+    expected_program_config.bump_seed = ProgramConfig::find_address().1;
+    expected_program_config.reserve_2z_bump_seed =
+        state::find_2z_token_pda_address(&program_config_key).1;
     expected_program_config.admin_key = admin_signer.pubkey();
     expected_program_config.set_is_paused(should_pause);
     expected_program_config.accountant_key = accountant_key;
-    expected_program_config.calculation_grace_period_seconds = calculation_grace_period_seconds;
     expected_program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;
-    expected_program_config.current_solana_validator_fee =
+
+    let distribution_parameters = &mut expected_program_config.distribution_parameters;
+    distribution_parameters.calculation_grace_period_seconds = calculation_grace_period_seconds;
+    distribution_parameters.current_solana_validator_fee =
         ValidatorFee::new(solana_validator_fee).unwrap();
-    expected_program_config.community_burn_rate_parameters = CommunityBurnRateParameters::new(
+    distribution_parameters.community_burn_rate_parameters = CommunityBurnRateParameters::new(
         BurnRate::new(initial_cbr).unwrap(),
         BurnRate::new(cbr_limit).unwrap(),
         dz_epochs_to_increasing_cbr,
         dz_epochs_to_cbr_limit,
     )
     .unwrap();
+
+    let prepaid_connection_parameters = &mut expected_program_config.prepaid_connection_parameters;
+    prepaid_connection_parameters.activation_cost = prepaid_connection_activation_cost;
+    prepaid_connection_parameters.cost_per_dz_epoch = prepaid_connection_cost_per_dz_epoch;
+
+    let relay_parameters = &mut expected_program_config.relay_parameters;
+    relay_parameters.prepaid_connection_termination_lamports =
+        prepaid_connection_termination_relay_lamports;
     assert_eq!(program_config, expected_program_config);
 }
 
@@ -167,14 +213,20 @@ async fn test_initialize_journal() {
 
     let (journal, remaining_data) =
         checked_from_bytes_with_discriminator::<Journal>(&journal_account_data).unwrap();
-    assert_eq!(journal, &Journal::default());
 
-    let epoch_payments = Journal::checked_epoch_payments(remaining_data).unwrap();
+    let (journal_key, journal_bump) = Journal::find_address();
+
+    let mut expected_journal = Journal::default();
+    expected_journal.bump_seed = journal_bump;
+    expected_journal.token_2z_pda_bump_seed = state::find_2z_token_pda_address(&journal_key).1;
+    assert_eq!(journal, &expected_journal);
+
+    let epoch_payments = Journal::checked_journal_entries(remaining_data).unwrap();
     assert!(epoch_payments.is_empty());
 
     let custodied_2z_token_account_data = test_setup
         .banks_client
-        .get_account(state::find_custodied_2z_address(&journal_key).0)
+        .get_account(state::find_2z_token_pda_address(&journal_key).0)
         .await
         .unwrap()
         .unwrap()
@@ -221,15 +273,15 @@ async fn test_initialize_distribution() {
         .unwrap()
         .configure_program(
             [
-                ConfigureProgramSetting::Accountant(accountant_signer.pubkey()),
-                ConfigureProgramSetting::SolanaValidatorFee(solana_validator_fee),
-                ConfigureProgramSetting::CommunityBurnRateParameters {
+                ProgramConfiguration::Accountant(accountant_signer.pubkey()),
+                ProgramConfiguration::SolanaValidatorFee(solana_validator_fee),
+                ProgramConfiguration::CommunityBurnRateParameters {
                     limit: cbr_limit,
                     dz_epochs_to_increasing: dz_epochs_to_increasing_cbr,
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-                ConfigureProgramSetting::Flag(ConfigureFlag::IsPaused(false)),
+                ProgramConfiguration::Flag(ConfigureFlag::IsPaused(false)),
             ],
             &admin_signer,
         )
@@ -256,23 +308,32 @@ async fn test_initialize_distribution() {
     );
 
     let dz_epoch = DoubleZeroEpoch::new(0);
-    let (_, distribution, distribution_custody) = test_setup.fetch_distribution(dz_epoch).await;
+    let (distribution_key, distribution, distribution_custody) =
+        test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
+    expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
+    expected_distribution.token_2z_pda_bump_seed =
+        state::find_2z_token_pda_address(&distribution_key).1;
     expected_distribution.dz_epoch = dz_epoch;
     expected_distribution.community_burn_rate = expected_cbr;
     assert_eq!(distribution, expected_distribution);
     assert_eq!(distribution_custody.amount, 0);
 
-    let (_, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
+    expected_program_config.bump_seed = ProgramConfig::find_address().1;
+    expected_program_config.reserve_2z_bump_seed =
+        state::find_2z_token_pda_address(&program_config_key).1;
     expected_program_config.admin_key = admin_signer.pubkey();
     expected_program_config.next_dz_epoch = DoubleZeroEpoch::new(1);
     expected_program_config.accountant_key = accountant_signer.pubkey();
-    expected_program_config.current_solana_validator_fee =
+
+    let distribution_parameters = &mut expected_program_config.distribution_parameters;
+    distribution_parameters.current_solana_validator_fee =
         ValidatorFee::new(solana_validator_fee).unwrap();
-    expected_program_config.community_burn_rate_parameters = cbr_params;
+    distribution_parameters.community_burn_rate_parameters = cbr_params;
     assert_eq!(program_config, expected_program_config);
 
     // Create another distribution.
@@ -291,23 +352,32 @@ async fn test_initialize_distribution() {
     );
 
     let dz_epoch = DoubleZeroEpoch::new(1);
-    let (_, distribution, distribution_custody) = test_setup.fetch_distribution(dz_epoch).await;
+    let (distribution_key, distribution, distribution_custody) =
+        test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
+    expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
+    expected_distribution.token_2z_pda_bump_seed =
+        state::find_2z_token_pda_address(&distribution_key).1;
     expected_distribution.dz_epoch = dz_epoch;
     expected_distribution.community_burn_rate = expected_cbr;
     assert_eq!(distribution, expected_distribution);
     assert_eq!(distribution_custody.amount, 0);
 
-    let (_, program_config) = test_setup.fetch_program_config().await;
+    let (program_config_key, program_config) = test_setup.fetch_program_config().await;
 
     let mut expected_program_config = ProgramConfig::default();
+    expected_program_config.bump_seed = ProgramConfig::find_address().1;
+    expected_program_config.reserve_2z_bump_seed =
+        state::find_2z_token_pda_address(&program_config_key).1;
     expected_program_config.admin_key = admin_signer.pubkey();
     expected_program_config.next_dz_epoch = DoubleZeroEpoch::new(2);
     expected_program_config.accountant_key = accountant_signer.pubkey();
-    expected_program_config.current_solana_validator_fee =
+
+    let distribution_parameters = &mut expected_program_config.distribution_parameters;
+    distribution_parameters.current_solana_validator_fee =
         ValidatorFee::new(solana_validator_fee).unwrap();
-    expected_program_config.community_burn_rate_parameters = cbr_params;
+    distribution_parameters.community_burn_rate_parameters = cbr_params;
     assert_eq!(program_config, expected_program_config);
 }
 
@@ -349,15 +419,15 @@ async fn test_configure_distribution() {
         .unwrap()
         .configure_program(
             [
-                ConfigureProgramSetting::Accountant(accountant_signer.pubkey()),
-                ConfigureProgramSetting::SolanaValidatorFee(solana_validator_fee),
-                ConfigureProgramSetting::CommunityBurnRateParameters {
+                ProgramConfiguration::Accountant(accountant_signer.pubkey()),
+                ProgramConfiguration::SolanaValidatorFee(solana_validator_fee),
+                ProgramConfiguration::CommunityBurnRateParameters {
                     limit: cbr_limit,
                     dz_epochs_to_increasing: dz_epochs_to_increasing_cbr,
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-                ConfigureProgramSetting::Flag(ConfigureFlag::IsPaused(false)),
+                ProgramConfiguration::Flag(ConfigureFlag::IsPaused(false)),
             ],
             &admin_signer,
         )
@@ -372,11 +442,11 @@ async fn test_configure_distribution() {
         .configure_distribution(
             dz_epoch,
             [
-                ConfigureDistributionData::SolanaValidatorPayments {
+                DistributionConfiguration::SolanaValidatorPayments {
                     total_owed: total_solana_validator_payments_owed,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
-                ConfigureDistributionData::ContributorRewards {
+                DistributionConfiguration::ContributorRewards {
                     total_contributors,
                     merkle_root: contributor_rewards_merkle_root,
                 },
@@ -386,9 +456,12 @@ async fn test_configure_distribution() {
         .await
         .unwrap();
 
-    let (_, distribution, _) = test_setup.fetch_distribution(dz_epoch).await;
+    let (distribution_key, distribution, _) = test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
+    expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
+    expected_distribution.token_2z_pda_bump_seed =
+        state::find_2z_token_pda_address(&distribution_key).1;
     expected_distribution.dz_epoch = dz_epoch;
     expected_distribution.community_burn_rate = BurnRate::new(initial_cbr).unwrap();
     expected_distribution.total_solana_validator_payments_owed =
@@ -398,4 +471,180 @@ async fn test_configure_distribution() {
     expected_distribution.total_contributors = total_contributors;
     expected_distribution.contributor_rewards_merkle_root = contributor_rewards_merkle_root;
     assert_eq!(distribution, expected_distribution);
+}
+
+//
+// Initialize prepaid connection.
+//
+
+#[tokio::test]
+async fn test_initialize_prepaid_connection() {
+    let burn_authority_signer = Keypair::new();
+
+    let bootstrapped_accounts = common::generate_token_accounts_for_test(
+        &DOUBLEZERO_MINT_KEY,
+        &[burn_authority_signer.pubkey()],
+    );
+    let source_token_account_key = bootstrapped_accounts.first().unwrap().key;
+
+    let mut test_setup = common::start_test_with_accounts(bootstrapped_accounts).await;
+
+    let admin_signer = Keypair::new();
+
+    // Prepaid connection settings.
+    let prepaid_connection_activation_cost = 20_000;
+
+    let expected_activation_cost = u64::from(prepaid_connection_activation_cost) * u64::pow(10, 8);
+
+    test_setup
+        .transfer_2z(&source_token_account_key, expected_activation_cost)
+        .await
+        .unwrap()
+        .initialize_program()
+        .await
+        .unwrap()
+        .set_admin(admin_signer.pubkey())
+        .await
+        .unwrap()
+        .configure_program(
+            [PrepaidConnectionProgramSetting::ActivationCost(
+                prepaid_connection_activation_cost,
+            )],
+            &admin_signer,
+        )
+        .await
+        .unwrap();
+
+    let balance_before = test_setup
+        .fetch_token_account(&source_token_account_key)
+        .await
+        .unwrap()
+        .amount;
+    assert_eq!(balance_before, expected_activation_cost);
+
+    // Test inputs.
+
+    let user_key = Pubkey::new_unique();
+
+    test_setup
+        .initialize_prepaid_connection(
+            &burn_authority_signer,
+            &source_token_account_key,
+            &user_key,
+            8,
+        )
+        .await
+        .unwrap();
+
+    // Activation fee must have been burned from the source token account.
+    let balance_after = test_setup
+        .fetch_token_account(&source_token_account_key)
+        .await
+        .unwrap()
+        .amount;
+    assert_eq!(balance_after, 0);
+
+    let prepaid_connection_key = PrepaidConnection::find_address(&user_key).0;
+    let prepaid_connection_account_data = test_setup
+        .banks_client
+        .get_account(prepaid_connection_key)
+        .await
+        .unwrap()
+        .unwrap()
+        .data;
+
+    let (prepaid_connection, remaining_data) = checked_from_bytes_with_discriminator::<
+        PrepaidConnection,
+    >(&prepaid_connection_account_data)
+    .unwrap();
+
+    let mut expected_prepaid_connection = PrepaidConnection::default();
+    expected_prepaid_connection.user_key = user_key;
+    expected_prepaid_connection.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    assert_eq!(prepaid_connection, &expected_prepaid_connection);
+}
+
+//
+// Terminate prepaid connection.
+//
+
+#[tokio::test]
+#[ignore]
+async fn test_terminate_prepaid_connection() {
+    let burn_authority_signer = Keypair::new();
+
+    let bootstrapped_accounts = common::generate_token_accounts_for_test(
+        &DOUBLEZERO_MINT_KEY,
+        &[burn_authority_signer.pubkey()],
+    );
+    let source_token_account_key = bootstrapped_accounts.first().unwrap().key;
+
+    let mut test_setup = common::start_test_with_accounts(bootstrapped_accounts).await;
+
+    let admin_signer = Keypair::new();
+
+    let user_key = Pubkey::new_unique();
+    let prepaid_connection_termination_relay_lamports = 20_000;
+
+    test_setup
+        .initialize_program()
+        .await
+        .unwrap()
+        .initialize_prepaid_connection(
+            &burn_authority_signer,
+            &source_token_account_key,
+            &user_key,
+            8,
+        )
+        .await
+        .unwrap()
+        .set_admin(admin_signer.pubkey())
+        .await
+        .unwrap()
+        .configure_program(
+            [PrepaidConnectionProgramSetting::TerminationRelayLamports(
+                prepaid_connection_termination_relay_lamports,
+            )],
+            &admin_signer,
+        )
+        .await
+        .unwrap()
+        .configure_program(
+            [ProgramConfiguration::Flag(ConfigureFlag::IsPaused(false))],
+            &admin_signer,
+        )
+        .await
+        .unwrap();
+
+    // Test inputs.
+
+    let termination_relayer_key = Pubkey::new_unique();
+
+    test_setup
+        .terminate_prepaid_connection(
+            &user_key,
+            &test_setup.payer_signer.pubkey(),
+            Some(&termination_relayer_key),
+        )
+        .await
+        .unwrap();
+
+    // let prepaid_connection_key = PrepaidConnection::find_address(&user_key).0;
+    // let prepaid_connection_account_data = test_setup
+    //     .banks_client
+    //     .get_account(prepaid_connection_key)
+    //     .await
+    //     .unwrap()
+    //     .unwrap()
+    //     .data;
+    //
+    // let (prepaid_connection, remaining_data) = checked_from_bytes_with_discriminator::<
+    //     PrepaidConnection,
+    // >(&prepaid_connection_account_data)
+    // .unwrap();
+    //
+    // let mut expected_prepaid_connection = PrepaidConnection::default();
+    // expected_prepaid_connection.user_key = user_key;
+    // expected_prepaid_connection.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    // assert_eq!(prepaid_connection, &expected_prepaid_connection);
 }

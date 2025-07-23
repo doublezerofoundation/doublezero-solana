@@ -1202,6 +1202,7 @@ dependencies = [
  "solana-pubkey",
  "solana-system-interface",
  "solana-sysvar",
+ "spl-token",
 ]
 
 [[package]]

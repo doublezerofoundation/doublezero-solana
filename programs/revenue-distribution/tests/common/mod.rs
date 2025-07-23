@@ -1,7 +1,7 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
 use doublezero_program_tools::{
     instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
 };
+use doublezero_revenue_distribution::instruction::ConfigureProgramInstructionData;
 use doublezero_revenue_distribution::{
     state::Distribution,
     types::DoubleZeroEpoch,
@@ -10,9 +10,10 @@ use doublezero_revenue_distribution::{
             account::{
                 ConfigureDistributionAccounts, ConfigureProgramAccounts,
                 InitializeDistributionAccounts, InitializeJournalAccounts,
-                InitializeProgramAccounts, SetAdminAccounts,
+                InitializePrepaidConnectionAccounts, InitializeProgramAccounts, SetAdminAccounts,
+                TerminatePrepaidConnectionAccounts,
             },
-            ConfigureDistributionData, ConfigureProgramSetting, RevenueDistributionInstructionData,
+            DistributionConfiguration, RevenueDistributionInstructionData,
         },
         state::{self, Journal, ProgramConfig},
         DOUBLEZERO_MINT_KEY, ID,
@@ -30,18 +31,27 @@ use solana_sdk::{
     signature::{Keypair, Signer},
     transaction::VersionedTransaction,
 };
-use spl_token::state::Account as TokenAccount;
+use spl_token::{
+    instruction as token_instruction,
+    state::{Account as TokenAccount, AccountState as SplTokenAccountState, Mint},
+};
+
+pub const TOTAL_2Z_SUPPLY: u64 = 10_000_000_000 * u64::pow(10, 8);
+
+pub struct TestAccount {
+    pub key: Pubkey,
+    pub info: Account,
+}
 
 pub struct ProgramTestWithOwner {
     pub banks_client: BanksClient,
     pub payer_signer: Keypair,
     pub recent_blockhash: Hash,
     pub owner_signer: Keypair,
+    pub treasury_2z_key: Pubkey,
 }
 
-pub async fn start_test_with_accounts<const N: usize>(
-    accounts: [(Pubkey, Account); N],
-) -> ProgramTestWithOwner {
+pub async fn start_test_with_accounts(accounts: Vec<TestAccount>) -> ProgramTestWithOwner {
     let mut program_test = ProgramTest::new("doublezero_revenue_distribution", ID, None);
     program_test.prefer_bpf(true);
 
@@ -59,17 +69,50 @@ pub async fn start_test_with_accounts<const N: usize>(
     };
     program_test.add_account(program_data_key(), program_data_acct);
 
-    // Add the 2Z Mint.
+    let mint_data = Mint {
+        mint_authority: owner_signer.pubkey().into(),
+        supply: TOTAL_2Z_SUPPLY,
+        decimals: 8,
+        is_initialized: true,
+        freeze_authority: owner_signer.pubkey().into(),
+    };
+
+    let mut mint_account_data = vec![0; Mint::LEN];
+    mint_data.pack_into_slice(&mut mint_account_data);
+
+    // Add the 2Z mint.
     let mint_acct = Account {
         lamports: 69,
         owner: spl_token::ID,
-        data: BASE64_STANDARD.decode("AAAAAE1jnR8S73ewuG1cltefhmHehgZSBXMl+4ukrwX7lnXwAADBb/KGIwAGAQAAAABNY50fEu93sLhtXJbXn4Zh3oYGUgVzJfuLpK8F+5Z18A==").unwrap(),
+        data: mint_account_data,
         ..Default::default()
     };
     program_test.add_account(DOUBLEZERO_MINT_KEY, mint_acct);
 
-    for (key, account) in accounts.into_iter() {
-        program_test.add_account(key, account);
+    let treasury_token_account_data = TokenAccount {
+        mint: DOUBLEZERO_MINT_KEY,
+        owner: owner_signer.pubkey(),
+        amount: TOTAL_2Z_SUPPLY,
+        state: SplTokenAccountState::Initialized,
+        ..Default::default()
+    };
+
+    let mut treasury_account_data = vec![0; TokenAccount::LEN];
+    treasury_token_account_data.pack_into_slice(&mut treasury_account_data);
+
+    let treasury_2z_key = Pubkey::new_unique();
+
+    // Add 2Z test treasury.
+    let treasury_token_acct = Account {
+        lamports: 69,
+        owner: spl_token::ID,
+        data: treasury_account_data,
+        ..Default::default()
+    };
+    program_test.add_account(treasury_2z_key, treasury_token_acct);
+
+    for TestAccount { key, info } in accounts.into_iter() {
+        program_test.add_account(key, info);
     }
 
     let (banks_client, payer_signer, recent_blockhash) = program_test.start().await;
@@ -79,11 +122,39 @@ pub async fn start_test_with_accounts<const N: usize>(
         payer_signer,
         recent_blockhash,
         owner_signer,
+        treasury_2z_key,
     }
 }
 
 pub async fn start_test() -> ProgramTestWithOwner {
-    start_test_with_accounts([]).await
+    start_test_with_accounts(Default::default()).await
+}
+
+pub fn generate_token_accounts_for_test(mint_key: &Pubkey, owners: &[Pubkey]) -> Vec<TestAccount> {
+    owners
+        .iter()
+        .map(|&owner| {
+            let token_account = TokenAccount {
+                mint: *mint_key,
+                owner,
+                state: SplTokenAccountState::Initialized,
+                ..Default::default()
+            };
+
+            let mut token_account_data = vec![0; TokenAccount::LEN];
+            token_account.pack_into_slice(&mut token_account_data);
+
+            TestAccount {
+                key: Pubkey::new_unique(),
+                info: Account {
+                    lamports: 69,
+                    owner: spl_token::ID,
+                    data: token_account_data,
+                    ..Default::default()
+                },
+            }
+        })
+        .collect()
 }
 
 pub fn program_data_key() -> Pubkey {
@@ -91,13 +162,44 @@ pub fn program_data_key() -> Pubkey {
 }
 
 impl ProgramTestWithOwner {
+    pub async fn transfer_2z(
+        &mut self,
+        dst_token_account_key: &Pubkey,
+        amount: u64,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+        let owner_signer = &self.owner_signer;
+
+        let token_transfer_ix = token_instruction::transfer(
+            &spl_token::ID,
+            &self.treasury_2z_key,
+            dst_token_account_key,
+            &owner_signer.pubkey(),
+            &[],
+            amount,
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[token_transfer_ix],
+            &[payer_signer, owner_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
     pub async fn initialize_program(&mut self) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
         let program_config_key = ProgramConfig::find_address().0;
 
         let initialize_program_ix = try_build_instruction(
             &ID,
-            InitializeProgramAccounts::new(payer_signer.pubkey()),
+            InitializeProgramAccounts::new(&payer_signer.pubkey()),
             &RevenueDistributionInstructionData::InitializeProgram,
         )
         .unwrap();
@@ -128,7 +230,7 @@ impl ProgramTestWithOwner {
 
         let set_admin_ix = try_build_instruction(
             &ID,
-            SetAdminAccounts::new(program_data_key(), owner_signer.pubkey()),
+            SetAdminAccounts::new(&program_data_key(), &owner_signer.pubkey()),
             &RevenueDistributionInstructionData::SetAdmin(admin_key),
         )
         .unwrap();
@@ -148,7 +250,7 @@ impl ProgramTestWithOwner {
 
     pub async fn configure_program<const N: usize>(
         &mut self,
-        settings: [ConfigureProgramSetting; N],
+        settings: [impl ConfigureProgramInstructionData; N],
         admin_signer: &Keypair,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
@@ -158,8 +260,8 @@ impl ProgramTestWithOwner {
             .map(|setting| {
                 try_build_instruction(
                     &ID,
-                    ConfigureProgramAccounts::new(admin_signer.pubkey()),
-                    &RevenueDistributionInstructionData::ConfigureProgram(setting),
+                    ConfigureProgramAccounts::new(&admin_signer.pubkey()),
+                    &setting.into_instruction_data(),
                 )
                 .unwrap()
             })
@@ -184,7 +286,7 @@ impl ProgramTestWithOwner {
 
         let initialize_journal_ix = try_build_instruction(
             &ID,
-            InitializeJournalAccounts::new(payer_signer.pubkey()),
+            InitializeJournalAccounts::new(&payer_signer.pubkey()),
             &RevenueDistributionInstructionData::InitializeJournal,
         )
         .unwrap();
@@ -217,8 +319,8 @@ impl ProgramTestWithOwner {
         let initialize_distribution_ix = try_build_instruction(
             &ID,
             InitializeDistributionAccounts::new(
-                accountant_signer.pubkey(),
-                payer_signer.pubkey(),
+                &accountant_signer.pubkey(),
+                &payer_signer.pubkey(),
                 program_config.next_dz_epoch,
             ),
             &RevenueDistributionInstructionData::InitializeDistribution,
@@ -241,7 +343,7 @@ impl ProgramTestWithOwner {
     pub async fn configure_distribution<const N: usize>(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        data: [ConfigureDistributionData; N],
+        data: [DistributionConfiguration; N],
         accountant_signer: &Keypair,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
@@ -251,7 +353,7 @@ impl ProgramTestWithOwner {
             .map(|data| {
                 try_build_instruction(
                     &ID,
-                    ConfigureDistributionAccounts::new(accountant_signer.pubkey(), dz_epoch),
+                    ConfigureDistributionAccounts::new(&accountant_signer.pubkey(), dz_epoch),
                     &RevenueDistributionInstructionData::ConfigureDistribution(data),
                 )
                 .unwrap()
@@ -271,9 +373,105 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
+    pub async fn initialize_prepaid_connection(
+        &mut self,
+        token_transfer_authority_signer: &Keypair,
+        source_2z_token_account_key: &Pubkey,
+        user_key: &Pubkey,
+        decimals: u8,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let initialize_prepaid_connection_ix = try_build_instruction(
+            &ID,
+            InitializePrepaidConnectionAccounts::new(
+                source_2z_token_account_key,
+                &token_transfer_authority_signer.pubkey(),
+                &payer_signer.pubkey(),
+                user_key,
+            ),
+            &RevenueDistributionInstructionData::InitializePrepaidConnection {
+                user_key: *user_key,
+                decimals,
+            },
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[initialize_prepaid_connection_ix],
+            &[payer_signer, &token_transfer_authority_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
+    pub async fn terminate_prepaid_connection(
+        &mut self,
+        user_key: &Pubkey,
+        termination_beneficiary: &Pubkey,
+        termination_relayer: Option<&Pubkey>,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let terminate_prepaid_connection_ix = try_build_instruction(
+            &ID,
+            TerminatePrepaidConnectionAccounts::new(
+                user_key,
+                termination_beneficiary,
+                termination_relayer,
+            ),
+            &RevenueDistributionInstructionData::TerminatePrepaidConnection,
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[terminate_prepaid_connection_ix],
+            &[payer_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
     //
     // Account fetchers.
     //
+
+    pub async fn fetch_mint(&self, mint_key: &Pubkey) -> Result<Mint, BanksClientError> {
+        let mint_account_data = self
+            .banks_client
+            .get_account(*mint_key)
+            .await
+            .unwrap()
+            .unwrap_or_default()
+            .data;
+
+        Mint::unpack(&mint_account_data).map_err(|_| BanksClientError::ClientError("not SPL mint"))
+    }
+
+    pub async fn fetch_token_account(
+        &self,
+        token_account_key: &Pubkey,
+    ) -> Result<TokenAccount, BanksClientError> {
+        let token_account_data = self
+            .banks_client
+            .get_account(*token_account_key)
+            .await?
+            .unwrap_or_default()
+            .data;
+
+        TokenAccount::unpack(&token_account_data)
+            .map_err(|_| BanksClientError::ClientError("not SPL token account"))
+    }
 
     pub async fn fetch_program_config(&self) -> (Pubkey, ProgramConfig) {
         let program_config_key = ProgramConfig::find_address().0;
@@ -312,7 +510,7 @@ impl ProgramTestWithOwner {
             .unwrap()
             .0;
 
-        let custodied_2z_key = state::find_custodied_2z_address(&distribution_key).0;
+        let custodied_2z_key = state::find_2z_token_pda_address(&distribution_key).0;
         let distribution_custody_account_data = self
             .banks_client
             .get_account(custodied_2z_key)
