@@ -3,13 +3,9 @@ mod common;
 //
 
 use doublezero_revenue_distribution::{
-    instruction::{
-        DistributionConfiguration, ProgramConfiguration,
-        ProgramFlagConfiguration,
-    },
+    instruction::{DistributionConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
     state::{self, Distribution},
-    types::{BurnRate, DoubleZeroEpoch}
-    ,
+    types::{BurnRate, DoubleZeroEpoch},
 };
 use solana_hash::Hash;
 use solana_program_test::tokio;
