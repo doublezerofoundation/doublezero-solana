@@ -346,14 +346,14 @@ fn process_configure_program(
                 }
             }
         }
-        ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(lamports) => {
+        ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(relay_lamports) => {
             msg!(
                 "Set relay_parameters.prepaid_connection_termination_lamports: {}",
-                lamports
+                relay_lamports
             );
             program_config
                 .relay_parameters
-                .prepaid_connection_termination_lamports = lamports;
+                .prepaid_connection_termination_lamports = relay_lamports;
         }
     }
 
@@ -1094,7 +1094,12 @@ fn process_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResu
     let prepaid_connection =
         ZeroCopyAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    if prepaid_connection.valid_through_dz_epoch <= program_config.next_dz_epoch {
+    if !prepaid_connection.has_paid() {
+        msg!("Prepaid connection has not been paid yet");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    if program_config.next_dz_epoch <= prepaid_connection.valid_through_dz_epoch {
         msg!(
             "Can only terminate prepaid connection after DZ epoch {}",
             program_config.next_dz_epoch
@@ -1134,6 +1139,10 @@ fn process_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResu
     let mut prepaid_connection_info_lamports = prepaid_connection.info.try_borrow_mut_lamports()?;
 
     // Move some lamports to the termination relayer.
+    //
+    // If the termination relay lamports is less than rent-exemption for a zero-byte account and the
+    // termination relayer is an underfunded account, the transaction will fail. In order for the
+    // termination to be reliable, be sure to specify a funded account.
     **termination_relayer_info.lamports.borrow_mut() += termination_relay_lamports;
 
     // Move the rest to the termination beneficiary.
@@ -1142,6 +1151,12 @@ fn process_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResu
 
     // By setting the prepaid connection lamports to zero, this account will be closed.
     **prepaid_connection_info_lamports = 0;
+
+    msg!(
+        "Expired since DZ epoch {} for user {}",
+        prepaid_connection.valid_through_dz_epoch,
+        prepaid_connection.user_key
+    );
 
     Ok(())
 }

@@ -164,6 +164,29 @@ pub fn program_data_key() -> Pubkey {
 }
 
 impl ProgramTestWithOwner {
+    pub async fn transfer_lamports(
+        &mut self,
+        dst_key: &Pubkey,
+        amount: u64,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let transfer_ix =
+            solana_system_interface::instruction::transfer(&payer_signer.pubkey(), dst_key, amount);
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[transfer_ix],
+            &[payer_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
     pub async fn transfer_2z(
         &mut self,
         dst_token_account_key: &Pubkey,
