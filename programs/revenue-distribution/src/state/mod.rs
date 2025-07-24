@@ -15,7 +15,7 @@ use solana_pubkey::Pubkey;
 
 use crate::ID;
 
-pub const TOKEN_2Z_PDA_SEED_PREFIX: &[u8] = b"custodied_2z";
+pub const TOKEN_2Z_PDA_SEED_PREFIX: &[u8] = b"2z_token";
 
 pub fn find_2z_token_pda_address(token_owner: &Pubkey) -> (Pubkey, u8) {
     Pubkey::find_program_address(&[TOKEN_2Z_PDA_SEED_PREFIX, token_owner.as_ref()], &ID)

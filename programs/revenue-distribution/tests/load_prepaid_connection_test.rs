@@ -47,7 +47,7 @@ async fn test_load_prepaid_connection() {
         .initialize_journal()
         .await
         .unwrap()
-        .set_admin(admin_signer.pubkey())
+        .set_admin(&admin_signer.pubkey())
         .await
         .unwrap()
         .configure_journal(

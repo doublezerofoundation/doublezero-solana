@@ -18,7 +18,7 @@ async fn test_set_admin() {
         .initialize_program()
         .await
         .unwrap()
-        .set_admin(admin_signer.pubkey())
+        .set_admin(&admin_signer.pubkey())
         .await
         .unwrap();
 

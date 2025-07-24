@@ -26,7 +26,7 @@ async fn test_configure_program() {
         .initialize_program()
         .await
         .unwrap()
-        .set_admin(admin_signer.pubkey())
+        .set_admin(&admin_signer.pubkey())
         .await
         .unwrap();
 

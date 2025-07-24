@@ -45,7 +45,6 @@ pub struct ProgramConfig {
 
     pub distribution_parameters: DistributionParameters,
 
-    //pub prepaid_connection_parameters: PrepaidConnectionParameters,
     pub relay_parameters: RelayParameters,
 
     /// 16 * 32 bytes of a storage gap in case more fields need to be added.

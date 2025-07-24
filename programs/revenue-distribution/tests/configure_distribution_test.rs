@@ -47,7 +47,7 @@ async fn test_configure_distribution() {
         .initialize_journal()
         .await
         .unwrap()
-        .set_admin(admin_signer.pubkey())
+        .set_admin(&admin_signer.pubkey())
         .await
         .unwrap()
         .configure_program(

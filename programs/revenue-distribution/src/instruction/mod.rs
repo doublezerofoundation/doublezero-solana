@@ -11,10 +11,6 @@ use solana_pubkey::Pubkey;
 
 use crate::types::{DoubleZeroEpoch, EpochDuration};
 
-pub trait ConfigureProgramInstructionData {
-    fn into_instruction_data(self) -> RevenueDistributionInstructionData;
-}
-
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ProgramConfiguration {
     Flag(ProgramFlagConfiguration),

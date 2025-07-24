@@ -3,7 +3,6 @@
 use doublezero_program_tools::{
     instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
 };
-use doublezero_revenue_distribution::state::PrepaidConnection;
 use doublezero_revenue_distribution::{
     state::Distribution,
     types::DoubleZeroEpoch,
@@ -19,7 +18,7 @@ use doublezero_revenue_distribution::{
             DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
             RevenueDistributionInstructionData,
         },
-        state::{self, Journal, JournalEntries, ProgramConfig},
+        state::{self, Journal, JournalEntries, PrepaidConnection, ProgramConfig},
         DOUBLEZERO_MINT_KEY, ID,
     },
 };
@@ -251,14 +250,14 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn set_admin(&mut self, admin_key: Pubkey) -> Result<&mut Self, BanksClientError> {
+    pub async fn set_admin(&mut self, admin_key: &Pubkey) -> Result<&mut Self, BanksClientError> {
         let owner_signer = &self.owner_signer;
         let payer_signer = &self.payer_signer;
 
         let set_admin_ix = try_build_instruction(
             &ID,
             SetAdminAccounts::new(&program_data_key(), &owner_signer.pubkey()),
-            &RevenueDistributionInstructionData::SetAdmin(admin_key),
+            &RevenueDistributionInstructionData::SetAdmin(*admin_key),
         )
         .unwrap();
 

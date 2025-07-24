@@ -1,9 +1,8 @@
 use solana_instruction::AccountMeta;
 use solana_pubkey::Pubkey;
 
-use crate::state::PrepaidConnection;
 use crate::{
-    state::{find_2z_token_pda_address, Distribution, Journal, ProgramConfig},
+    state::{find_2z_token_pda_address, Distribution, Journal, PrepaidConnection, ProgramConfig},
     types::DoubleZeroEpoch,
     DOUBLEZERO_MINT_KEY,
 };

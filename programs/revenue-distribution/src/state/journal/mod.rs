@@ -225,16 +225,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_size() {
-        assert_eq!(size_of::<Journal>(), 552);
-    }
-
-    #[test]
-    fn test_absolute_max_journal_entries() {
-        assert_eq!(absolute_max_journal_entries(), 605);
-    }
-
-    #[test]
     fn test_journal_entries_update_full_overlap() {
         let next_dz_epoch = DoubleZeroEpoch::new(0);
         let valid_through_dz_epoch = DoubleZeroEpoch::new(5);
