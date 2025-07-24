@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use doublezero_program_tools::{
     instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
 };
