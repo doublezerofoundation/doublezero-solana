@@ -343,6 +343,9 @@ async fn test_initialize_distribution() {
         .initialize_program()
         .await
         .unwrap()
+        .initialize_journal()
+        .await
+        .unwrap()
         .set_admin(admin_signer.pubkey())
         .await
         .unwrap()
@@ -489,6 +492,9 @@ async fn test_configure_distribution() {
         .initialize_program()
         .await
         .unwrap()
+        .initialize_journal()
+        .await
+        .unwrap()
         .set_admin(admin_signer.pubkey())
         .await
         .unwrap()
@@ -518,7 +524,7 @@ async fn test_configure_distribution() {
             dz_epoch,
             [
                 DistributionConfiguration::SolanaValidatorPayments {
-                    total_owed: total_solana_validator_payments_owed,
+                    total_lamports_owed: total_solana_validator_payments_owed,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
                 DistributionConfiguration::ContributorRewards {
@@ -731,9 +737,7 @@ async fn test_load_prepaid_connection() {
         .amount;
 
     // Compute the total cost. Because global DZ epoch is 0, we needed to have paid for 6 epochs.
-    let expected_total_payment = (valid_through_dz_epoch.value() + 1)
-        * u64::from(prepaid_cost_per_dz_epoch)
-        * u64::pow(10, 8);
+    let expected_total_payment = 6 * u64::from(prepaid_cost_per_dz_epoch) * u64::pow(10, 8);
     assert_eq!(
         starting_src_balance - ending_src_balance,
         expected_total_payment
@@ -754,32 +758,35 @@ async fn test_load_prepaid_connection() {
     assert_eq!(journal.total_2z_balance, total_journal_balance);
     assert_eq!(journal_2z_pda.amount, total_journal_balance);
 
-    let expected_journal_entries = JournalEntries(vec![
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(0),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(1),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(2),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(3),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(4),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(5),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-    ]);
+    let expected_journal_entries = JournalEntries(
+        vec![
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(0),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(1),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(2),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(3),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(4),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(5),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+        ]
+        .into(),
+    );
     assert_eq!(journal_entries, expected_journal_entries);
 
     // Load again.
@@ -808,9 +815,7 @@ async fn test_load_prepaid_connection() {
 
     // Compute the total cost. Because we have already paid through DZ epoch 5, we needed to have
     // paid for 2 more epochs.
-    let expected_total_payment = (valid_through_dz_epoch.value() - 5)
-        * u64::from(prepaid_cost_per_dz_epoch)
-        * u64::pow(10, 8);
+    let expected_total_payment = 2 * u64::from(prepaid_cost_per_dz_epoch) * u64::pow(10, 8);
     assert_eq!(
         starting_src_balance - ending_src_balance,
         expected_total_payment
@@ -826,40 +831,43 @@ async fn test_load_prepaid_connection() {
     assert_eq!(journal.total_2z_balance, total_journal_balance);
     assert_eq!(journal_2z_pda.amount, total_journal_balance);
 
-    let expected_journal_entries = JournalEntries(vec![
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(0),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(1),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(2),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(3),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(4),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(5),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(6),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(7),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-    ]);
+    let expected_journal_entries = JournalEntries(
+        vec![
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(0),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(1),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(2),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(3),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(4),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(5),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(6),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(7),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+        ]
+        .into(),
+    );
     assert_eq!(journal_entries, expected_journal_entries);
 
     // Load another user.
@@ -887,9 +895,7 @@ async fn test_load_prepaid_connection() {
         .amount;
 
     // Compute the total cost. Because global DZ epoch is 0, we needed to have paid for 4 epochs.
-    let expected_total_payment = (valid_through_dz_epoch.value() + 1)
-        * u64::from(prepaid_cost_per_dz_epoch)
-        * u64::pow(10, 8);
+    let expected_total_payment = 4 * u64::from(prepaid_cost_per_dz_epoch) * u64::pow(10, 8);
     assert_eq!(
         starting_src_balance - ending_src_balance,
         expected_total_payment
@@ -910,40 +916,244 @@ async fn test_load_prepaid_connection() {
     assert_eq!(journal.total_2z_balance, total_journal_balance);
     assert_eq!(journal_2z_pda.amount, total_journal_balance);
 
-    let expected_journal_entries = JournalEntries(vec![
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(0),
-            amount: 2 * prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(1),
-            amount: 2 * prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(2),
-            amount: 2 * prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(3),
-            amount: 2 * prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(4),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(5),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(6),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-        JournalEntry {
-            dz_epoch: DoubleZeroEpoch::new(7),
-            amount: prepaid_cost_per_dz_epoch,
-        },
-    ]);
+    let expected_journal_entries = JournalEntries(
+        vec![
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(0),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(1),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(2),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(3),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(4),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(5),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(6),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(7),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+        ]
+        .into(),
+    );
+    assert_eq!(journal_entries, expected_journal_entries);
+
+    // Initialize new distribution.
+
+    let last_journal_balance = total_journal_balance;
+
+    let accountant_signer = Keypair::new();
+    let solana_validator_fee = 500; // 5%
+
+    // Community burn rate.
+    let initial_cbr = 100_000_000; // 10%
+    let cbr_limit = 500_000_000; // 50%
+    let dz_epochs_to_increasing_cbr = 10;
+    let dz_epochs_to_cbr_limit = 20;
+
+    test_setup
+        .configure_program(
+            [
+                ProgramConfiguration::Accountant(accountant_signer.pubkey()),
+                ProgramConfiguration::SolanaValidatorFee(solana_validator_fee),
+                ProgramConfiguration::CommunityBurnRateParameters {
+                    limit: cbr_limit,
+                    dz_epochs_to_increasing: dz_epochs_to_increasing_cbr,
+                    dz_epochs_to_limit: dz_epochs_to_cbr_limit,
+                    initial_rate: Some(initial_cbr),
+                },
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
+            ],
+            &admin_signer,
+        )
+        .await
+        .unwrap()
+        .initialize_distribution(&accountant_signer)
+        .await
+        .unwrap();
+
+    let expected_journal_entry_amount = 2 * prepaid_cost_per_dz_epoch;
+    assert_eq!(
+        journal_entries.front_entry().unwrap().amount,
+        expected_journal_entry_amount
+    );
+
+    let expected_transfer_amount = u64::from(expected_journal_entry_amount) * u64::pow(10, 8);
+
+    let (_, _, distribution_2z_token_pda) =
+        test_setup.fetch_distribution(DoubleZeroEpoch::new(0)).await;
+    assert_eq!(distribution_2z_token_pda.amount, expected_transfer_amount);
+
+    let (_, journal, journal_entries, journal_2z_pda) = test_setup.fetch_journal().await;
+
+    // The balance on the journal should change by the first entry's amount.
+
+    let total_journal_balance = last_journal_balance - expected_transfer_amount;
+    assert_eq!(journal.total_2z_balance, total_journal_balance);
+    assert_eq!(journal_2z_pda.amount, total_journal_balance);
+
+    let expected_journal_entries = JournalEntries(
+        vec![
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(1),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(2),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(3),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(4),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(5),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(6),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(7),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+        ]
+        .into(),
+    );
+    assert_eq!(journal_entries, expected_journal_entries);
+
+    // Load another user and initialize another distribution.
+
+    let starting_src_balance = ending_src_balance;
+    let last_journal_balance = total_journal_balance;
+
+    // NOTE: This should be the maximum a user can load.
+    let valid_through_dz_epoch = DoubleZeroEpoch::new(11);
+
+    test_setup
+        .load_prepaid_connection(
+            &burn_authority_signer,
+            &source_token_account_key,
+            &user_3_key,
+            valid_through_dz_epoch,
+            8,
+        )
+        .await
+        .unwrap()
+        .initialize_distribution(&accountant_signer)
+        .await
+        .unwrap();
+
+    let ending_src_balance = test_setup
+        .fetch_token_account(&source_token_account_key)
+        .await
+        .unwrap()
+        .amount;
+
+    // Compute the total cost. Because global DZ epoch is 1, we needed to have paid for 11 epochs.
+    let expected_total_payment = 11 * u64::from(prepaid_cost_per_dz_epoch) * u64::pow(10, 8);
+    assert_eq!(
+        starting_src_balance - ending_src_balance,
+        expected_total_payment
+    );
+
+    let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_3_key).await;
+
+    let mut expected_prepaid_connection_2 = PrepaidConnection::default();
+    expected_prepaid_connection_2.user_key = user_3_key;
+    expected_prepaid_connection_2.set_has_paid(true);
+    expected_prepaid_connection_2.valid_through_dz_epoch = valid_through_dz_epoch;
+    expected_prepaid_connection_2.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    assert_eq!(prepaid_connection, expected_prepaid_connection_2);
+
+    let expected_journal_entry_amount = 3 * prepaid_cost_per_dz_epoch;
+    assert_eq!(
+        journal_entries.front_entry().unwrap().amount + prepaid_cost_per_dz_epoch,
+        expected_journal_entry_amount
+    );
+
+    let expected_transfer_amount = u64::from(expected_journal_entry_amount) * u64::pow(10, 8);
+
+    let (_, _, distribution_2z_token_pda) =
+        test_setup.fetch_distribution(DoubleZeroEpoch::new(1)).await;
+    assert_eq!(distribution_2z_token_pda.amount, expected_transfer_amount);
+
+    let (_, journal, journal_entries, journal_2z_pda) = test_setup.fetch_journal().await;
+
+    // The balance on the journal should change by the first entry's amount.
+
+    let total_journal_balance =
+        last_journal_balance + expected_total_payment - expected_transfer_amount;
+    assert_eq!(journal.total_2z_balance, total_journal_balance);
+    assert_eq!(journal_2z_pda.amount, total_journal_balance);
+
+    let expected_journal_entries = JournalEntries(
+        vec![
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(2),
+                amount: 3 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(3),
+                amount: 3 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(4),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(5),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(6),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(7),
+                amount: 2 * prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(8),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(9),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(10),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+            JournalEntry {
+                dz_epoch: DoubleZeroEpoch::new(11),
+                amount: prepaid_cost_per_dz_epoch,
+            },
+        ]
+        .into(),
+    );
     assert_eq!(journal_entries, expected_journal_entries);
 }
 

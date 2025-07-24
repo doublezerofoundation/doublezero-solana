@@ -17,6 +17,7 @@ use solana_pubkey::Pubkey;
 use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
 
+use crate::state::JournalEntries;
 use crate::{
     instruction::{
         DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
@@ -27,7 +28,7 @@ use crate::{
         TOKEN_2Z_PDA_SEED_PREFIX,
     },
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
-    DOUBLEZERO_MINT_KEY, ID,
+    DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
 };
 
 solana_program_entrypoint::entrypoint!(process_instruction);
@@ -530,7 +531,9 @@ fn process_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     // - 4: New distribution's 2Z token account.
     // - 5: 2Z mint.
     // - 6: SPL Token program.
-    // - 7: System program.
+    // - 7: Journal.
+    // - 8: Journal 2Z token account.
+    // - 9: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
     let authorized_use =
@@ -662,6 +665,56 @@ fn process_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     distribution.token_2z_pda_bump_seed = distribution_2z_token_pda_bump;
     distribution.community_burn_rate = community_burn_rate;
 
+    // We need to move prepaid 2Z from the journal to the distribution.
+    let mut journal =
+        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let (_, journal_2z_token_pda_info, _) = try_next_2z_token_pda_info(
+        &mut accounts_iter,
+        journal.info.key,
+        "journal's",
+        Some(journal.token_2z_pda_bump_seed),
+    )?;
+
+    // Check the front of the journal entries. If the front entry's epoch matches this
+    // distribution's epoch, pop the front and transfer the amount.
+    let mut journal_entries = Journal::checked_journal_entries(&journal.remaining_data).unwrap();
+
+    if let Some(entry) = journal_entries.front_entry() {
+        if entry.dz_epoch == distribution.dz_epoch {
+            let entry = journal_entries.pop_front_entry().unwrap();
+
+            // Update the journal account with the modified entries.
+            try_serialize_journal_entries(&journal_entries, &mut journal)?;
+
+            // This operation should be safe. u32::MAX * 10 ^ 8 < u64::MAX
+            let transfer_amount = entry.checked_amount(DOUBLEZERO_MINT_DECIMALS).unwrap();
+
+            // We are transferring between token PDAs. No need to check mint's decimals.
+            let token_transfer_ix = token_instruction::transfer(
+                &spl_token::ID,
+                journal_2z_token_pda_info.key,
+                new_distribution_2z_token_pda_info.key,
+                journal.info.key,
+                &[], // signer_pubkeys
+                transfer_amount,
+            )
+            .unwrap();
+
+            invoke_signed_unchecked(
+                &token_transfer_ix,
+                accounts,
+                &[&[Journal::SEED_PREFIX, &[journal.bump_seed]]],
+            )?;
+
+            msg!("Moved {} 2Z from journal to distribution", transfer_amount);
+            distribution.collected_prepaid_2z_payments = transfer_amount;
+            journal.total_2z_balance = journal.total_2z_balance.saturating_sub(transfer_amount);
+        }
+    }
+
+    msg!("Initialized distribution for DZ epoch {}", dz_epoch);
+
     Ok(())
 }
 
@@ -685,11 +738,14 @@ fn process_configure_distribution(
 
     match setting {
         DistributionConfiguration::SolanaValidatorPayments {
-            total_owed,
+            total_lamports_owed,
             merkle_root,
         } => {
-            msg!("Set total_solana_validator_payments_owed: {}", total_owed);
-            distribution.total_solana_validator_payments_owed = total_owed;
+            msg!(
+                "Set total_solana_validator_payments_owed: {}",
+                total_lamports_owed
+            );
+            distribution.total_solana_validator_payments_owed = total_lamports_owed;
 
             msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
             distribution.solana_validator_payments_merkle_root = merkle_root;
@@ -942,11 +998,8 @@ fn process_load_prepaid_connection(
             ProgramError::InvalidInstructionData
         })?;
 
-    // Serialize back into remaining data.
-    borsh::to_writer(&mut journal.remaining_data[..], &journal_entries).map_err(|e| {
-        msg!("Failed to serialize journal entries");
-        ProgramError::BorshIoError(e.to_string())
-    })?;
+    // Update the journal account with the updated entries.
+    try_serialize_journal_entries(&journal_entries, &mut journal)?;
 
     msg!(
         "Loaded from DZ epoch {} through {}",
@@ -1260,4 +1313,14 @@ fn try_next_token_program_info(accounts_iter: &mut EnumeratedAccountInfoIter) ->
     }
 
     Ok(())
+}
+
+fn try_serialize_journal_entries(
+    journal_entries: &JournalEntries,
+    journal: &mut ZeroCopyMutAccount<Journal>,
+) -> ProgramResult {
+    borsh::to_writer(&mut journal.remaining_data[..], &journal_entries).map_err(|e| {
+        msg!("Failed to serialize journal entries");
+        ProgramError::BorshIoError(e.to_string())
+    })
 }

@@ -49,7 +49,7 @@ pub enum ProgramFlagConfiguration {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum DistributionConfiguration {
     SolanaValidatorPayments {
-        total_owed: u64,
+        total_lamports_owed: u64,
         merkle_root: Hash,
     },
     ContributorRewards {

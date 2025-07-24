@@ -36,7 +36,7 @@ pub struct Distribution {
     pub solana_validator_payments_merkle_root: Hash,
 
     pub total_solana_validator_payments_owed: u64,
-    pub solana_validator_payments_collected: u64,
+    pub collected_solana_validator_payments: u64,
 
     pub contributor_rewards_merkle_root: Hash,
 
@@ -52,7 +52,8 @@ pub struct Distribution {
     /// [total_contributors]: Self::total_contributors
     pub num_contributors_redeemed: u32,
 
-    pub prepaid_payments_collected: u64,
+    pub collected_prepaid_2z_payments: u64,
+    pub collected_lamports_converted_to_2z: u64,
 
     _storage_gap: StorageGap<4>,
 }
@@ -77,6 +78,6 @@ impl Distribution {
 //
 
 const _: () = assert!(
-    size_of::<Distribution>() == 248,
+    size_of::<Distribution>() == 256,
     "`Distribution` size changed"
 );

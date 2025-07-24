@@ -186,11 +186,14 @@ pub struct InitializeDistributionAccounts {
     pub payer_key: Pubkey,
     pub new_distribution_key: Pubkey,
     pub distribution_2z_token_pda_key: Pubkey,
+    pub journal_key: Pubkey,
+    pub journal_2z_token_pda_key: Pubkey,
 }
 
 impl InitializeDistributionAccounts {
     pub fn new(accountant_key: &Pubkey, payer_key: &Pubkey, dz_epoch: DoubleZeroEpoch) -> Self {
         let new_distribution_key = Distribution::find_address(dz_epoch).0;
+        let journal_key = Journal::find_address().0;
 
         Self {
             program_config_key: ProgramConfig::find_address().0,
@@ -198,6 +201,8 @@ impl InitializeDistributionAccounts {
             payer_key: *payer_key,
             new_distribution_key,
             distribution_2z_token_pda_key: find_2z_token_pda_address(&new_distribution_key).0,
+            journal_key,
+            journal_2z_token_pda_key: find_2z_token_pda_address(&journal_key).0,
         }
     }
 }
@@ -210,6 +215,8 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
             payer_key,
             new_distribution_key,
             distribution_2z_token_pda_key,
+            journal_key,
+            journal_2z_token_pda_key,
         } = accounts;
 
         vec![
@@ -220,6 +227,8 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
             AccountMeta::new(distribution_2z_token_pda_key, false),
             AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
             AccountMeta::new_readonly(spl_token::ID, false),
+            AccountMeta::new(journal_key, false),
+            AccountMeta::new(journal_2z_token_pda_key, false),
             AccountMeta::new_readonly(solana_system_interface::program::ID, false),
         ]
     }

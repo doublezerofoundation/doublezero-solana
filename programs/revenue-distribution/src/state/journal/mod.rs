@@ -4,6 +4,8 @@ pub use prepaid_connection::*;
 
 //
 
+use std::collections::VecDeque;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
@@ -128,12 +130,18 @@ pub struct JournalEntry {
     pub amount: u32,
 }
 
+impl JournalEntry {
+    pub fn checked_amount(&self, decimals: u8) -> Option<u64> {
+        checked_pow_10(decimals)?.checked_mul(self.amount.into())
+    }
+}
+
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Default, PartialEq, Eq)]
-pub struct JournalEntries(pub Vec<JournalEntry>);
+pub struct JournalEntries(pub VecDeque<JournalEntry>);
 
 impl JournalEntries {
     pub fn last_dz_epoch(&self) -> Option<DoubleZeroEpoch> {
-        self.0.last().map(|entry| entry.dz_epoch)
+        self.0.back().map(|entry| entry.dz_epoch)
     }
 
     pub fn update(
@@ -168,13 +176,13 @@ impl JournalEntries {
 
         // Find the last epoch so we can push the cost-per-epoch as new entries.
         let last_dz_epoch = entries
-            .last()
+            .back()
             .map(|entry| entry.dz_epoch.saturating_add_duration(1))
             .unwrap_or(next_dz_epoch);
 
         if last_dz_epoch <= valid_through_dz_epoch {
             for epoch_value in last_dz_epoch.value()..=valid_through_dz_epoch.value() {
-                entries.push(JournalEntry {
+                entries.push_back(JournalEntry {
                     dz_epoch: DoubleZeroEpoch::new(epoch_value),
                     amount: cost_per_epoch,
                 });
@@ -182,6 +190,14 @@ impl JournalEntries {
         }
 
         Some(num_epochs as u16)
+    }
+
+    pub fn front_entry(&self) -> Option<&JournalEntry> {
+        self.0.front()
+    }
+
+    pub fn pop_front_entry(&mut self) -> Option<JournalEntry> {
+        self.0.pop_front()
     }
 }
 
@@ -225,45 +241,51 @@ mod tests {
 
         let cost_per_epoch = 69;
 
-        let mut journal_entries = JournalEntries(vec![
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(0),
-                amount: 100,
-            },
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(1),
-                amount: 200,
-            },
-        ]);
+        let mut journal_entries = JournalEntries(
+            vec![
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(0),
+                    amount: 100,
+                },
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(1),
+                    amount: 200,
+                },
+            ]
+            .into(),
+        );
 
         journal_entries.update(next_dz_epoch, valid_through_dz_epoch, cost_per_epoch);
 
-        let expected_journal_entries = JournalEntries(vec![
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(0),
-                amount: 169,
-            },
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(1),
-                amount: 269,
-            },
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(2),
-                amount: 69,
-            },
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(3),
-                amount: 69,
-            },
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(4),
-                amount: 69,
-            },
-            JournalEntry {
-                dz_epoch: DoubleZeroEpoch::new(5),
-                amount: 69,
-            },
-        ]);
+        let expected_journal_entries = JournalEntries(
+            vec![
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(0),
+                    amount: 169,
+                },
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(1),
+                    amount: 269,
+                },
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(2),
+                    amount: 69,
+                },
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(3),
+                    amount: 69,
+                },
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(4),
+                    amount: 69,
+                },
+                JournalEntry {
+                    dz_epoch: DoubleZeroEpoch::new(5),
+                    amount: 69,
+                },
+            ]
+            .into(),
+        );
         assert_eq!(journal_entries, expected_journal_entries);
     }
 }
