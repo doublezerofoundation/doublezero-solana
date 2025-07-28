@@ -23,6 +23,8 @@ use std::{collections::HashMap, error::Error, str::FromStr};
 
 const JITO_BASE_URL: &str = "https://kobe.mainnet.jito.network/api/v1/";
 
+pub const JITO_REWARDS_LIMIT: u16 = 1_500;
+
 pub const fn get_first_slot_for_epoch(target_epoch: u64) -> u64 {
     DEFAULT_SLOTS_PER_EPOCH * target_epoch
 }
@@ -31,7 +33,7 @@ pub const fn get_first_slot_for_epoch(target_epoch: u64) -> u64 {
 pub struct JitoRewards {
     // TODO: check total_count to see if it exceeds entries in a single response
     // limit - default: 100, max: 10000
-    pub total_count: u64,
+    pub total_count: u16,
     pub rewards: Vec<JitoReward>,
 }
 
