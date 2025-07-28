@@ -208,12 +208,12 @@ pub async fn get_jito_rewards<T: ValidatorRewards>(
     let url = format!(
         // TODO: make limit an env var
         // based on very unscientific checking of a number of epochs, 1200 is the highest count
-        "{JITO_BASE_URL}validator_rewards?epoch={epoch}&limit=1500"
+        "{JITO_BASE_URL}validator_rewards?epoch={epoch}&limit={JITO_REWARDS_LIMIT}"
     );
 
     let rewards = match fee_payment_calculator.get::<JitoRewards>(&url).await {
         Ok(jito_rewards) => {
-            if jito_rewards.total_count > 1500 {
+            if jito_rewards.total_count > JITO_REWARDS_LIMIT {
                 println!(
                     "Unexpectedly received total count higher than 1500; actual count is {}",
                     jito_rewards.total_count
