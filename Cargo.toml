@@ -43,7 +43,7 @@ solana-pubkey = "2"
 solana-sha256-hasher = "2"
 solana-system-interface = "1"
 solana-sysvar = "2"
-solana-transaction-status-client-types = "2.2.7"
+solana-transaction-status-client-types = "2"
 spl-token = { version = "8", features = ["no-entrypoint"] }
 tokio = "1"
 
