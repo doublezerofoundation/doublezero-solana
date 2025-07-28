@@ -267,8 +267,9 @@ pub async fn get_inflation_rewards<T: ValidatorRewards + ?Sized>(
             .iter()
             .find(|vote_account| vote_account.node_pubkey == *validator_id)
             .map(|vote_account| {
-                Pubkey::from_str(&vote_account.vote_pubkey)
-                    .map_err(|e| eyre::eyre!("Invalid vote_pubkey '{}': {e}", vote_account.vote_pubkey))
+                Pubkey::from_str(&vote_account.vote_pubkey).map_err(|e| {
+                    eyre::eyre!("Invalid vote_pubkey '{}': {e}", vote_account.vote_pubkey)
+                })
             })
             .transpose()?
         {
