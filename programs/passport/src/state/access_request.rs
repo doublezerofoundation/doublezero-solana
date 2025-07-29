@@ -5,9 +5,9 @@ use solana_pubkey::Pubkey;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct AccessRequest {
-    pub rent_beneficiary_key: Pubkey,
-
     pub service_key: Pubkey,
+
+    pub rent_beneficiary_key: Pubkey,
 }
 
 impl PrecomputedDiscriminator for AccessRequest {
