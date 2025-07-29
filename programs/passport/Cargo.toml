@@ -27,6 +27,8 @@ solana-sdk.workspace = true
 
 [features]
 default = []
+### Build with this feature for Solana devnet and localnet.
+development = []
 no-entrypoint = []
 
 [lib]
