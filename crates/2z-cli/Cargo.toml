@@ -10,8 +10,6 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-solana-clap-utils.workspace = true
-solana-cli-output.workspace = true
 solana-client.workspace = true
 solana-commitment-config.workspace = true
 solana-sdk.workspace = true
