@@ -55,7 +55,9 @@ async fn test_initialize_distribution() {
             &admin_signer,
         )
         .await
-        .unwrap()
+        .unwrap();
+
+    test_setup
         .initialize_distribution(&accountant_signer)
         .await
         .unwrap();

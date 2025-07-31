@@ -17,7 +17,7 @@ use solana_pubkey::Pubkey;
 use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
 
-use crate::state::JournalEntries;
+use crate::state::{ContributorRewards, JournalEntries};
 use crate::{
     instruction::{
         DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
@@ -1166,7 +1166,72 @@ fn try_initialize_contributor_rewards(
 ) -> ProgramResult {
     msg!("Initialize contributor rewards");
 
-    todo!()
+    // We expect the following accounts for this instruction:
+    // - 0: Program config account.
+    // - 1: DZ Ledger sentinel account.
+    // - 2: Payer (funder for new accounts).
+    // - 3: New contributor rewards account.
+    // - 4: System program.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::DoubleZeroLedgerSentinel,
+    )?;
+
+    // Make sure the program is not paused.
+    if authorized_use.program_config.is_paused() {
+        msg!("Program is paused");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Account 2 must be a signer and writable (i.e., payer) because it will be sending lamports
+    // to the new contributor rewards account when the system program allocates data to it. But
+    // because the create-program instruction requires that this account is a signer and is
+    // writable, we do not need to explicitly check these fields in its account info.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // Account 3 must be the new contributor rewards account. This account should not exist yet.
+    let (account_index, new_contributor_rewards_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    let (expected_contributor_rewards_key, contributor_rewards_bump) =
+        ContributorRewards::find_address(&service_key);
+
+    // Enforce this account location.
+    if new_contributor_rewards_info.key != &expected_contributor_rewards_key {
+        msg!(
+            "Invalid seeds for contributor rewards (account {})",
+            account_index
+        );
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    try_create_account(
+        Invoker::Signer(payer_info.key),
+        Invoker::Pda {
+            key: &expected_contributor_rewards_key,
+            signer_seeds: &[
+                ContributorRewards::SEED_PREFIX,
+                service_key.as_ref(),
+                &[contributor_rewards_bump],
+            ],
+        },
+        new_contributor_rewards_info.lamports(),
+        zero_copy::data_end::<ContributorRewards>(),
+        &ID,
+        accounts,
+        None, // rent_sysvar
+    )?;
+
+    // Finalize initialize the contributor rewards with the service and rewards manager keys.
+    let (mut contributor_rewards, _) =
+        zero_copy::try_initialize::<ContributorRewards>(new_contributor_rewards_info, None)?;
+
+    contributor_rewards.service_key = service_key;
+    contributor_rewards.rewards_manager_key = rewards_manager_key;
+
+    Ok(())
 }
 
 //
@@ -1222,7 +1287,7 @@ impl Authority {
 }
 
 struct VerifiedProgramAuthority<'a, 'b> {
-    _program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
+    program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
     _authority: (usize, &'a AccountInfo<'b>),
 }
 
@@ -1239,7 +1304,7 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, Authority> for VerifiedProgramAuthority<'a,
             authority.try_next_as_authorized_account(accounts_iter, &program_config.data)?;
 
         Ok(Self {
-            _program_config: program_config,
+            program_config,
             _authority: (index, authority_info),
         })
     }

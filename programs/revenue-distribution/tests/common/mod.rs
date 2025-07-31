@@ -7,14 +7,18 @@ use doublezero_revenue_distribution::{
     instruction::{
         account::{
             ConfigureDistributionAccounts, ConfigureJournalAccounts, ConfigureProgramAccounts,
-            InitializeDistributionAccounts, InitializeJournalAccounts,
-            InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
-            LoadPrepaidConnectionAccounts, SetAdminAccounts, TerminatePrepaidConnectionAccounts,
+            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
+            InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
+            InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
+            TerminatePrepaidConnectionAccounts,
         },
         DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
         RevenueDistributionInstructionData,
     },
-    state::{self, Distribution, Journal, JournalEntries, PrepaidConnection, ProgramConfig},
+    state::{
+        self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
+        ProgramConfig,
+    },
     types::DoubleZeroEpoch,
     DOUBLEZERO_MINT_KEY, ID,
 };
@@ -533,6 +537,41 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
+    pub async fn initialize_contributor_rewards(
+        &mut self,
+        dz_ledger_sentinel_signer: &Keypair,
+        rewards_manager_key: &Pubkey,
+        service_key: &Pubkey,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let initialize_contributor_rewards_ix = try_build_instruction(
+            &ID,
+            InitializeContributorRewardsAccounts::new(
+                &dz_ledger_sentinel_signer.pubkey(),
+                &payer_signer.pubkey(),
+                service_key,
+            ),
+            &RevenueDistributionInstructionData::InitializeContributorRewards {
+                rewards_manager_key: *rewards_manager_key,
+                service_key: *service_key,
+            },
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[initialize_contributor_rewards_ix],
+            &[payer_signer, dz_ledger_sentinel_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
     //
     // Account fetchers.
     //
@@ -662,6 +701,28 @@ impl ProgramTestWithOwner {
                 .unwrap()
                 .0,
         )
+    }
+
+    pub async fn fetch_contributor_rewards(
+        &self,
+        service_key: &Pubkey,
+    ) -> (Pubkey, ContributorRewards) {
+        let contributor_rewards_key = ContributorRewards::find_address(service_key).0;
+
+        let contributor_rewards_account_data = self
+            .banks_client
+            .get_account(contributor_rewards_key)
+            .await
+            .unwrap()
+            .unwrap()
+            .data;
+
+        let contributor_rewards =
+            *checked_from_bytes_with_discriminator(&contributor_rewards_account_data)
+                .unwrap()
+                .0;
+
+        (contributor_rewards_key, contributor_rewards)
     }
 }
 
