@@ -38,7 +38,7 @@ pub struct ProgramConfig {
     pub accountant_key: Pubkey,
 
     /// This authority is the only authority that can grant access to the DoubleZero Ledger network.
-    pub dz_ledger_sentinel_key: Pubkey,
+    pub contributor_manager_key: Pubkey,
 
     /// The program allowed to CPI to this program to withdraw SOL to swap for 2Z. The Revenue
     /// Distribution program trusts that the SOL/2Z Swap program will be depositing 2Z when it

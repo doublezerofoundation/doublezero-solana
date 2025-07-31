@@ -539,7 +539,7 @@ impl ProgramTestWithOwner {
 
     pub async fn initialize_contributor_rewards(
         &mut self,
-        dz_ledger_sentinel_signer: &Keypair,
+        contributor_manager_signer: &Keypair,
         rewards_manager_key: &Pubkey,
         service_key: &Pubkey,
     ) -> Result<&mut Self, BanksClientError> {
@@ -548,7 +548,7 @@ impl ProgramTestWithOwner {
         let initialize_contributor_rewards_ix = try_build_instruction(
             &ID,
             InitializeContributorRewardsAccounts::new(
-                &dz_ledger_sentinel_signer.pubkey(),
+                &contributor_manager_signer.pubkey(),
                 &payer_signer.pubkey(),
                 service_key,
             ),
@@ -563,7 +563,7 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             self.recent_blockhash,
             &[initialize_contributor_rewards_ix],
-            &[payer_signer, dz_ledger_sentinel_signer],
+            &[payer_signer, contributor_manager_signer],
         )
         .await?;
 

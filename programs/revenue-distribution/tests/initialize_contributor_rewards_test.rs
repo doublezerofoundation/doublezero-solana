@@ -20,7 +20,7 @@ async fn test_initialize_contributor_rewards() {
 
     let admin_signer = Keypair::new();
 
-    let dz_ledger_sentinel_signer = Keypair::new();
+    let contributor_manager_signer = Keypair::new();
 
     test_setup
         .initialize_program()
@@ -34,7 +34,7 @@ async fn test_initialize_contributor_rewards() {
         .unwrap()
         .configure_program(
             [
-                ProgramConfiguration::DzLedgerSentinel(dz_ledger_sentinel_signer.pubkey()),
+                ProgramConfiguration::ContributorManager(contributor_manager_signer.pubkey()),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
             &admin_signer,
@@ -49,7 +49,7 @@ async fn test_initialize_contributor_rewards() {
 
     test_setup
         .initialize_contributor_rewards(
-            &dz_ledger_sentinel_signer,
+            &contributor_manager_signer,
             &rewards_manager_key,
             &service_key,
         )

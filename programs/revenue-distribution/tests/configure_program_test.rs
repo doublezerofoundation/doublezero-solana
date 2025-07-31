@@ -37,7 +37,7 @@ async fn test_configure_program() {
 
     // Other settings.
     let accountant_key = Pubkey::new_unique();
-    let dz_ledger_sentinel_key = Pubkey::new_unique();
+    let contributor_manager_key = Pubkey::new_unique();
     let sol_2z_swap_program_id = Pubkey::new_unique();
 
     // Distribution settings.
@@ -58,7 +58,7 @@ async fn test_configure_program() {
             [
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(should_pause)),
                 ProgramConfiguration::Accountant(accountant_key),
-                ProgramConfiguration::DzLedgerSentinel(dz_ledger_sentinel_key),
+                ProgramConfiguration::ContributorManager(contributor_manager_key),
                 ProgramConfiguration::CalculationGracePeriodSeconds(
                     calculation_grace_period_seconds,
                 ),
@@ -86,7 +86,7 @@ async fn test_configure_program() {
     expected_program_config.reserve_2z_bump_seed =
         state::find_2z_token_pda_address(&program_config_key).1;
     expected_program_config.admin_key = admin_signer.pubkey();
-    expected_program_config.dz_ledger_sentinel_key = dz_ledger_sentinel_key;
+    expected_program_config.contributor_manager_key = contributor_manager_key;
     expected_program_config.set_is_paused(should_pause);
     expected_program_config.accountant_key = accountant_key;
     expected_program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;

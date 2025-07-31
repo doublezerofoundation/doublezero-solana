@@ -222,9 +222,9 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             msg!("Set accountant_key: {}", accountant_key);
             program_config.accountant_key = accountant_key;
         }
-        ProgramConfiguration::DzLedgerSentinel(dz_ledger_sentinel_key) => {
-            msg!("Set dz_ledger_sentinel_key: {}", dz_ledger_sentinel_key);
-            program_config.dz_ledger_sentinel_key = dz_ledger_sentinel_key;
+        ProgramConfiguration::ContributorManager(contributor_manager_key) => {
+            msg!("Set contributor_manager_key: {}", contributor_manager_key);
+            program_config.contributor_manager_key = contributor_manager_key;
         }
         ProgramConfiguration::Sol2zSwapProgram(sol_2z_swap_program_id) => {
             msg!("Set sol_2z_swap_program_id: {}", sol_2z_swap_program_id);
@@ -1168,7 +1168,7 @@ fn try_initialize_contributor_rewards(
 
     // We expect the following accounts for this instruction:
     // - 0: Program config account.
-    // - 1: DZ Ledger sentinel account.
+    // - 1: ContributorManager account.
     // - 2: Payer (funder for new accounts).
     // - 3: New contributor rewards account.
     // - 4: System program.
@@ -1176,7 +1176,7 @@ fn try_initialize_contributor_rewards(
 
     let authorized_use = VerifiedProgramAuthority::try_next_accounts(
         &mut accounts_iter,
-        Authority::DoubleZeroLedgerSentinel,
+        Authority::ContributorManager,
     )?;
 
     // Make sure the program is not paused.
@@ -1241,7 +1241,7 @@ fn try_initialize_contributor_rewards(
 enum Authority {
     Admin,
     Accountant,
-    DoubleZeroLedgerSentinel,
+    ContributorManager,
 }
 
 impl Authority {
@@ -1271,12 +1271,9 @@ impl Authority {
                     return Err(ProgramError::InvalidAccountData);
                 }
             }
-            Authority::DoubleZeroLedgerSentinel => {
-                if authority_info.key != &program_config.dz_ledger_sentinel_key {
-                    msg!(
-                        "Unauthorized DoubleZero Ledger sentinel (account {})",
-                        index
-                    );
+            Authority::ContributorManager => {
+                if authority_info.key != &program_config.contributor_manager_key {
+                    msg!("Unauthorized contributor manager (account {})", index);
                     return Err(ProgramError::InvalidAccountData);
                 }
             }

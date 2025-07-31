@@ -15,7 +15,7 @@ use crate::types::{DoubleZeroEpoch, EpochDuration};
 pub enum ProgramConfiguration {
     Flag(ProgramFlagConfiguration),
     Accountant(Pubkey),
-    DzLedgerSentinel(Pubkey),
+    ContributorManager(Pubkey),
     Sol2zSwapProgram(Pubkey),
     SolanaValidatorFee(u16),
     CalculationGracePeriodSeconds(u32),
