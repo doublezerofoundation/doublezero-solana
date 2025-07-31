@@ -15,6 +15,7 @@ use crate::types::{DoubleZeroEpoch, EpochDuration};
 pub enum ProgramConfiguration {
     Flag(ProgramFlagConfiguration),
     Accountant(Pubkey),
+    DzLedgerSentinel(Pubkey),
     Sol2zSwapProgram(Pubkey),
     SolanaValidatorFee(u16),
     CalculationGracePeriodSeconds(u32),
@@ -72,6 +73,10 @@ pub enum RevenueDistributionInstructionData {
         decimals: u8,
     },
     TerminatePrepaidConnection,
+    InitializeContributorRewards {
+        rewards_manager_key: Pubkey,
+        service_key: Pubkey,
+    },
 }
 
 impl RevenueDistributionInstructionData {
@@ -95,6 +100,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::load_prepaid_connection");
     pub const TERMINATE_PREPAID_CONNECTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::terminate_prepaid_connection");
+    pub const INITIALIZE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::initialize_contributor_rewards");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -128,6 +135,15 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 })
             }
             Self::TERMINATE_PREPAID_CONNECTION => Ok(Self::TerminatePrepaidConnection),
+            Self::INITIALIZE_CONTRIBUTOR_REWARDS => {
+                let rewards_manager_key = BorshDeserialize::deserialize_reader(reader)?;
+                let service_key = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::InitializeContributorRewards {
+                    rewards_manager_key,
+                    service_key,
+                })
+            }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid discriminator",
@@ -173,6 +189,14 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::TerminatePrepaidConnection => {
                 Self::TERMINATE_PREPAID_CONNECTION.serialize(writer)
+            }
+            Self::InitializeContributorRewards {
+                rewards_manager_key,
+                service_key,
+            } => {
+                Self::INITIALIZE_CONTRIBUTOR_REWARDS.serialize(writer)?;
+                rewards_manager_key.serialize(writer)?;
+                service_key.serialize(writer)
             }
         }
     }

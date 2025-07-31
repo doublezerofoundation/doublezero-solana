@@ -75,6 +75,10 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::TerminatePrepaidConnection => {
             try_terminate_prepaid_connection(accounts)
         }
+        RevenueDistributionInstructionData::InitializeContributorRewards {
+            rewards_manager_key,
+            service_key,
+        } => try_initialize_contributor_rewards(accounts, rewards_manager_key, service_key),
     }
 }
 
@@ -217,6 +221,10 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
         ProgramConfiguration::Accountant(accountant_key) => {
             msg!("Set accountant_key: {}", accountant_key);
             program_config.accountant_key = accountant_key;
+        }
+        ProgramConfiguration::DzLedgerSentinel(dz_ledger_sentinel_key) => {
+            msg!("Set dz_ledger_sentinel_key: {}", dz_ledger_sentinel_key);
+            program_config.dz_ledger_sentinel_key = dz_ledger_sentinel_key;
         }
         ProgramConfiguration::Sol2zSwapProgram(sol_2z_swap_program_id) => {
             msg!("Set sol_2z_swap_program_id: {}", sol_2z_swap_program_id);
@@ -1151,6 +1159,16 @@ fn try_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResult {
     Ok(())
 }
 
+fn try_initialize_contributor_rewards(
+    accounts: &[AccountInfo],
+    rewards_manager_key: Pubkey,
+    service_key: Pubkey,
+) -> ProgramResult {
+    msg!("Initialize contributor rewards");
+
+    todo!()
+}
+
 //
 // Account info handling.
 //
@@ -1158,6 +1176,7 @@ fn try_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResult {
 enum Authority {
     Admin,
     Accountant,
+    DoubleZeroLedgerSentinel,
 }
 
 impl Authority {
@@ -1187,18 +1206,18 @@ impl Authority {
                     return Err(ProgramError::InvalidAccountData);
                 }
             }
+            Authority::DoubleZeroLedgerSentinel => {
+                if authority_info.key != &program_config.dz_ledger_sentinel_key {
+                    msg!(
+                        "Unauthorized DoubleZero Ledger sentinel (account {})",
+                        index
+                    );
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
         }
 
         Ok((index, authority_info))
-    }
-}
-
-impl std::fmt::Display for Authority {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Authority::Admin => write!(f, "Admin"),
-            Authority::Accountant => write!(f, "Accountant"),
-        }
     }
 }
 
