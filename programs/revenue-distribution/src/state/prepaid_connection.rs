@@ -29,7 +29,8 @@ impl PrecomputedDiscriminator for PrepaidConnection {
 impl PrepaidConnection {
     pub const SEED_PREFIX: &'static [u8] = b"prepaid_connection";
 
-    pub const FLAG_HAS_PAID_BIT: usize = 0;
+    pub const FLAG_RESERVED_BIT: usize = 0;
+    pub const FLAG_HAS_PAID_BIT: usize = 1;
 
     pub fn find_address(prepaid_user_key: &Pubkey) -> (Pubkey, u8) {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, prepaid_user_key.as_ref()], &crate::ID)

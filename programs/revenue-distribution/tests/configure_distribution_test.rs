@@ -83,20 +83,34 @@ async fn test_configure_distribution() {
         .configure_distribution(
             dz_epoch,
             &payments_accountant_signer,
-            [DistributionConfiguration::SolanaValidatorPayments {
-                total_lamports_owed: total_solana_validator_payments_owed,
-                merkle_root: solana_validator_payments_merkle_root,
-            }],
+            [
+                DistributionConfiguration::UpdateSolanaValidatorPayments {
+                    total_lamports_owed: total_solana_validator_payments_owed + 1,
+                    merkle_root: solana_validator_payments_merkle_root,
+                },
+                DistributionConfiguration::UpdateSolanaValidatorPayments {
+                    total_lamports_owed: total_solana_validator_payments_owed,
+                    merkle_root: solana_validator_payments_merkle_root,
+                },
+                DistributionConfiguration::FinalizeSolanaValidatorPayments,
+            ],
         )
         .await
         .unwrap()
         .configure_distribution(
             dz_epoch,
             &rewards_accountant_signer,
-            [DistributionConfiguration::ContributorRewards {
-                total_contributors,
-                merkle_root: contributor_rewards_merkle_root,
-            }],
+            [
+                DistributionConfiguration::UpdateContributorRewards {
+                    total_contributors: total_contributors + 1,
+                    merkle_root: contributor_rewards_merkle_root,
+                },
+                DistributionConfiguration::UpdateContributorRewards {
+                    total_contributors,
+                    merkle_root: contributor_rewards_merkle_root,
+                },
+                DistributionConfiguration::FinalizeContributorRewards,
+            ],
         )
         .await
         .unwrap();
@@ -104,6 +118,8 @@ async fn test_configure_distribution() {
     let (distribution_key, distribution, _) = test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
+    expected_distribution.set_is_solana_validator_payments_finalized(true);
+    expected_distribution.set_is_contributor_rewards_finalized(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;

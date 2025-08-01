@@ -776,10 +776,15 @@ fn try_configure_distribution(
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     match setting {
-        DistributionConfiguration::SolanaValidatorPayments {
+        DistributionConfiguration::UpdateSolanaValidatorPayments {
             total_lamports_owed,
             merkle_root,
         } => {
+            if distribution.is_solana_validator_payments_finalized() {
+                msg!("Solana validator payments have already been finalized");
+                return Err(ProgramError::InvalidAccountData);
+            }
+
             // Only the payments accountant can determine what Solana validators owe.
             VerifiedProgramAuthority::try_next_accounts(
                 &mut accounts_iter,
@@ -795,10 +800,30 @@ fn try_configure_distribution(
             msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
             distribution.solana_validator_payments_merkle_root = merkle_root;
         }
-        DistributionConfiguration::ContributorRewards {
+        DistributionConfiguration::FinalizeSolanaValidatorPayments => {
+            if distribution.is_solana_validator_payments_finalized() {
+                msg!("Solana validator payments have already been finalized");
+                return Err(ProgramError::InvalidAccountData);
+            }
+
+            // Only the payments accountant can finalize Solana validator payments.
+            VerifiedProgramAuthority::try_next_accounts(
+                &mut accounts_iter,
+                Authority::PaymentsAccountant,
+            )?;
+
+            msg!("Finalized Solana validator payments");
+            distribution.set_is_solana_validator_payments_finalized(true);
+        }
+        DistributionConfiguration::UpdateContributorRewards {
             total_contributors,
             merkle_root,
         } => {
+            if distribution.is_contributor_rewards_finalized() {
+                msg!("Contributor rewards have already been finalized");
+                return Err(ProgramError::InvalidAccountData);
+            }
+
             // Only the rewards accountant can determine contributor rewards.
             VerifiedProgramAuthority::try_next_accounts(
                 &mut accounts_iter,
@@ -813,6 +838,21 @@ fn try_configure_distribution(
 
             // TODO: Add payer and system program to transfer lamports based
             // on the total contributors.
+        }
+        DistributionConfiguration::FinalizeContributorRewards => {
+            if distribution.is_contributor_rewards_finalized() {
+                msg!("Contributor rewards have already been finalized");
+                return Err(ProgramError::InvalidAccountData);
+            }
+
+            // Only the rewards accountant can finalize contributor rewards.
+            VerifiedProgramAuthority::try_next_accounts(
+                &mut accounts_iter,
+                Authority::RewardsAccountant,
+            )?;
+
+            msg!("Finalized contributor rewards");
+            distribution.set_is_contributor_rewards_finalized(true);
         }
     }
 
