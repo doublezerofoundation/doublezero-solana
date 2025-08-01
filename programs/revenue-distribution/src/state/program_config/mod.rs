@@ -29,7 +29,7 @@ pub struct ProgramConfig {
 
     /// Cache this seed to validate token PDA address.
     pub reserve_2z_bump_seed: u8,
-    _bump_seed_padding: [u8; 6],
+    _padding: [u8; 6],
 
     pub admin_key: Pubkey,
 

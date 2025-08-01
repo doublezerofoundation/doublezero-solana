@@ -17,7 +17,7 @@ pub struct DistributionParameters {
     /// grace period has not been configured, the program will not allow new Merkle roots (which
     /// are necessary for validators to pay their dues and contributors to claim rewards).
     pub calculation_grace_period_seconds: u32,
-    _calculation_grace_period_padding: [u8; 4],
+    _padding: [u8; 4],
 
     pub community_burn_rate_parameters: CommunityBurnRateParameters,
 
