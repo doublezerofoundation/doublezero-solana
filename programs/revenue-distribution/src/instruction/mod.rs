@@ -33,6 +33,7 @@ pub enum ProgramConfiguration {
         initial_rate: Option<u32>,
     },
     PrepaidConnectionTerminationRelayLamports(u32),
+    ContributorRewardClaimLamports(u32),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]

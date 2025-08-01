@@ -14,12 +14,13 @@ use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
+use solana_system_interface::instruction as system_instruction;
 use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
 
 use crate::{
     instruction::ContributorRewardsConfiguration,
-    state::{ContributorRewards, JournalEntries, RecipientShares},
+    state::{ContributorRewards, JournalEntries, RecipientShares, RelayParameters},
 };
 use crate::{
     instruction::{
@@ -396,6 +397,12 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             }
         }
         ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(relay_lamports) => {
+            // The specified lamports must be greater than the cost of a transaction signature.
+            if relay_lamports < RelayParameters::MIN_LAMPORTS {
+                msg!("Relay lamports must be greater than the cost of a transaction signature");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
             msg!(
                 "Set relay_parameters.prepaid_connection_termination_lamports: {}",
                 relay_lamports
@@ -403,6 +410,21 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             program_config
                 .relay_parameters
                 .prepaid_connection_termination_lamports = relay_lamports;
+        }
+        ProgramConfiguration::ContributorRewardClaimLamports(relay_lamports) => {
+            // The specified lamports must be greater than the cost of a transaction signature.
+            if relay_lamports < RelayParameters::MIN_LAMPORTS {
+                msg!("Relay lamports must be greater than the cost of a transaction signature");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            msg!(
+                "Set relay_parameters.contributor_reward_claim_lamports: {}",
+                relay_lamports
+            );
+            program_config
+                .relay_parameters
+                .contributor_reward_claim_lamports = relay_lamports;
         }
     }
 
@@ -835,9 +857,6 @@ fn try_configure_distribution(
 
             msg!("Set contributor_rewards_merkle_root: {}", merkle_root);
             distribution.contributor_rewards_merkle_root = merkle_root;
-
-            // TODO: Add payer and system program to transfer lamports based
-            // on the total contributors.
         }
         DistributionConfiguration::FinalizeContributorRewards => {
             if distribution.is_contributor_rewards_finalized() {
@@ -846,13 +865,51 @@ fn try_configure_distribution(
             }
 
             // Only the rewards accountant can finalize contributor rewards.
-            VerifiedProgramAuthority::try_next_accounts(
+            let authorized_use = VerifiedProgramAuthority::try_next_accounts(
                 &mut accounts_iter,
                 Authority::RewardsAccountant,
             )?;
 
+            // In order to finalize contributor rewards, the program config must have a non-zero
+            // amount of lamports to pay for each contributor reward claim. By providing these
+            // lamports to the distribution account, the contributor reward claims will not cost any
+            // gas to the invoker of this claim.
+            let contributor_reward_claim_lamports = authorized_use
+                .program_config
+                .checked_relay_contributor_reward_claim_lamports()
+                .map(u64::from)
+                .ok_or_else(|| {
+                    msg!("Contributor reward claim lamports are misconfigured");
+                    ProgramError::InvalidAccountData
+                })?;
+
             msg!("Finalized contributor rewards");
             distribution.set_is_contributor_rewards_finalized(true);
+
+            // The rewards accountant can pay with another account. But most likely this account
+            // will be the same as the payments accountant. This account will need to be writable
+            // in order to transfer lamports to the payer (but we do not need to check this because
+            // the transfer CPI call will fail if this account is not writable).
+            let (_, payer_info) =
+                try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+            let total_contributors = distribution.total_contributors;
+            let transfer_amount =
+                contributor_reward_claim_lamports.saturating_mul(total_contributors.into());
+
+            let transfer_ix = system_instruction::transfer(
+                &payer_info.key,
+                &distribution.info.key,
+                transfer_amount,
+            );
+
+            invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
+
+            msg!(
+                "Transferred {} lamports to distribution for {} contributor claims",
+                transfer_amount,
+                total_contributors
+            );
         }
     }
 

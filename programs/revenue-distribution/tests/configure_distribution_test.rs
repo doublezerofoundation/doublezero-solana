@@ -31,15 +31,8 @@ async fn test_configure_distribution() {
     let dz_epochs_to_increasing_cbr = 10;
     let dz_epochs_to_cbr_limit = 20;
 
-    // Test inputs.
-
-    let dz_epoch = DoubleZeroEpoch::new(1);
-
-    let total_solana_validator_payments_owed = 100_000_000_000; // 100 SOL.
-    let solana_validator_payments_merkle_root = Hash::new_unique();
-
-    let total_contributors = 69;
-    let contributor_rewards_merkle_root = Hash::new_unique();
+    // Relay settings.
+    let contributor_reward_claim_relay_lamports = 10_000;
 
     test_setup
         .initialize_program()
@@ -69,6 +62,9 @@ async fn test_configure_distribution() {
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
+                ProgramConfiguration::ContributorRewardClaimLamports(
+                    contributor_reward_claim_relay_lamports,
+                ),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
         )
@@ -79,7 +75,22 @@ async fn test_configure_distribution() {
         .unwrap()
         .initialize_distribution(&rewards_accountant_signer)
         .await
-        .unwrap()
+        .unwrap();
+
+    // Test inputs.
+
+    let dz_epoch = DoubleZeroEpoch::new(1);
+
+    let total_solana_validator_payments_owed = 100_000_000_000; // 100 SOL.
+    let solana_validator_payments_merkle_root = Hash::new_unique();
+
+    let total_contributors = 69;
+    let contributor_rewards_merkle_root = Hash::new_unique();
+
+    let (_, _, distribution_lamports_balance_before, _) =
+        test_setup.fetch_distribution(dz_epoch).await;
+
+    test_setup
         .configure_distribution(
             dz_epoch,
             &payments_accountant_signer,
@@ -115,7 +126,13 @@ async fn test_configure_distribution() {
         .await
         .unwrap();
 
-    let (distribution_key, distribution, _) = test_setup.fetch_distribution(dz_epoch).await;
+    let (distribution_key, distribution, distribution_lamports_balance_after, _) =
+        test_setup.fetch_distribution(dz_epoch).await;
+
+    assert_eq!(
+        distribution_lamports_balance_after,
+        distribution_lamports_balance_before + 690_000
+    );
 
     let mut expected_distribution = Distribution::default();
     expected_distribution.set_is_solana_validator_payments_finalized(true);

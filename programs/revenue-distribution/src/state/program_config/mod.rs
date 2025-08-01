@@ -94,6 +94,16 @@ impl ProgramConfig {
             Some(params)
         }
     }
+
+    pub fn checked_relay_contributor_reward_claim_lamports(&self) -> Option<u32> {
+        let lamports = self.relay_parameters.contributor_reward_claim_lamports;
+
+        if lamports == 0 {
+            None
+        } else {
+            Some(lamports)
+        }
+    }
 }
 
 //
