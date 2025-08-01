@@ -244,23 +244,35 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             _unused,
         } => {
             let base_block_rewards = ValidatorFee::new(base_block_rewards).ok_or_else(|| {
-                msg!("Invalid base block rewards: {}", base_block_rewards);
+                msg!(
+                    "Invalid Solana validator base block rewards fee parameter: {}",
+                    base_block_rewards
+                );
                 ProgramError::InvalidInstructionData
             })?;
 
             let priority_block_rewards =
                 ValidatorFee::new(priority_block_rewards).ok_or_else(|| {
-                    msg!("Invalid priority block rewards: {}", priority_block_rewards);
+                    msg!(
+                        "Invalid Solana validator priority block rewards fee parameter: {}",
+                        priority_block_rewards
+                    );
                     ProgramError::InvalidInstructionData
                 })?;
 
             let inflation_rewards = ValidatorFee::new(inflation_rewards).ok_or_else(|| {
-                msg!("Invalid inflation rewards: {}", inflation_rewards);
+                msg!(
+                    "Invalid Solana validator inflation rewards fee parameter: {}",
+                    inflation_rewards
+                );
                 ProgramError::InvalidInstructionData
             })?;
 
             let jito_tips = ValidatorFee::new(jito_tips).ok_or_else(|| {
-                msg!("Invalid jito tips: {}", jito_tips);
+                msg!(
+                    "Invalid Solana validator Jito tips fee parameter: {}",
+                    jito_tips
+                );
                 ProgramError::InvalidInstructionData
             })?;
 
