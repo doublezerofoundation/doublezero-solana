@@ -224,9 +224,13 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 }
             };
         }
-        ProgramConfiguration::Accountant(accountant_key) => {
-            msg!("Set accountant_key: {}", accountant_key);
-            program_config.accountant_key = accountant_key;
+        ProgramConfiguration::PaymentsAccountant(payments_accountant_key) => {
+            msg!("Set payments_accountant_key: {}", payments_accountant_key);
+            program_config.payments_accountant_key = payments_accountant_key;
+        }
+        ProgramConfiguration::RewardsAccountant(rewards_accountant_key) => {
+            msg!("Set rewards_accountant_key: {}", rewards_accountant_key);
+            program_config.rewards_accountant_key = rewards_accountant_key;
         }
         ProgramConfiguration::ContributorManager(contributor_manager_key) => {
             msg!("Set contributor_manager_key: {}", contributor_manager_key);
@@ -767,12 +771,6 @@ fn try_configure_distribution(
     // - 2: Distribution account.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    let authorized_use =
-        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Accountant)?;
-
-    // Make sure the program is not paused.
-    try_require_unpaused(&authorized_use.program_config)?;
-
     // Account 2 must be the program config account.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
@@ -782,6 +780,12 @@ fn try_configure_distribution(
             total_lamports_owed,
             merkle_root,
         } => {
+            // Only the payments accountant can determine what Solana validators owe.
+            VerifiedProgramAuthority::try_next_accounts(
+                &mut accounts_iter,
+                Authority::PaymentsAccountant,
+            )?;
+
             msg!(
                 "Set total_solana_validator_payments_owed: {}",
                 total_lamports_owed
@@ -795,11 +799,20 @@ fn try_configure_distribution(
             total_contributors,
             merkle_root,
         } => {
+            // Only the rewards accountant can determine contributor rewards.
+            VerifiedProgramAuthority::try_next_accounts(
+                &mut accounts_iter,
+                Authority::RewardsAccountant,
+            )?;
+
             msg!("set total_contributors: {}", total_contributors);
             distribution.total_contributors = total_contributors;
 
             msg!("Set contributor_rewards_merkle_root: {}", merkle_root);
             distribution.contributor_rewards_merkle_root = merkle_root;
+
+            // TODO: Add payer and system program to transfer lamports based
+            // on the total contributors.
         }
     }
 
@@ -1343,6 +1356,8 @@ fn try_configure_contributor_rewards(
 enum Authority {
     Admin,
     Accountant,
+    PaymentsAccountant,
+    RewardsAccountant,
     ContributorManager,
 }
 
@@ -1368,8 +1383,22 @@ impl Authority {
                 }
             }
             Authority::Accountant => {
-                if authority_info.key != &program_config.accountant_key {
+                if authority_info.key != &program_config.payments_accountant_key
+                    && authority_info.key != &program_config.rewards_accountant_key
+                {
                     msg!("Unauthorized accountant (account {})", index);
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            Authority::PaymentsAccountant => {
+                if authority_info.key != &program_config.payments_accountant_key {
+                    msg!("Unauthorized payments accountant (account {})", index);
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+            Authority::RewardsAccountant => {
+                if authority_info.key != &program_config.rewards_accountant_key {
+                    msg!("Unauthorized rewards accountant (account {})", index);
                     return Err(ProgramError::InvalidAccountData);
                 }
             }

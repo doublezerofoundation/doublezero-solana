@@ -36,7 +36,8 @@ async fn test_configure_program() {
     let should_pause = false;
 
     // Other settings.
-    let accountant_key = Pubkey::new_unique();
+    let payments_accountant_key = Pubkey::new_unique();
+    let rewards_accountant_key = Pubkey::new_unique();
     let contributor_manager_key = Pubkey::new_unique();
     let sol_2z_swap_program_id = Pubkey::new_unique();
 
@@ -63,7 +64,8 @@ async fn test_configure_program() {
             &admin_signer,
             [
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(should_pause)),
-                ProgramConfiguration::Accountant(accountant_key),
+                ProgramConfiguration::PaymentsAccountant(payments_accountant_key),
+                ProgramConfiguration::RewardsAccountant(rewards_accountant_key),
                 ProgramConfiguration::ContributorManager(contributor_manager_key),
                 ProgramConfiguration::CalculationGracePeriodSeconds(
                     calculation_grace_period_seconds,
@@ -99,7 +101,8 @@ async fn test_configure_program() {
     expected_program_config.admin_key = admin_signer.pubkey();
     expected_program_config.contributor_manager_key = contributor_manager_key;
     expected_program_config.set_is_paused(should_pause);
-    expected_program_config.accountant_key = accountant_key;
+    expected_program_config.payments_accountant_key = payments_accountant_key;
+    expected_program_config.rewards_accountant_key = rewards_accountant_key;
     expected_program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;
 
     let expected_distribution_params = &mut expected_program_config.distribution_parameters;

@@ -33,9 +33,11 @@ pub struct ProgramConfig {
 
     pub admin_key: Pubkey,
 
-    /// This authority is the only authority that can post data relevant to fee calculations and
-    /// contributor rewards.
-    pub accountant_key: Pubkey,
+    /// This authority determines the payments due for distributions.
+    pub payments_accountant_key: Pubkey,
+
+    /// This authority determines the rewards for contributors.
+    pub rewards_accountant_key: Pubkey,
 
     /// This authority is the only authority that can grant access to the DoubleZero Ledger network.
     pub contributor_manager_key: Pubkey,
@@ -97,6 +99,6 @@ impl ProgramConfig {
 //
 
 const _: () = assert!(
-    size_of::<ProgramConfig>() == 1_032,
+    size_of::<ProgramConfig>() == 1_064,
     "`ProgramConfig` size changed"
 );

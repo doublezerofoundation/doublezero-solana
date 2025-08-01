@@ -21,8 +21,9 @@ async fn test_configure_distribution() {
 
     let admin_signer = Keypair::new();
 
-    let accountant_signer = Keypair::new();
-    let solana_validator_base_block_rewards_fee = 500; // 5%
+    let payments_accountant_signer = Keypair::new();
+    let rewards_accountant_signer = Keypair::new();
+    let solana_validator_base_block_rewards_fee = 500; // 5%.
 
     // Community burn rate.
     let initial_cbr = 100_000_000; // 10%.
@@ -53,7 +54,8 @@ async fn test_configure_distribution() {
         .configure_program(
             &admin_signer,
             [
-                ProgramConfiguration::Accountant(accountant_signer.pubkey()),
+                ProgramConfiguration::PaymentsAccountant(payments_accountant_signer.pubkey()),
+                ProgramConfiguration::RewardsAccountant(rewards_accountant_signer.pubkey()),
                 ProgramConfiguration::SolanaValidatorFeeParameters {
                     base_block_rewards: solana_validator_base_block_rewards_fee,
                     priority_block_rewards: 0,
@@ -72,25 +74,29 @@ async fn test_configure_distribution() {
         )
         .await
         .unwrap()
-        .initialize_distribution(&accountant_signer)
+        .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .initialize_distribution(&accountant_signer)
+        .initialize_distribution(&rewards_accountant_signer)
         .await
         .unwrap()
         .configure_distribution(
             dz_epoch,
-            &accountant_signer,
-            [
-                DistributionConfiguration::SolanaValidatorPayments {
-                    total_lamports_owed: total_solana_validator_payments_owed,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-                DistributionConfiguration::ContributorRewards {
-                    total_contributors,
-                    merkle_root: contributor_rewards_merkle_root,
-                },
-            ],
+            &payments_accountant_signer,
+            [DistributionConfiguration::SolanaValidatorPayments {
+                total_lamports_owed: total_solana_validator_payments_owed,
+                merkle_root: solana_validator_payments_merkle_root,
+            }],
+        )
+        .await
+        .unwrap()
+        .configure_distribution(
+            dz_epoch,
+            &rewards_accountant_signer,
+            [DistributionConfiguration::ContributorRewards {
+                total_contributors,
+                merkle_root: contributor_rewards_merkle_root,
+            }],
         )
         .await
         .unwrap();

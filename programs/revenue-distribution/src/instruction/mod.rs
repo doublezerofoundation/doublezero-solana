@@ -14,7 +14,8 @@ use crate::types::{DoubleZeroEpoch, EpochDuration};
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ProgramConfiguration {
     Flag(ProgramFlagConfiguration),
-    Accountant(Pubkey),
+    PaymentsAccountant(Pubkey),
+    RewardsAccountant(Pubkey),
     ContributorManager(Pubkey),
     Sol2zSwapProgram(Pubkey),
     SolanaValidatorFeeParameters {

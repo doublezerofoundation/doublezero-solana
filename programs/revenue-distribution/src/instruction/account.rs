@@ -238,17 +238,17 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigureDistributionAccounts {
+    pub distribution_key: Pubkey,
     pub program_config_key: Pubkey,
     pub accountant_key: Pubkey,
-    pub distribution_key: Pubkey,
 }
 
 impl ConfigureDistributionAccounts {
     pub fn new(accountant_key: &Pubkey, dz_epoch: DoubleZeroEpoch) -> Self {
         Self {
+            distribution_key: Distribution::find_address(dz_epoch).0,
             program_config_key: ProgramConfig::find_address().0,
             accountant_key: *accountant_key,
-            distribution_key: Distribution::find_address(dz_epoch).0,
         }
     }
 }
@@ -256,15 +256,15 @@ impl ConfigureDistributionAccounts {
 impl From<ConfigureDistributionAccounts> for Vec<AccountMeta> {
     fn from(accounts: ConfigureDistributionAccounts) -> Self {
         let ConfigureDistributionAccounts {
+            distribution_key,
             program_config_key,
             accountant_key,
-            distribution_key,
         } = accounts;
 
         vec![
+            AccountMeta::new(distribution_key, false),
             AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new_readonly(accountant_key, true),
-            AccountMeta::new(distribution_key, false),
         ]
     }
 }
