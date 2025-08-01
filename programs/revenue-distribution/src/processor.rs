@@ -583,7 +583,7 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     let mut program_config = authorized_use.program_config;
 
     // Make sure the program is not paused.
-    try_is_unpaused(&program_config)?;
+    try_require_unpaused(&program_config)?;
 
     let solana_validator_fee_params = program_config
         .checked_solana_validator_fee_parameters()
@@ -771,7 +771,7 @@ fn try_configure_distribution(
         VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Accountant)?;
 
     // Make sure the program is not paused.
-    try_is_unpaused(&authorized_use.program_config)?;
+    try_require_unpaused(&authorized_use.program_config)?;
 
     // Account 2 must be the program config account.
     let mut distribution =
@@ -836,7 +836,7 @@ fn try_initialize_prepaid_connection(
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Make sure the program is not paused.
-    try_is_unpaused(&program_config)?;
+    try_require_unpaused(&program_config)?;
 
     // Account 1 must be the journal. We need the activation cost to determine how much to transfer
     // to the reserve.
@@ -966,7 +966,7 @@ fn try_load_prepaid_connection(
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Make sure the program is not paused.
-    try_is_unpaused(&program_config)?;
+    try_require_unpaused(&program_config)?;
 
     // Account 1 must be the journal. The journal specifies the min and max entry constraints. When
     // the constraint checks pass, we update the existing journal entries to reflect the payment.
@@ -1229,7 +1229,7 @@ fn try_initialize_contributor_rewards(
     )?;
 
     // Make sure the program is not paused.
-    try_is_unpaused(&authorized_use.program_config)?;
+    try_require_unpaused(&authorized_use.program_config)?;
 
     // Account 2 must be a signer and writable (i.e., payer) because it will be sending lamports
     // to the new contributor rewards account when the system program allocates data to it. But
@@ -1297,7 +1297,7 @@ fn try_configure_contributor_rewards(
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Make sure the program is not paused.
-    try_is_unpaused(&program_config)?;
+    try_require_unpaused(&program_config)?;
 
     // Account 1 must be the contributor rewards.
     let mut contributor_rewards =
@@ -1513,7 +1513,7 @@ fn try_serialize_journal_entries(
     })
 }
 
-fn try_is_unpaused(program_config: &ProgramConfig) -> ProgramResult {
+fn try_require_unpaused(program_config: &ProgramConfig) -> ProgramResult {
     if program_config.is_paused() {
         msg!("Program is paused");
         return Err(ProgramError::InvalidAccountData);
