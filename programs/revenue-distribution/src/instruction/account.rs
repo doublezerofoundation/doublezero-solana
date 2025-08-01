@@ -255,7 +255,7 @@ impl ConfigureDistributionAccounts {
             distribution_key: Distribution::find_address(dz_epoch).0,
             program_config_key: ProgramConfig::find_address().0,
             accountant_key: *accountant_key,
-            payer_key: payer_key.map(|key| *key),
+            payer_key: payer_key.copied(),
         }
     }
 }
