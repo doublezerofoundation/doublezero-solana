@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{
-    types::{Flags, FlagsBitmap, StorageGap},
+    types::{Flags, StorageGap},
     {Discriminator, PrecomputedDiscriminator},
 };
 use solana_pubkey::Pubkey;
@@ -36,19 +36,12 @@ impl PrepaidConnection {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, prepaid_user_key.as_ref()], &crate::ID)
     }
 
-    #[inline]
-    pub fn flags_bitmap(&self) -> FlagsBitmap {
-        FlagsBitmap::from_value(self.flags)
-    }
-
     pub fn has_paid(&self) -> bool {
-        self.flags_bitmap().get(Self::FLAG_HAS_PAID_BIT)
+        self.flags.bit(Self::FLAG_HAS_PAID_BIT)
     }
 
     pub fn set_has_paid(&mut self, paid: bool) {
-        let mut flags_bitmap = self.flags_bitmap();
-        flags_bitmap.set(Self::FLAG_HAS_PAID_BIT, paid);
-        self.flags = flags_bitmap.into_value();
+        self.flags.set_bit(Self::FLAG_HAS_PAID_BIT, paid);
     }
 
     pub fn checked_valid_through_dz_epoch(&self) -> Option<DoubleZeroEpoch> {

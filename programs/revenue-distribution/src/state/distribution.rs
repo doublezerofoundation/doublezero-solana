@@ -1,6 +1,6 @@
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{
-    types::{Flags, FlagsBitmap, StorageGap},
+    types::{Flags, StorageGap},
     {Discriminator, PrecomputedDiscriminator},
 };
 use solana_hash::Hash;
@@ -78,37 +78,28 @@ impl Distribution {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, &dz_epoch.as_seed()], &crate::ID)
     }
 
-    #[inline]
-    pub fn flags_bitmap(&self) -> FlagsBitmap {
-        FlagsBitmap::from_value(self.flags)
-    }
-
     pub fn is_solana_validator_payments_finalized(&self) -> bool {
-        self.flags_bitmap()
-            .get(Self::FLAG_IS_SOLANA_VALIDATOR_PAYMENTS_FINALIZED_BIT)
+        self.flags
+            .bit(Self::FLAG_IS_SOLANA_VALIDATOR_PAYMENTS_FINALIZED_BIT)
     }
 
     pub fn set_is_solana_validator_payments_finalized(&mut self, should_finalize: bool) {
-        let mut flags_bitmap = self.flags_bitmap();
-        flags_bitmap.set(
+        self.flags.set_bit(
             Self::FLAG_IS_SOLANA_VALIDATOR_PAYMENTS_FINALIZED_BIT,
             should_finalize,
         );
-        self.flags = flags_bitmap.into_value();
     }
 
     pub fn is_contributor_rewards_finalized(&self) -> bool {
-        self.flags_bitmap()
-            .get(Self::FLAG_IS_CONTRIBUTOR_REWARDS_FINALIZED_BIT)
+        self.flags
+            .bit(Self::FLAG_IS_CONTRIBUTOR_REWARDS_FINALIZED_BIT)
     }
 
     pub fn set_is_contributor_rewards_finalized(&mut self, should_finalize: bool) {
-        let mut flags_bitmap = self.flags_bitmap();
-        flags_bitmap.set(
+        self.flags.set_bit(
             Self::FLAG_IS_CONTRIBUTOR_REWARDS_FINALIZED_BIT,
             should_finalize,
         );
-        self.flags = flags_bitmap.into_value();
     }
 }
 
