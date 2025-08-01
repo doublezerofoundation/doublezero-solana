@@ -17,7 +17,10 @@ use solana_pubkey::Pubkey;
 use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
 
-use crate::state::{ContributorRewards, JournalEntries};
+use crate::{
+    instruction::ContributorRewardsConfiguration,
+    state::{ContributorRewards, JournalEntries, RecipientShares},
+};
 use crate::{
     instruction::{
         DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
@@ -79,6 +82,9 @@ fn try_process_instruction(
             rewards_manager_key,
             service_key,
         } => try_initialize_contributor_rewards(accounts, rewards_manager_key, service_key),
+        RevenueDistributionInstructionData::ConfigureContributorRewards(setting) => {
+            try_configure_contributor_rewards(accounts, setting)
+        }
     }
 }
 
@@ -538,16 +544,8 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         VerifiedProgramAuthorityMut::try_next_accounts(&mut accounts_iter, Authority::Accountant)?;
     let mut program_config = authorized_use.program_config;
 
-    // Cannot initialize a new distribution when paused.
-    // Before we initialize a new distribution, we need to make sure of the following:
-    // 1. The program is not paused.
-    // 2. Solana validator fee is not zero.
-    // 3. The last community burn rate is not zero.
-
-    if program_config.is_paused() {
-        msg!("Program paused");
-        return Err(ProgramError::InvalidAccountData);
-    }
+    // Make sure the program is not paused.
+    try_is_unpaused(&program_config)?;
 
     if program_config.checked_solana_validator_fee().is_none() {
         msg!("Solana validator fee has not been configured yet");
@@ -728,7 +726,11 @@ fn try_configure_distribution(
     // - 2: Distribution account.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Accountant)?;
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Accountant)?;
+
+    // Make sure the program is not paused.
+    try_is_unpaused(&authorized_use.program_config)?;
 
     // Account 2 must be the program config account.
     let mut distribution =
@@ -791,6 +793,9 @@ fn try_initialize_prepaid_connection(
     // Account 0 must be the program config. We need the reserve 2Z bump.
     let program_config =
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    try_is_unpaused(&program_config)?;
 
     // Account 1 must be the journal. We need the activation cost to determine how much to transfer
     // to the reserve.
@@ -918,6 +923,9 @@ fn try_load_prepaid_connection(
     // account because many calculations require this value.
     let program_config =
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    try_is_unpaused(&program_config)?;
 
     // Account 1 must be the journal. The journal specifies the min and max entry constraints. When
     // the constraint checks pass, we update the existing journal entries to reflect the payment.
@@ -1180,10 +1188,7 @@ fn try_initialize_contributor_rewards(
     )?;
 
     // Make sure the program is not paused.
-    if authorized_use.program_config.is_paused() {
-        msg!("Program is paused");
-        return Err(ProgramError::InvalidAccountData);
-    }
+    try_is_unpaused(&authorized_use.program_config)?;
 
     // Account 2 must be a signer and writable (i.e., payer) because it will be sending lamports
     // to the new contributor rewards account when the system program allocates data to it. But
@@ -1230,6 +1235,62 @@ fn try_initialize_contributor_rewards(
 
     contributor_rewards.service_key = service_key;
     contributor_rewards.rewards_manager_key = rewards_manager_key;
+
+    Ok(())
+}
+
+fn try_configure_contributor_rewards(
+    accounts: &[AccountInfo],
+    setting: ContributorRewardsConfiguration,
+) -> Result<(), ProgramError> {
+    msg!("Configure contributor rewards");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Contributor rewards.
+    // - 2: Rewards manager.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    try_is_unpaused(&program_config)?;
+
+    // Account 1 must be the contributor rewards.
+    let mut contributor_rewards =
+        ZeroCopyMutAccount::<ContributorRewards>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Account 2 must be the rewards manager.
+    let (account_index, rewards_manager_info) = try_next_enumerated_account(
+        &mut accounts_iter,
+        NextAccountOptions {
+            must_be_signer: true,
+            ..Default::default()
+        },
+    )?;
+
+    // The rewards manager must be the one recognized in the contributor rewards account.
+    if rewards_manager_info.key != &contributor_rewards.rewards_manager_key {
+        msg!("Invalid rewards manager (account {})", account_index);
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    match setting {
+        ContributorRewardsConfiguration::Recipients(recipients) => {
+            let recipients = RecipientShares::new(&recipients).ok_or_else(|| {
+                msg!("Invalid recipients");
+                ProgramError::InvalidAccountData
+            })?;
+
+            msg!("Recipients");
+            recipients.iter().for_each(|recipient| {
+                msg!("{}: {}", recipient.recipient_key, recipient.share);
+            });
+            contributor_rewards.recipient_shares = recipients;
+        }
+    }
 
     Ok(())
 }
@@ -1409,4 +1470,13 @@ fn try_serialize_journal_entries(
         msg!("Failed to serialize journal entries");
         ProgramError::BorshIoError(e.to_string())
     })
+}
+
+fn try_is_unpaused(program_config: &ProgramConfig) -> ProgramResult {
+    if program_config.is_paused() {
+        msg!("Program is paused");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    Ok(())
 }

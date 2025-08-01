@@ -50,6 +50,14 @@ async fn test_load_prepaid_connection() {
         .set_admin(&admin_signer.pubkey())
         .await
         .unwrap()
+        .configure_program(
+            [ProgramConfiguration::Flag(
+                ProgramFlagConfiguration::IsPaused(false),
+            )],
+            &admin_signer,
+        )
+        .await
+        .unwrap()
         .configure_journal(
             [
                 JournalConfiguration::ActivationCost(prepaid_activation_cost),

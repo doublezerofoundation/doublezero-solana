@@ -55,6 +55,11 @@ pub enum DistributionConfiguration {
     },
 }
 
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
+pub enum ContributorRewardsConfiguration {
+    Recipients(Vec<(Pubkey, u16)>),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RevenueDistributionInstructionData {
     InitializeProgram,
@@ -77,6 +82,7 @@ pub enum RevenueDistributionInstructionData {
         rewards_manager_key: Pubkey,
         service_key: Pubkey,
     },
+    ConfigureContributorRewards(ContributorRewardsConfiguration),
 }
 
 impl RevenueDistributionInstructionData {
@@ -102,6 +108,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::terminate_prepaid_connection");
     pub const INITIALIZE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_contributor_rewards");
+    pub const CONFIGURE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::configure_contributor_rewards");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -143,6 +151,10 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                     rewards_manager_key,
                     service_key,
                 })
+            }
+            Self::CONFIGURE_CONTRIBUTOR_REWARDS => {
+                ContributorRewardsConfiguration::deserialize_reader(reader)
+                    .map(Self::ConfigureContributorRewards)
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -197,6 +209,10 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::INITIALIZE_CONTRIBUTOR_REWARDS.serialize(writer)?;
                 rewards_manager_key.serialize(writer)?;
                 service_key.serialize(writer)
+            }
+            Self::ConfigureContributorRewards(setting) => {
+                Self::CONFIGURE_CONTRIBUTOR_REWARDS.serialize(writer)?;
+                setting.serialize(writer)
             }
         }
     }

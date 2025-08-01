@@ -1,3 +1,9 @@
+mod recipient_shares;
+
+pub use recipient_shares::*;
+
+//
+
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{
     types::{Flags, FlagsBitmap, StorageGap},
@@ -14,7 +20,7 @@ pub struct ContributorRewards {
 
     pub rewards_manager_key: Pubkey,
 
-    pub recipients: [Pubkey; 8],
+    pub recipient_shares: RecipientShares,
 
     _storage_gap: StorageGap<8>,
 }
@@ -40,6 +46,6 @@ impl ContributorRewards {
 //
 
 const _: () = assert!(
-    size_of::<ContributorRewards>() == 584,
+    size_of::<ContributorRewards>() == 600,
     "`ContributorRewards` size changed"
 );

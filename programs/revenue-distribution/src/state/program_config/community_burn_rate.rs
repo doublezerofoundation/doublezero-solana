@@ -127,7 +127,7 @@ impl CommunityBurnRateParameters {
                 .checked_add(self.cached_slope_numerator.into())?
                 .saturating_div(self.cached_slope_denominator.into());
 
-            // Ensure we don't pass the limit. We shouldn't have to do this, but we are being extra
+            // Ensure we do not pass the limit. We should not have to do this, but we are being extra
             // safe. Subsequent calls to compute should bail early above because dz_epochs_to_limit
             // should already be at zero.
             self.cached_next_burn_rate = BurnRate::try_from(new_burn_rate)

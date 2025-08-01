@@ -6,14 +6,15 @@ use doublezero_program_tools::{
 use doublezero_revenue_distribution::{
     instruction::{
         account::{
-            ConfigureDistributionAccounts, ConfigureJournalAccounts, ConfigureProgramAccounts,
+            ConfigureContributorRewardsAccounts, ConfigureDistributionAccounts,
+            ConfigureJournalAccounts, ConfigureProgramAccounts,
             InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
             InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
             InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
             TerminatePrepaidConnectionAccounts,
         },
-        DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
-        RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionConfiguration, JournalConfiguration,
+        ProgramConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
@@ -564,6 +565,42 @@ impl ProgramTestWithOwner {
             self.recent_blockhash,
             &[initialize_contributor_rewards_ix],
             &[payer_signer, contributor_manager_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
+    pub async fn configure_contributor_rewards<const N: usize>(
+        &mut self,
+        rewards_manager_signer: &Keypair,
+        service_key: &Pubkey,
+        setting: [ContributorRewardsConfiguration; N],
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let configure_contributor_rewards_ix = setting
+            .into_iter()
+            .map(|setting| {
+                try_build_instruction(
+                    &ID,
+                    ConfigureContributorRewardsAccounts::new(
+                        &rewards_manager_signer.pubkey(),
+                        service_key,
+                    ),
+                    &RevenueDistributionInstructionData::ConfigureContributorRewards(setting),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &configure_contributor_rewards_ix,
+            &[payer_signer, rewards_manager_signer],
         )
         .await?;
 
