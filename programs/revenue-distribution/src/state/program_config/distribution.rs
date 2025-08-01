@@ -23,8 +23,18 @@ pub struct DistributionParameters {
 
     /// Proportion of Solana validator revenue DoubleZero collects to pay contributors. These fees
     /// are denominated in SOL, so this proportion represents a proportion of SOL rewards.
-    pub current_solana_validator_fee: ValidatorFee,
-    _current_solana_validator_fee_padding: [u8; 6],
+    pub solana_validator_fee_parameters: SolanaValidatorFeeParameters,
 
     _storage_gap: StorageGap<8>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
+#[repr(C, align(8))]
+pub struct SolanaValidatorFeeParameters {
+    pub base_block_rewards: ValidatorFee,
+    pub priority_block_rewards: ValidatorFee,
+    pub inflation_rewards: ValidatorFee,
+    pub jito_tips: ValidatorFee,
+
+    _storage_gap: StorageGap<1>,
 }

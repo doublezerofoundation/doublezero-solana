@@ -236,24 +236,50 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             msg!("Set sol_2z_swap_program_id: {}", sol_2z_swap_program_id);
             program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;
         }
-        ProgramConfiguration::SolanaValidatorFee(solana_validator_fee) => {
-            let solana_validator_fee =
-                ValidatorFee::new(solana_validator_fee).ok_or_else(|| {
-                    msg!(
-                        "Invalid Solana validator fee: {}/{}",
-                        solana_validator_fee,
-                        10_000
-                    );
+        ProgramConfiguration::SolanaValidatorFeeParameters {
+            base_block_rewards,
+            priority_block_rewards,
+            inflation_rewards,
+            jito_tips,
+            _unused,
+        } => {
+            let base_block_rewards = ValidatorFee::new(base_block_rewards).ok_or_else(|| {
+                msg!("Invalid base block rewards: {}", base_block_rewards);
+                ProgramError::InvalidInstructionData
+            })?;
+
+            let priority_block_rewards =
+                ValidatorFee::new(priority_block_rewards).ok_or_else(|| {
+                    msg!("Invalid priority block rewards: {}", priority_block_rewards);
                     ProgramError::InvalidInstructionData
                 })?;
 
-            msg!(
-                "Set distribution_parameters.solana_validator_fee: {}",
-                solana_validator_fee
-            );
-            program_config
+            let inflation_rewards = ValidatorFee::new(inflation_rewards).ok_or_else(|| {
+                msg!("Invalid inflation rewards: {}", inflation_rewards);
+                ProgramError::InvalidInstructionData
+            })?;
+
+            let jito_tips = ValidatorFee::new(jito_tips).ok_or_else(|| {
+                msg!("Invalid jito tips: {}", jito_tips);
+                ProgramError::InvalidInstructionData
+            })?;
+
+            msg!("Set distribution_parameters.solana_validator_fee_parameters");
+            let fee_params = &mut program_config
                 .distribution_parameters
-                .current_solana_validator_fee = solana_validator_fee;
+                .solana_validator_fee_parameters;
+
+            msg!("  base_block_rewards: {}", base_block_rewards);
+            fee_params.base_block_rewards = base_block_rewards;
+
+            msg!("  priority_block_rewards: {}", priority_block_rewards);
+            fee_params.priority_block_rewards = priority_block_rewards;
+
+            msg!("  inflation_rewards: {}", inflation_rewards);
+            fee_params.inflation_rewards = inflation_rewards;
+
+            msg!("  jito_tips: {}", jito_tips);
+            fee_params.jito_tips = jito_tips;
         }
         ProgramConfiguration::CalculationGracePeriodSeconds(calculation_grace_period_seconds) => {
             msg!(
@@ -547,10 +573,12 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     // Make sure the program is not paused.
     try_is_unpaused(&program_config)?;
 
-    if program_config.checked_solana_validator_fee().is_none() {
-        msg!("Solana validator fee has not been configured yet");
-        return Err(ProgramError::InvalidAccountData);
-    }
+    let solana_validator_fee_params = program_config
+        .checked_solana_validator_fee_parameters()
+        .ok_or_else(|| {
+            msg!("Solana validator fee parameters have not been configured yet");
+            ProgramError::InvalidAccountData
+        })?;
 
     if program_config
         .distribution_parameters
@@ -660,6 +688,7 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     distribution.bump_seed = distribution_bump;
     distribution.token_2z_pda_bump_seed = distribution_2z_token_pda_bump;
     distribution.community_burn_rate = community_burn_rate;
+    distribution.solana_validator_fee_parameters = solana_validator_fee_params;
 
     // We need to move prepaid 2Z from the journal to the distribution.
     let mut journal =
