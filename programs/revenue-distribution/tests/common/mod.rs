@@ -277,8 +277,8 @@ impl ProgramTestWithOwner {
 
     pub async fn configure_program<const N: usize>(
         &mut self,
-        settings: [ProgramConfiguration; N],
         admin_signer: &Keypair,
+        settings: [ProgramConfiguration; N],
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
@@ -337,8 +337,8 @@ impl ProgramTestWithOwner {
 
     pub async fn configure_journal<const N: usize>(
         &mut self,
-        settings: [JournalConfiguration; N],
         admin_signer: &Keypair,
+        settings: [JournalConfiguration; N],
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
@@ -402,8 +402,8 @@ impl ProgramTestWithOwner {
     pub async fn configure_distribution<const N: usize>(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        setting: [DistributionConfiguration; N],
         accountant_signer: &Keypair,
+        setting: [DistributionConfiguration; N],
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
@@ -434,9 +434,9 @@ impl ProgramTestWithOwner {
 
     pub async fn initialize_prepaid_connection(
         &mut self,
+        user_key: &Pubkey,
         token_transfer_authority_signer: &Keypair,
         source_2z_token_account_key: &Pubkey,
-        user_key: &Pubkey,
         decimals: u8,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
@@ -471,9 +471,9 @@ impl ProgramTestWithOwner {
 
     pub async fn load_prepaid_connection(
         &mut self,
+        user_key: &Pubkey,
         token_transfer_authority_signer: &Keypair,
         source_2z_token_account_key: &Pubkey,
-        user_key: &Pubkey,
         valid_through_dz_epoch: DoubleZeroEpoch,
         decimals: u8,
     ) -> Result<&mut Self, BanksClientError> {
@@ -540,9 +540,9 @@ impl ProgramTestWithOwner {
 
     pub async fn initialize_contributor_rewards(
         &mut self,
+        service_key: &Pubkey,
         contributor_manager_signer: &Keypair,
         rewards_manager_key: &Pubkey,
-        service_key: &Pubkey,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
@@ -575,8 +575,8 @@ impl ProgramTestWithOwner {
 
     pub async fn configure_contributor_rewards<const N: usize>(
         &mut self,
-        rewards_manager_signer: &Keypair,
         service_key: &Pubkey,
+        rewards_manager_signer: &Keypair,
         setting: [ContributorRewardsConfiguration; N],
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;

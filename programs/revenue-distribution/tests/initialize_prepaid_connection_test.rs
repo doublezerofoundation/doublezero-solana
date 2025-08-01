@@ -48,18 +48,18 @@ async fn test_initialize_prepaid_connection() {
         .await
         .unwrap()
         .configure_program(
+            &admin_signer,
             [ProgramConfiguration::Flag(
                 ProgramFlagConfiguration::IsPaused(false),
             )],
-            &admin_signer,
         )
         .await
         .unwrap()
         .configure_journal(
+            &admin_signer,
             [JournalConfiguration::ActivationCost(
                 prepaid_connection_activation_cost,
             )],
-            &admin_signer,
         )
         .await
         .unwrap();
@@ -77,9 +77,9 @@ async fn test_initialize_prepaid_connection() {
 
     test_setup
         .initialize_prepaid_connection(
+            &user_key,
             &transfer_authority_signer,
             &src_token_account_key,
-            &user_key,
             8,
         )
         .await

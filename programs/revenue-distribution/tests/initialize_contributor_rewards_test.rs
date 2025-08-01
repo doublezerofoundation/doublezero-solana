@@ -33,11 +33,11 @@ async fn test_initialize_contributor_rewards() {
         .await
         .unwrap()
         .configure_program(
+            &admin_signer,
             [
                 ProgramConfiguration::ContributorManager(contributor_manager_signer.pubkey()),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
-            &admin_signer,
         )
         .await
         .unwrap();
@@ -49,9 +49,9 @@ async fn test_initialize_contributor_rewards() {
 
     test_setup
         .initialize_contributor_rewards(
+            &service_key,
             &contributor_manager_signer,
             &rewards_manager_key,
-            &service_key,
         )
         .await
         .unwrap();

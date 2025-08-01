@@ -41,12 +41,12 @@ async fn test_configure_program() {
     let sol_2z_swap_program_id = Pubkey::new_unique();
 
     // Distribution settings.
-    let solana_validator_fee = 500; // 5%
+    let solana_validator_fee = 500; // 5%.
     let calculation_grace_period_seconds = 6 * 60 * 60;
 
     // -- Community burn rate.
-    let initial_cbr = 100_000_000; // 10%
-    let cbr_limit = 500_000_000; // 50%
+    let initial_cbr = 100_000_000; // 10%.
+    let cbr_limit = 500_000_000; // 50%.
     let dz_epochs_to_increasing_cbr = 10;
     let dz_epochs_to_cbr_limit = 20;
 
@@ -55,6 +55,7 @@ async fn test_configure_program() {
 
     test_setup
         .configure_program(
+            &admin_signer,
             [
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(should_pause)),
                 ProgramConfiguration::Accountant(accountant_key),
@@ -74,7 +75,6 @@ async fn test_configure_program() {
                     prepaid_connection_termination_relay_lamports,
                 ),
             ],
-            &admin_signer,
         )
         .await
         .unwrap();
