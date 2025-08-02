@@ -25,6 +25,7 @@ async fn test_terminate_prepaid_connection() {
     let mut test_setup = common::start_test_with_accounts(bootstrapped_accounts).await;
 
     let admin_signer = Keypair::new();
+    let dz_ledger_sentinel_signer = Keypair::new();
 
     let payments_accountant_signer = Keypair::new();
     let solana_validator_base_block_rewards_fee = 500; // 5%.
@@ -75,6 +76,7 @@ async fn test_terminate_prepaid_connection() {
         .configure_program(
             &admin_signer,
             [
+                ProgramConfiguration::DoubleZeroLedgerSentinel(dz_ledger_sentinel_signer.pubkey()),
                 ProgramConfiguration::PaymentsAccountant(payments_accountant_signer.pubkey()),
                 ProgramConfiguration::SolanaValidatorFeeParameters {
                     base_block_rewards: solana_validator_base_block_rewards_fee,
@@ -103,6 +105,9 @@ async fn test_terminate_prepaid_connection() {
             &src_token_account_key,
             8,
         )
+        .await
+        .unwrap()
+        .grant_prepaid_connection_access(&dz_ledger_sentinel_signer, &user_key)
         .await
         .unwrap()
         .load_prepaid_connection(

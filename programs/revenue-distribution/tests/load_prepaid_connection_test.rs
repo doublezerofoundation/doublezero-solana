@@ -25,6 +25,7 @@ async fn test_load_prepaid_connection() {
     let mut test_setup = common::start_test_with_accounts(bootstrapped_accounts).await;
 
     let admin_signer = Keypair::new();
+    let dz_ledger_sentinel_signer = Keypair::new();
 
     // Prepaid connection settings.
     let prepaid_activation_cost = 20_000;
@@ -52,9 +53,10 @@ async fn test_load_prepaid_connection() {
         .unwrap()
         .configure_program(
             &admin_signer,
-            [ProgramConfiguration::Flag(
-                ProgramFlagConfiguration::IsPaused(false),
-            )],
+            [
+                ProgramConfiguration::DoubleZeroLedgerSentinel(dz_ledger_sentinel_signer.pubkey()),
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
+            ],
         )
         .await
         .unwrap()
@@ -80,6 +82,9 @@ async fn test_load_prepaid_connection() {
                 &src_token_account_key,
                 8,
             )
+            .await
+            .unwrap()
+            .grant_prepaid_connection_access(&dz_ledger_sentinel_signer, user_key)
             .await
             .unwrap();
     }
@@ -118,13 +123,18 @@ async fn test_load_prepaid_connection() {
         expected_total_payment
     );
 
+    let expected_activation_cost = u64::from(prepaid_activation_cost) * u64::pow(10, 8);
+
     let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_1_key).await;
 
     let mut expected_prepaid_connection_1 = PrepaidConnection::default();
     expected_prepaid_connection_1.user_key = user_1_key;
+    expected_prepaid_connection_1.set_has_access_granted(true);
     expected_prepaid_connection_1.set_has_paid(true);
     expected_prepaid_connection_1.valid_through_dz_epoch = valid_through_dz_epoch;
     expected_prepaid_connection_1.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    expected_prepaid_connection_1.activation_cost = expected_activation_cost;
+    expected_prepaid_connection_1.activation_funder_key = src_token_account_key;
     assert_eq!(prepaid_connection, expected_prepaid_connection_1);
 
     let (_, journal, journal_entries, journal_2z_pda) = test_setup.fetch_journal().await;
@@ -280,9 +290,12 @@ async fn test_load_prepaid_connection() {
 
     let mut expected_prepaid_connection_2 = PrepaidConnection::default();
     expected_prepaid_connection_2.user_key = user_2_key;
+    expected_prepaid_connection_2.set_has_access_granted(true);
     expected_prepaid_connection_2.set_has_paid(true);
     expected_prepaid_connection_2.valid_through_dz_epoch = valid_through_dz_epoch;
     expected_prepaid_connection_2.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    expected_prepaid_connection_2.activation_cost = expected_activation_cost;
+    expected_prepaid_connection_2.activation_funder_key = src_token_account_key;
     assert_eq!(prepaid_connection, expected_prepaid_connection_2);
 
     let (_, journal, journal_entries, journal_2z_pda) = test_setup.fetch_journal().await;
@@ -462,12 +475,15 @@ async fn test_load_prepaid_connection() {
 
     let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_3_key).await;
 
-    let mut expected_prepaid_connection_2 = PrepaidConnection::default();
-    expected_prepaid_connection_2.user_key = user_3_key;
-    expected_prepaid_connection_2.set_has_paid(true);
-    expected_prepaid_connection_2.valid_through_dz_epoch = valid_through_dz_epoch;
-    expected_prepaid_connection_2.termination_beneficiary_key = test_setup.payer_signer.pubkey();
-    assert_eq!(prepaid_connection, expected_prepaid_connection_2);
+    let mut expected_prepaid_connection_3 = PrepaidConnection::default();
+    expected_prepaid_connection_3.user_key = user_3_key;
+    expected_prepaid_connection_3.set_has_access_granted(true);
+    expected_prepaid_connection_3.set_has_paid(true);
+    expected_prepaid_connection_3.valid_through_dz_epoch = valid_through_dz_epoch;
+    expected_prepaid_connection_3.termination_beneficiary_key = test_setup.payer_signer.pubkey();
+    expected_prepaid_connection_3.activation_cost = expected_activation_cost;
+    expected_prepaid_connection_3.activation_funder_key = src_token_account_key;
+    assert_eq!(prepaid_connection, expected_prepaid_connection_3);
 
     let expected_journal_entry_amount = 3 * prepaid_cost_per_dz_epoch;
     assert_eq!(

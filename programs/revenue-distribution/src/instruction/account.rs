@@ -344,6 +344,39 @@ impl From<InitializePrepaidConnectionAccounts> for Vec<AccountMeta> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GrantPrepaidConnectionAccessAccounts {
+    pub program_config_key: Pubkey,
+    pub dz_ledger_sentinel_key: Pubkey,
+    pub prepaid_connection_key: Pubkey,
+}
+
+impl GrantPrepaidConnectionAccessAccounts {
+    pub fn new(dz_ledger_sentinel_key: &Pubkey, user_key: &Pubkey) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            dz_ledger_sentinel_key: *dz_ledger_sentinel_key,
+            prepaid_connection_key: PrepaidConnection::find_address(user_key).0,
+        }
+    }
+}
+
+impl From<GrantPrepaidConnectionAccessAccounts> for Vec<AccountMeta> {
+    fn from(accounts: GrantPrepaidConnectionAccessAccounts) -> Self {
+        let GrantPrepaidConnectionAccessAccounts {
+            program_config_key,
+            dz_ledger_sentinel_key,
+            prepaid_connection_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new_readonly(dz_ledger_sentinel_key, true),
+            AccountMeta::new(prepaid_connection_key, false),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LoadPrepaidConnectionAccounts {
     pub program_config_key: Pubkey,
     pub journal_key: Pubkey,

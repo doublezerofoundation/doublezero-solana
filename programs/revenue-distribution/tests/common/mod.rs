@@ -8,10 +8,11 @@ use doublezero_revenue_distribution::{
         account::{
             ConfigureContributorRewardsAccounts, ConfigureDistributionAccounts,
             ConfigureJournalAccounts, ConfigureProgramAccounts,
-            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
-            InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
-            InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
-            SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
+            GrantPrepaidConnectionAccessAccounts, InitializeContributorRewardsAccounts,
+            InitializeDistributionAccounts, InitializeJournalAccounts,
+            InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
+            LoadPrepaidConnectionAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
+            TerminatePrepaidConnectionAccounts,
         },
         ContributorRewardsConfiguration, DistributionConfiguration, JournalConfiguration,
         ProgramConfiguration, RevenueDistributionInstructionData,
@@ -465,6 +466,36 @@ impl ProgramTestWithOwner {
             self.recent_blockhash,
             &[initialize_prepaid_connection_ix],
             &[payer_signer, token_transfer_authority_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
+    pub async fn grant_prepaid_connection_access(
+        &mut self,
+        dz_ledger_sentinel_signer: &Keypair,
+        user_key: &Pubkey,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let grant_prepaid_connection_access_ix = try_build_instruction(
+            &ID,
+            GrantPrepaidConnectionAccessAccounts::new(
+                &dz_ledger_sentinel_signer.pubkey(),
+                user_key,
+            ),
+            &RevenueDistributionInstructionData::GrantPrepaidConnectionAccess,
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[grant_prepaid_connection_access_ix],
+            &[payer_signer, dz_ledger_sentinel_signer],
         )
         .await?;
 

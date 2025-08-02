@@ -242,6 +242,10 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             msg!("Set contributor_manager_key: {}", contributor_manager_key);
             program_config.contributor_manager_key = contributor_manager_key;
         }
+        ProgramConfiguration::DoubleZeroLedgerSentinel(dz_ledger_sentinel_key) => {
+            msg!("Set dz_ledger_sentinel_key: {}", dz_ledger_sentinel_key);
+            program_config.dz_ledger_sentinel_key = dz_ledger_sentinel_key;
+        }
         ProgramConfiguration::Sol2zSwapProgram(sol_2z_swap_program_id) => {
             msg!("Set sol_2z_swap_program_id: {}", sol_2z_swap_program_id);
             program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;

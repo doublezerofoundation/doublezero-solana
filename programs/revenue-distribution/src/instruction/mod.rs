@@ -17,6 +17,7 @@ pub enum ProgramConfiguration {
     PaymentsAccountant(Pubkey),
     RewardsAccountant(Pubkey),
     ContributorManager(Pubkey),
+    DoubleZeroLedgerSentinel(Pubkey),
     Sol2zSwapProgram(Pubkey),
     SolanaValidatorFeeParameters {
         base_block_rewards: u16,
