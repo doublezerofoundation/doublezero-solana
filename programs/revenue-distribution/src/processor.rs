@@ -19,16 +19,13 @@ use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
 
 use crate::{
-    instruction::ContributorRewardsConfiguration,
-    state::{ContributorRewards, JournalEntries, RecipientShares, RelayParameters},
-};
-use crate::{
     instruction::{
-        DistributionConfiguration, JournalConfiguration, ProgramConfiguration,
-        ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionConfiguration, JournalConfiguration,
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, CommunityBurnRateParameters, Distribution, Journal, PrepaidConnection, ProgramConfig,
+        self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
+        JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares, RelayParameters,
         TOKEN_2Z_PDA_SEED_PREFIX,
     },
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
@@ -71,6 +68,12 @@ fn try_process_instruction(
         }
         RevenueDistributionInstructionData::InitializePrepaidConnection { user_key, decimals } => {
             try_initialize_prepaid_connection(accounts, user_key, decimals)
+        }
+        RevenueDistributionInstructionData::GrantPrepaidConnectionAccess => {
+            try_grant_prepaid_connection_access(accounts)
+        }
+        RevenueDistributionInstructionData::DenyPrepaidConnectionAccess => {
+            try_deny_prepaid_connection_access(accounts)
         }
         RevenueDistributionInstructionData::LoadPrepaidConnection {
             valid_through_dz_epoch,
@@ -879,9 +882,8 @@ fn try_configure_distribution(
             let contributor_reward_claim_lamports = authorized_use
                 .program_config
                 .checked_relay_contributor_reward_claim_lamports()
-                .map(u64::from)
                 .ok_or_else(|| {
-                    msg!("Contributor reward claim lamports are misconfigured");
+                    msg!("Contributor reward claim relay lamports are misconfigured");
                     ProgramError::InvalidAccountData
                 })?;
 
@@ -1049,8 +1051,128 @@ fn try_initialize_prepaid_connection(
 
     prepaid_connection.user_key = user_key;
     prepaid_connection.termination_beneficiary_key = *payer_info.key;
+    prepaid_connection.activation_cost = activation_cost;
+    prepaid_connection.activation_funder_key = *src_2z_token_account_info.key;
 
     msg!("Paid {} to initialize user {}", activation_cost, user_key);
+
+    Ok(())
+}
+
+fn try_grant_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Grant prepaid connection access");
+
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::DoubleZeroLedgerSentinel,
+    )?;
+
+    // TODO: Do we want to check if the program is paused?
+
+    let mut prepaid_connection =
+        ZeroCopyMutAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    prepaid_connection.set_has_access_granted(true);
+    msg!("Granted {} access", prepaid_connection.user_key);
+
+    Ok(())
+}
+
+fn try_deny_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Deny prepaid connection access");
+
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::DoubleZeroLedgerSentinel,
+    )?;
+
+    // TODO: Do we want to check if the program is paused?
+
+    // The prepaid connection account will be closed by sending termination relay lamports to the
+    // sentinel and remaining rent to the termination key.
+    let prepaid_connection =
+        ZeroCopyAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    if prepaid_connection.has_access_granted() {
+        msg!("Prepaid connection already has access");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Read program config and the reserve 2z token account.
+    let program_config = authorized_use.program_config;
+
+    let (_, reserve_2z_token_account_info, _) = try_next_2z_token_pda_info(
+        &mut accounts_iter,
+        program_config.info.key,
+        "reserve",
+        Some(program_config.reserve_2z_bump_seed),
+    )?;
+
+    let (_, activation_funder_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    let expected_activation_funder_key = prepaid_connection.activation_funder_key;
+
+    if activation_funder_info.key != &expected_activation_funder_key {
+        msg!(
+            "Expected activation funder key: {}",
+            expected_activation_funder_key
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let activation_cost = prepaid_connection.activation_cost;
+
+    // Transfer the activation cost back to the reserve account.
+    let token_transfer_ix = token_instruction::transfer(
+        &spl_token::ID,
+        reserve_2z_token_account_info.key,
+        &expected_activation_funder_key,
+        &program_config.info.key,
+        &[], // signer_pubkeys
+        activation_cost,
+    )
+    .unwrap();
+
+    invoke_signed_unchecked(
+        &token_transfer_ix,
+        accounts,
+        &[&[ProgramConfig::SEED_PREFIX, &[program_config.bump_seed]]],
+    )?;
+
+    msg!("Deny {} access", prepaid_connection.user_key);
+    msg!(
+        "Return {} 2Z tokens to {}",
+        activation_cost,
+        expected_activation_funder_key
+    );
+    let termination_relay_lamports = program_config
+        .checked_relay_prepaid_connection_termination_lamports()
+        .ok_or_else(|| {
+            msg!("Prepaid connection termination relay lamports are misconfigured");
+            ProgramError::InvalidAccountData
+        })?;
+
+    // Move some lamports to the sentinel.
+    let (_, sentinel_info) = authorized_use.authority;
+    **sentinel_info.lamports.borrow_mut() += termination_relay_lamports;
+
+    let mut prepaid_connection_info_lamports = prepaid_connection.info.try_borrow_mut_lamports()?;
+
+    let (_, termination_beneficiary_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // Move the rest to the termination beneficiary.
+    **termination_beneficiary_info.lamports.borrow_mut() +=
+        prepaid_connection_info_lamports.saturating_sub(termination_relay_lamports);
+
+    // By setting the prepaid connection lamports to zero, this account will be closed.
+    **prepaid_connection_info_lamports = 0;
+
     Ok(())
 }
 
@@ -1107,6 +1229,12 @@ fn try_load_prepaid_connection(
     // current DZ epoch that this account is valid through.
     let mut prepaid_connection =
         ZeroCopyMutAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the prepaid connection has access to the DoubleZero Ledger network.
+    if !prepaid_connection.has_access_granted() {
+        msg!("Prepaid connection does not have access to DoubleZero Ledger");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // If the prepaid connection was freshly created, the valid-through DZ epoch will be zero, so
     // this value will default to the program config's next DZ epoch. But if service was already
@@ -1479,6 +1607,7 @@ enum Authority {
     PaymentsAccountant,
     RewardsAccountant,
     ContributorManager,
+    DoubleZeroLedgerSentinel,
 }
 
 impl Authority {
@@ -1528,6 +1657,15 @@ impl Authority {
                     return Err(ProgramError::InvalidAccountData);
                 }
             }
+            Authority::DoubleZeroLedgerSentinel => {
+                if authority_info.key != &program_config.dz_ledger_sentinel_key {
+                    msg!(
+                        "Unauthorized DoubleZero Ledger sentinel (account {})",
+                        index
+                    );
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
         }
 
         Ok((index, authority_info))
@@ -1536,7 +1674,7 @@ impl Authority {
 
 struct VerifiedProgramAuthority<'a, 'b> {
     program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
-    _authority: (usize, &'a AccountInfo<'b>),
+    authority: (usize, &'a AccountInfo<'b>),
 }
 
 impl<'a, 'b> TryNextAccounts<'a, 'b, Authority> for VerifiedProgramAuthority<'a, 'b> {
@@ -1553,7 +1691,7 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, Authority> for VerifiedProgramAuthority<'a,
 
         Ok(Self {
             program_config,
-            _authority: (index, authority_info),
+            authority: (index, authority_info),
         })
     }
 }
