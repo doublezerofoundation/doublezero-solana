@@ -22,7 +22,6 @@ async fn test_set_rewards_manager() {
 
     let contributor_manager_signer = Keypair::new();
 
-    let rewards_manager_key = Pubkey::new_unique();
     let service_key = Pubkey::new_unique();
 
     test_setup
@@ -35,6 +34,9 @@ async fn test_set_rewards_manager() {
         .set_admin(&admin_signer.pubkey())
         .await
         .unwrap()
+        .initialize_contributor_rewards(&service_key)
+        .await
+        .unwrap()
         .configure_program(
             &admin_signer,
             [
@@ -43,14 +45,11 @@ async fn test_set_rewards_manager() {
             ],
         )
         .await
-        .unwrap()
-        .initialize_contributor_rewards(
-            &service_key,
-            &contributor_manager_signer,
-            &rewards_manager_key,
-        )
-        .await
         .unwrap();
+
+    // Test input.
+
+    let rewards_manager_key = Pubkey::new_unique();
 
     test_setup
         .set_rewards_manager(

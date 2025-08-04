@@ -88,10 +88,7 @@ pub enum RevenueDistributionInstructionData {
         decimals: u8,
     },
     TerminatePrepaidConnection,
-    InitializeContributorRewards {
-        rewards_manager_key: Pubkey,
-        service_key: Pubkey,
-    },
+    InitializeContributorRewards(Pubkey),
     SetRewardsManager(Pubkey),
     ConfigureContributorRewards(ContributorRewardsConfiguration),
 }
@@ -157,13 +154,7 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             }
             Self::TERMINATE_PREPAID_CONNECTION => Ok(Self::TerminatePrepaidConnection),
             Self::INITIALIZE_CONTRIBUTOR_REWARDS => {
-                let rewards_manager_key = BorshDeserialize::deserialize_reader(reader)?;
-                let service_key = BorshDeserialize::deserialize_reader(reader)?;
-
-                Ok(Self::InitializeContributorRewards {
-                    rewards_manager_key,
-                    service_key,
-                })
+                BorshDeserialize::deserialize_reader(reader).map(Self::InitializeContributorRewards)
             }
             Self::SET_REWARDS_MANAGER => {
                 BorshDeserialize::deserialize_reader(reader).map(Self::SetRewardsManager)
@@ -184,9 +175,9 @@ impl BorshSerialize for RevenueDistributionInstructionData {
     fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
         match self {
             Self::InitializeProgram => Self::INITIALIZE_PROGRAM.serialize(writer),
-            Self::SetAdmin(key) => {
+            Self::SetAdmin(admin_key) => {
                 Self::SET_ADMIN.serialize(writer)?;
-                key.serialize(writer)
+                admin_key.serialize(writer)
             }
             Self::ConfigureProgram(setting) => {
                 Self::CONFIGURE_PROGRAM.serialize(writer)?;
@@ -218,17 +209,13 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             Self::TerminatePrepaidConnection => {
                 Self::TERMINATE_PREPAID_CONNECTION.serialize(writer)
             }
-            Self::InitializeContributorRewards {
-                rewards_manager_key,
-                service_key,
-            } => {
+            Self::InitializeContributorRewards(service_key) => {
                 Self::INITIALIZE_CONTRIBUTOR_REWARDS.serialize(writer)?;
-                rewards_manager_key.serialize(writer)?;
                 service_key.serialize(writer)
             }
-            Self::SetRewardsManager(key) => {
+            Self::SetRewardsManager(rewards_manager_key) => {
                 Self::SET_REWARDS_MANAGER.serialize(writer)?;
-                key.serialize(writer)
+                rewards_manager_key.serialize(writer)
             }
             Self::ConfigureContributorRewards(setting) => {
                 Self::CONFIGURE_CONTRIBUTOR_REWARDS.serialize(writer)?;

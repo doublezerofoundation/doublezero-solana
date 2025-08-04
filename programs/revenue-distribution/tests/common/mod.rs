@@ -545,22 +545,13 @@ impl ProgramTestWithOwner {
     pub async fn initialize_contributor_rewards(
         &mut self,
         service_key: &Pubkey,
-        contributor_manager_signer: &Keypair,
-        rewards_manager_key: &Pubkey,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
         let initialize_contributor_rewards_ix = try_build_instruction(
             &ID,
-            InitializeContributorRewardsAccounts::new(
-                &contributor_manager_signer.pubkey(),
-                &payer_signer.pubkey(),
-                service_key,
-            ),
-            &RevenueDistributionInstructionData::InitializeContributorRewards {
-                rewards_manager_key: *rewards_manager_key,
-                service_key: *service_key,
-            },
+            InitializeContributorRewardsAccounts::new(&payer_signer.pubkey(), service_key),
+            &RevenueDistributionInstructionData::InitializeContributorRewards(*service_key),
         )
         .unwrap();
 
@@ -568,7 +559,7 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             self.recent_blockhash,
             &[initialize_contributor_rewards_ix],
-            &[payer_signer, contributor_manager_signer],
+            &[payer_signer],
         )
         .await?;
 

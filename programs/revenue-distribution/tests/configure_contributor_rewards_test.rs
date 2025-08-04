@@ -45,7 +45,10 @@ async fn test_initialize_contributor_rewards() {
         )
         .await
         .unwrap()
-        .initialize_contributor_rewards(
+        .initialize_contributor_rewards(&service_key)
+        .await
+        .unwrap()
+        .set_rewards_manager(
             &service_key,
             &contributor_manager_signer,
             &rewards_manager_signer.pubkey(),
