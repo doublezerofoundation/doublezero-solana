@@ -56,12 +56,6 @@ pub struct ProgramTestWithOwner {
     pub treasury_2z_key: Pubkey,
 }
 
-impl std::fmt::Debug for ProgramTestWithOwner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ProgramTestWithOwner {{ .. }}")
-    }
-}
-
 pub async fn start_test_with_accounts(accounts: Vec<TestAccount>) -> ProgramTestWithOwner {
     let mut program_test = ProgramTest::new("doublezero_revenue_distribution", ID, None);
     program_test.prefer_bpf(true);
