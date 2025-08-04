@@ -83,6 +83,9 @@ fn try_process_instruction(
             rewards_manager_key,
             service_key,
         } => try_initialize_contributor_rewards(accounts, rewards_manager_key, service_key),
+        RevenueDistributionInstructionData::SetRewardsManager(rewards_manager_key) => {
+            try_set_rewards_manager(accounts, rewards_manager_key)
+        }
         RevenueDistributionInstructionData::ConfigureContributorRewards(setting) => {
             try_configure_contributor_rewards(accounts, setting)
         }
@@ -1326,13 +1329,18 @@ fn try_initialize_contributor_rewards(
     msg!("Initialize contributor rewards");
 
     // We expect the following accounts for this instruction:
-    // - 0: Program config account.
-    // - 1: ContributorManager account.
+    // - 0: Program config.
+    // - 1: ContributorManager.
     // - 2: Payer (funder for new accounts).
-    // - 3: New contributor rewards account.
+    // - 3: New contributor rewards.
     // - 4: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
+    // Account 0 must be the program config.
+    // Account 1 must be the contributor manager.
+    //
+    // This method verifies that account 1 is the contributor manager and is a
+    // signer.
     let authorized_use = VerifiedProgramAuthority::try_next_accounts(
         &mut accounts_iter,
         Authority::ContributorManager,
@@ -1341,10 +1349,11 @@ fn try_initialize_contributor_rewards(
     // Make sure the program is not paused.
     try_require_unpaused(&authorized_use.program_config)?;
 
-    // Account 2 must be a signer and writable (i.e., payer) because it will be sending lamports
-    // to the new contributor rewards account when the system program allocates data to it. But
-    // because the create-program instruction requires that this account is a signer and is
-    // writable, we do not need to explicitly check these fields in its account info.
+    // Account 2 must be a signer and writable (i.e., payer) because it will be
+    // sending lamports to the new contributor rewards account when the system
+    // program allocates data to it. But because the create-program instruction
+    // requires that this account is a signer and is writable, we do not need to
+    // explicitly check these fields in its account info.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // Account 3 must be the new contributor rewards account. This account should not exist yet.
@@ -1385,6 +1394,38 @@ fn try_initialize_contributor_rewards(
         zero_copy::try_initialize::<ContributorRewards>(new_contributor_rewards_info, None)?;
 
     contributor_rewards.service_key = service_key;
+    contributor_rewards.rewards_manager_key = rewards_manager_key;
+
+    Ok(())
+}
+
+fn try_set_rewards_manager(accounts: &[AccountInfo], rewards_manager_key: Pubkey) -> ProgramResult {
+    msg!("Set rewards manager");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: ContributorManager.
+    // - 3: Contributor rewards.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    // Account 1 must be the contributor manager.
+    //
+    // This method verifies that account 1 is the contributor manager and is a
+    // signer.
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::ContributorManager,
+    )?;
+
+    // Make sure the program is not paused.
+    try_require_unpaused(&authorized_use.program_config)?;
+
+    // Account 2 must be the contributor rewards.
+    let mut contributor_rewards =
+        ZeroCopyMutAccount::<ContributorRewards>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    msg!("rewards_manager_key: {}", rewards_manager_key);
     contributor_rewards.rewards_manager_key = rewards_manager_key;
 
     Ok(())

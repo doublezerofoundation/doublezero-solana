@@ -92,6 +92,7 @@ pub enum RevenueDistributionInstructionData {
         rewards_manager_key: Pubkey,
         service_key: Pubkey,
     },
+    SetRewardsManager(Pubkey),
     ConfigureContributorRewards(ContributorRewardsConfiguration),
 }
 
@@ -118,6 +119,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::terminate_prepaid_connection");
     pub const INITIALIZE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_contributor_rewards");
+    pub const SET_REWARDS_MANAGER: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::set_rewards_manager");
     pub const CONFIGURE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_contributor_rewards");
 }
@@ -161,6 +164,9 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                     rewards_manager_key,
                     service_key,
                 })
+            }
+            Self::SET_REWARDS_MANAGER => {
+                BorshDeserialize::deserialize_reader(reader).map(Self::SetRewardsManager)
             }
             Self::CONFIGURE_CONTRIBUTOR_REWARDS => {
                 ContributorRewardsConfiguration::deserialize_reader(reader)
@@ -219,6 +225,10 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::INITIALIZE_CONTRIBUTOR_REWARDS.serialize(writer)?;
                 rewards_manager_key.serialize(writer)?;
                 service_key.serialize(writer)
+            }
+            Self::SetRewardsManager(key) => {
+                Self::SET_REWARDS_MANAGER.serialize(writer)?;
+                key.serialize(writer)
             }
             Self::ConfigureContributorRewards(setting) => {
                 Self::CONFIGURE_CONTRIBUTOR_REWARDS.serialize(writer)?;

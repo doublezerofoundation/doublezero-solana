@@ -11,7 +11,7 @@ use doublezero_revenue_distribution::{
             InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
             InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
             InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
-            TerminatePrepaidConnectionAccounts,
+            SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
         },
         ContributorRewardsConfiguration, DistributionConfiguration, JournalConfiguration,
         ProgramConfiguration, RevenueDistributionInstructionData,
@@ -568,6 +568,34 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             self.recent_blockhash,
             &[initialize_contributor_rewards_ix],
+            &[payer_signer, contributor_manager_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
+    pub async fn set_rewards_manager(
+        &mut self,
+        service_key: &Pubkey,
+        contributor_manager_signer: &Keypair,
+        rewards_manager_key: &Pubkey,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let set_rewards_manager_ix = try_build_instruction(
+            &ID,
+            SetRewardsManagerAccounts::new(&contributor_manager_signer.pubkey(), service_key),
+            &RevenueDistributionInstructionData::SetRewardsManager(*rewards_manager_key),
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[set_rewards_manager_ix],
             &[payer_signer, contributor_manager_signer],
         )
         .await?;
