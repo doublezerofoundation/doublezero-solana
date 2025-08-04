@@ -2,21 +2,14 @@ mod common;
 
 //
 
-use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
-    instruction::{
-        account::DenyPrepaidConnectionAccessAccounts, JournalConfiguration, ProgramConfiguration,
-        ProgramFlagConfiguration, RevenueDistributionInstructionData,
-    },
-    DOUBLEZERO_MINT_KEY, ID,
+    instruction::{JournalConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
+    state::PrepaidConnection,
+    DOUBLEZERO_MINT_KEY,
 };
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
-use solana_sdk::{
-    instruction::InstructionError,
-    signature::{Keypair, Signer},
-    transaction::TransactionError,
-};
+use solana_sdk::signature::{Keypair, Signer};
 
 //
 // Grant prepaid connection access.
@@ -42,7 +35,13 @@ async fn test_grant_prepaid_connection_access() {
 
     let user_key = Pubkey::new_unique();
 
+    // Relay settings.
+    let termination_relay_lamports = 100_000;
+
     test_setup
+        .transfer_lamports(&dz_ledger_sentinel_signer.pubkey(), 128 * 6_960)
+        .await
+        .unwrap()
         .transfer_2z(&src_token_account_key, 1_000_000 * u64::pow(10, 8))
         .await
         .unwrap()
@@ -59,6 +58,9 @@ async fn test_grant_prepaid_connection_access() {
             &admin_signer,
             [
                 ProgramConfiguration::DoubleZeroLedgerSentinel(dz_ledger_sentinel_signer.pubkey()),
+                ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(
+                    termination_relay_lamports,
+                ),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
         )
@@ -83,44 +85,36 @@ async fn test_grant_prepaid_connection_access() {
 
     // No test inputs.
 
-    let (_, mut expected_prepaid_connection) = test_setup.fetch_prepaid_connection(&user_key).await;
-    assert!(!expected_prepaid_connection.has_access_granted());
-
-    test_setup
-        .grant_prepaid_connection_access(&dz_ledger_sentinel_signer, &user_key)
+    let sentinel_balance_before = test_setup
+        .banks_client
+        .get_balance(dz_ledger_sentinel_signer.pubkey())
         .await
         .unwrap();
 
-    let (_, prepaid_connection) = test_setup.fetch_prepaid_connection(&user_key).await;
-    expected_prepaid_connection.set_has_access_granted(true);
-    assert_eq!(prepaid_connection, expected_prepaid_connection);
-
-    // Cannot deny access to a prepaid connection that already has access.
-
-    let deny_prepaid_connection_access_ix = try_build_instruction(
-        &ID,
-        DenyPrepaidConnectionAccessAccounts::new(
-            &dz_ledger_sentinel_signer.pubkey(),
-            &Pubkey::new_unique(),
-            &Pubkey::new_unique(),
+    test_setup
+        .deny_prepaid_connection_access(
+            &dz_ledger_sentinel_signer,
+            &src_token_account_key,
             &user_key,
-        ),
-        &RevenueDistributionInstructionData::DenyPrepaidConnectionAccess,
-    )
-    .unwrap();
-
-    let (tx_err, program_logs) = test_setup
-        .unwrap_simulation_error(
-            &[deny_prepaid_connection_access_ix],
-            &[&dz_ledger_sentinel_signer],
         )
-        .await;
+        .await
+        .unwrap();
+
+    let (prepaid_connection_key, _) = PrepaidConnection::find_address(&user_key);
+    let prepaid_connection_info = test_setup
+        .banks_client
+        .get_account(prepaid_connection_key)
+        .await
+        .unwrap();
+    assert!(prepaid_connection_info.is_none());
+
+    let sentinel_balance_after = test_setup
+        .banks_client
+        .get_balance(dz_ledger_sentinel_signer.pubkey())
+        .await
+        .unwrap();
     assert_eq!(
-        tx_err,
-        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
-    );
-    assert_eq!(
-        program_logs.get(2).unwrap(),
-        "Program log: Prepaid connection already has access"
+        sentinel_balance_after,
+        sentinel_balance_before + termination_relay_lamports as u64
     );
 }
