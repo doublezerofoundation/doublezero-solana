@@ -2,15 +2,23 @@ mod common;
 
 //
 
+use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
-    instruction::{JournalConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
+    instruction::{
+        account::DenyPrepaidConnectionAccessAccounts, JournalConfiguration, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
+    },
     state::{JournalEntries, JournalEntry, PrepaidConnection},
     types::DoubleZeroEpoch,
-    DOUBLEZERO_MINT_KEY,
+    DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::{
+    instruction::InstructionError,
+    signature::{Keypair, Signer},
+    transaction::TransactionError,
+};
 
 #[tokio::test]
 async fn test_load_prepaid_connection() {
@@ -552,4 +560,36 @@ async fn test_load_prepaid_connection() {
         .into(),
     );
     assert_eq!(journal_entries, expected_journal_entries);
+
+    // Cannot deny access to any of the prepaid connections that already have
+    // been loaded.
+
+    for user_key in &[user_1_key, user_2_key, user_3_key] {
+        let deny_prepaid_connection_access_ix = try_build_instruction(
+            &ID,
+            DenyPrepaidConnectionAccessAccounts::new(
+                &dz_ledger_sentinel_signer.pubkey(),
+                &Pubkey::new_unique(),
+                &Pubkey::new_unique(),
+                &user_key,
+            ),
+            &RevenueDistributionInstructionData::DenyPrepaidConnectionAccess,
+        )
+        .unwrap();
+
+        let (tx_err, program_logs) = test_setup
+            .unwrap_simulation_error(
+                &[deny_prepaid_connection_access_ix],
+                &[&dz_ledger_sentinel_signer],
+            )
+            .await;
+        assert_eq!(
+            tx_err,
+            TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+        );
+        assert_eq!(
+            program_logs.get(2).unwrap(),
+            "Program log: Prepaid connection already has access"
+        );
+    }
 }

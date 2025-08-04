@@ -166,4 +166,15 @@ async fn test_terminate_prepaid_connection() {
         relayer_balance_after - relayer_balance_before,
         u64::from(prepaid_connection_termination_relay_lamports)
     );
+
+    // Create another prepaid connection with the same user key.
+    test_setup
+        .initialize_prepaid_connection(
+            &user_key,
+            &transfer_authority_signer,
+            &src_token_account_key,
+            8,
+        )
+        .await
+        .unwrap();
 }

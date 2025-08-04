@@ -117,4 +117,15 @@ async fn test_grant_prepaid_connection_access() {
         sentinel_balance_after,
         sentinel_balance_before + termination_relay_lamports as u64
     );
+
+    // Create another prepaid connection with the same user key.
+    test_setup
+        .initialize_prepaid_connection(
+            &user_key,
+            &transfer_authority_signer,
+            &src_token_account_key,
+            8,
+        )
+        .await
+        .unwrap();
 }
