@@ -5,8 +5,9 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::DenyPrepaidConnectionAccessAccounts, JournalConfiguration, ProgramConfiguration,
-        ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        account::{DenyPrepaidConnectionAccessAccounts, LoadPrepaidConnectionAccounts},
+        JournalConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        RevenueDistributionInstructionData,
     },
     state::{JournalEntries, JournalEntry, PrepaidConnection},
     types::DoubleZeroEpoch,
@@ -91,7 +92,46 @@ async fn test_load_prepaid_connection() {
                 8,
             )
             .await
-            .unwrap()
+            .unwrap();
+    }
+
+    // Test input.
+
+    let valid_through_dz_epoch = DoubleZeroEpoch::new(5);
+
+    // Cannot load a prepaid connection that does not have access.
+    let load_prepaid_connection_access_ix = try_build_instruction(
+        &ID,
+        LoadPrepaidConnectionAccounts::new(
+            &src_token_account_key,
+            &transfer_authority_signer.pubkey(),
+            &user_1_key,
+        ),
+        &RevenueDistributionInstructionData::LoadPrepaidConnection {
+            valid_through_dz_epoch,
+            decimals: 8,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            &[load_prepaid_connection_access_ix],
+            &[&transfer_authority_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Prepaid connection does not have access to DoubleZero Ledger"
+    );
+
+    // Grant access to all prepaid connections.
+    for user_key in &[user_1_key, user_2_key, user_3_key] {
+        test_setup
             .grant_prepaid_connection_access(&dz_ledger_sentinel_signer, user_key)
             .await
             .unwrap();
@@ -102,10 +142,6 @@ async fn test_load_prepaid_connection() {
         .await
         .unwrap()
         .amount;
-
-    // Test inputs.
-
-    let valid_through_dz_epoch = DoubleZeroEpoch::new(5);
 
     test_setup
         .load_prepaid_connection(
@@ -563,7 +599,6 @@ async fn test_load_prepaid_connection() {
 
     // Cannot deny access to any of the prepaid connections that already have
     // been loaded.
-
     for user_key in &[user_1_key, user_2_key, user_3_key] {
         let deny_prepaid_connection_access_ix = try_build_instruction(
             &ID,

@@ -96,7 +96,6 @@ async fn test_grant_prepaid_connection_access() {
     assert_eq!(prepaid_connection, expected_prepaid_connection);
 
     // Cannot deny access to a prepaid connection that already has access.
-
     let deny_prepaid_connection_access_ix = try_build_instruction(
         &ID,
         DenyPrepaidConnectionAccessAccounts::new(
