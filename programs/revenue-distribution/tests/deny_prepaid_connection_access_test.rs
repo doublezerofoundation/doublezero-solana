@@ -12,11 +12,11 @@ use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 
 //
-// Grant prepaid connection access.
+// Deny prepaid connection access.
 //
 
 #[tokio::test]
-async fn test_grant_prepaid_connection_access() {
+async fn test_deny_prepaid_connection_access() {
     let transfer_authority_signer = Keypair::new();
 
     let bootstrapped_accounts = common::generate_token_accounts_for_test(
