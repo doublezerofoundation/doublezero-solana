@@ -606,7 +606,7 @@ async fn test_load_prepaid_connection() {
                 &dz_ledger_sentinel_signer.pubkey(),
                 &Pubkey::new_unique(),
                 &Pubkey::new_unique(),
-                &user_key,
+                user_key,
             ),
             &RevenueDistributionInstructionData::DenyPrepaidConnectionAccess,
         )
