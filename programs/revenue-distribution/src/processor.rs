@@ -1386,8 +1386,8 @@ fn try_set_rewards_manager(accounts: &[AccountInfo], rewards_manager_key: Pubkey
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: ContributorManager.
-    // - 3: Contributor rewards.
+    // - 1: Contributor manager.
+    // - 2: Contributor rewards.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
