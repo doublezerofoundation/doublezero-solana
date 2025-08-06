@@ -184,7 +184,8 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
-    let program_config = ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Make sure program is not paused and we're accepting new accounts at this time
     try_require_unpaused(&program_config)?;
@@ -200,13 +201,18 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     // Account 2 must be the payer. The system program will automatically ensure this account is a signer and writable
     // in order to transfer the lamports to create the new account.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
-    let (account_index, new_access_request_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+    let (account_index, new_access_request_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    let (expected_access_request_key, access_request_bump) = AccessRequest::find_address(&service_key);
+    let (expected_access_request_key, access_request_bump) =
+        AccessRequest::find_address(&service_key);
 
     // Enforce the account location and seed validity
     if new_access_request_info.key != &expected_access_request_key {
-        msg!("Invalid seeds for access request (account {})", account_index);
+        msg!(
+            "Invalid seeds for access request (account {})",
+            account_index
+        );
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -233,10 +239,19 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         zero_copy::data_end::<AccessRequest>() as u64,
         &ID,
     );
-    invoke_signed_unchecked(&create_account_ix, accounts, &[&[AccessRequest::SEED_PREFIX, service_key.as_ref(), &[access_request_bump]]])?;
+    invoke_signed_unchecked(
+        &create_account_ix,
+        accounts,
+        &[&[
+            AccessRequest::SEED_PREFIX,
+            service_key.as_ref(),
+            &[access_request_bump],
+        ]],
+    )?;
 
     // Finalize init the access request with the user service and beneficiary keys
-    let (mut access_request, _) = zero_copy::try_initialize::<AccessRequest>(new_access_request_info, None)?;
+    let (mut access_request, _) =
+        zero_copy::try_initialize::<AccessRequest>(new_access_request_info, None)?;
     access_request.service_key = service_key;
     access_request.rent_beneficiary_key = *payer_info.key;
 
