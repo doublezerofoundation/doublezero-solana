@@ -90,7 +90,7 @@ async fn test_finalize_distribution_rewards() {
         .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .initialize_distribution(&rewards_accountant_signer)
+        .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
         .configure_distribution_rewards(
@@ -171,7 +171,7 @@ async fn test_finalize_distribution_rewards() {
     // be finalized.
 
     test_setup
-        .initialize_distribution(&rewards_accountant_signer)
+        .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap();
 

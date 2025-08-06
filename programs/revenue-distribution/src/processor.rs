@@ -630,8 +630,10 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     // - 9: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    let authorized_use =
-        VerifiedProgramAuthorityMut::try_next_accounts(&mut accounts_iter, Authority::Accountant)?;
+    let authorized_use = VerifiedProgramAuthorityMut::try_next_accounts(
+        &mut accounts_iter,
+        Authority::PaymentsAccountant,
+    )?;
     let mut program_config = authorized_use.program_config;
 
     // Make sure the program is not paused.
@@ -1730,7 +1732,6 @@ fn try_configure_contributor_rewards(
 
 enum Authority {
     Admin,
-    Accountant,
     PaymentsAccountant,
     RewardsAccountant,
     ContributorManager,
@@ -1755,14 +1756,6 @@ impl Authority {
             Authority::Admin => {
                 if authority_info.key != &program_config.admin_key {
                     msg!("Unauthorized admin (account {})", index);
-                    return Err(ProgramError::InvalidAccountData);
-                }
-            }
-            Authority::Accountant => {
-                if authority_info.key != &program_config.payments_accountant_key
-                    && authority_info.key != &program_config.rewards_accountant_key
-                {
-                    msg!("Unauthorized accountant (account {})", index);
                     return Err(ProgramError::InvalidAccountData);
                 }
             }

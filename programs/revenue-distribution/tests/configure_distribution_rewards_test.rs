@@ -73,7 +73,7 @@ async fn test_configure_distribution_rewards() {
         .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .initialize_distribution(&rewards_accountant_signer)
+        .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap();
 
