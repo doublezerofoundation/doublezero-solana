@@ -951,6 +951,11 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    // If the distribution rewards have already been finalized, we have nothing to do.
+    try_require_unfinalized_distribution_rewards(&distribution)?;
+
+    distribution.set_are_rewards_finalized(true);
+
     // Payments must have been finalized before rewards can be finalized.
     if !distribution.are_payments_finalized() {
         msg!("Payments must be finalized before rewards can be finalized");
@@ -974,11 +979,6 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
         );
         return Err(ProgramError::InvalidAccountData);
     }
-
-    // If the distribution rewards have already been finalized, we have nothing to do.
-    try_require_unfinalized_distribution_rewards(&distribution)?;
-
-    distribution.set_are_rewards_finalized(true);
 
     // The rewards accountant can pay with another account. But most likely this account
     // will be the same as the payments accountant. This account will need to be writable
