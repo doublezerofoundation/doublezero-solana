@@ -1431,6 +1431,7 @@ dependencies = [
  "bytemuck",
  "doublezero-program-tools",
  "solana-account-info",
+ "solana-cpi",
  "solana-instruction",
  "solana-loader-v3-interface",
  "solana-msg",

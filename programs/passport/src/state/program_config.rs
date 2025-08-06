@@ -40,3 +40,8 @@ impl ProgramConfig {
         self.flags.set_bit(Self::FLAG_IS_PAUSED_BIT, should_pause);
     }
 }
+
+const _: () = assert!(
+    size_of::<ProgramConfig>() == 328,
+    "`ProgramConfig` size changed"
+);

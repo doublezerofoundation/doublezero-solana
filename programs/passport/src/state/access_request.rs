@@ -21,3 +21,8 @@ impl AccessRequest {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, service_key.as_ref()], &crate::ID)
     }
 }
+
+const _: () = assert!(
+    size_of::<AccessRequest>() == 64,
+    "`AccessRequest` size changed"
+);
