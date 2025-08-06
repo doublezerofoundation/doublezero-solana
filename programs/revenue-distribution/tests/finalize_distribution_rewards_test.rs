@@ -101,6 +101,61 @@ async fn test_configure_distribution() {
         .await
         .unwrap();
 
+    // Cannot finalize until the minimum number of epochs has been configured.
+
+    let (tx_err, program_logs) = cannot_finalize_distribution_rewards(&test_setup, dz_epoch).await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Minimum epoch duration to finalize rewards is misconfigured"
+    );
+
+    let minimum_epoch_duration_to_finalize_rewards = 2;
+
+    test_setup
+        .configure_program(
+            &admin_signer,
+            [ProgramConfiguration::MinimumEpochDurationToFinalizeRewards(
+                minimum_epoch_duration_to_finalize_rewards,
+            )],
+        )
+        .await
+        .unwrap();
+
+    let (_, program_config, _) = test_setup.fetch_program_config().await;
+
+    let minimum_dz_epoch_to_finalize =
+        dz_epoch.saturating_add_duration(minimum_epoch_duration_to_finalize_rewards.into());
+
+    // Cannot finalize until the minimum number of epochs have passed.
+
+    let (tx_err, program_logs) = cannot_finalize_distribution_rewards(&test_setup, dz_epoch).await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        &format!(
+            "Program log: DZ epoch must be at least {} (currently {}) to finalize rewards",
+            minimum_dz_epoch_to_finalize, program_config.next_dz_epoch
+        )
+    );
+
+    // Initialize another distribution to move next DZ epoch to allow rewards to
+    // be finalized.
+
+    test_setup
+        .initialize_distribution(&rewards_accountant_signer)
+        .await
+        .unwrap();
+
+    let (_, program_config, _) = test_setup.fetch_program_config().await;
+    assert_eq!(program_config.next_dz_epoch, minimum_dz_epoch_to_finalize);
+
     //
 
     let (_, _, distribution_lamports_balance_before, _) =
@@ -162,17 +217,7 @@ async fn test_configure_distribution() {
 
     // Cannot finalize again.
 
-    let payer_key = test_setup.payer_signer.pubkey();
-
-    let finalize_distribution_rewards_ix = try_build_instruction(
-        &ID,
-        FinalizeDistributionRewardsAccounts::new(&payer_key, dz_epoch),
-        &RevenueDistributionInstructionData::FinalizeDistributionRewards,
-    )
-    .unwrap();
-    let (tx_err, program_logs) = test_setup
-        .unwrap_simulation_error(&[finalize_distribution_rewards_ix], &[])
-        .await;
+    let (tx_err, program_logs) = cannot_finalize_distribution_rewards(&test_setup, dz_epoch).await;
     assert_eq!(
         tx_err,
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
@@ -181,4 +226,22 @@ async fn test_configure_distribution() {
         program_logs.get(2).unwrap(),
         "Program log: Distribution rewards have already been finalized"
     );
+}
+
+async fn cannot_finalize_distribution_rewards(
+    test_setup: &common::ProgramTestWithOwner,
+    dz_epoch: DoubleZeroEpoch,
+) -> (TransactionError, Vec<String>) {
+    let payer_key = test_setup.payer_signer.pubkey();
+
+    let finalize_distribution_rewards_ix = try_build_instruction(
+        &ID,
+        FinalizeDistributionRewardsAccounts::new(&payer_key, dz_epoch),
+        &RevenueDistributionInstructionData::FinalizeDistributionRewards,
+    )
+    .unwrap();
+
+    test_setup
+        .unwrap_simulation_error(&[finalize_distribution_rewards_ix], &[])
+        .await
 }

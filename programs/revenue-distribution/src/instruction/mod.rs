@@ -35,6 +35,7 @@ pub enum ProgramConfiguration {
     },
     PrepaidConnectionTerminationRelayLamports(u32),
     ContributorRewardClaimLamports(u32),
+    MinimumEpochDurationToFinalizeRewards(u16),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]

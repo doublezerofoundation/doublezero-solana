@@ -443,6 +443,15 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 .relay_parameters
                 .contributor_reward_claim_lamports = relay_lamports;
         }
+        ProgramConfiguration::MinimumEpochDurationToFinalizeRewards(epoch_duration) => {
+            msg!(
+                "Set distribution_parameters.minimum_epoch_duration_to_finalize_rewards: {}",
+                epoch_duration
+            );
+            program_config
+                .distribution_parameters
+                .minimum_epoch_duration_to_finalize_rewards = epoch_duration;
+        }
     }
 
     Ok(())
@@ -941,6 +950,24 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     // Account 0 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // The distribution must have been created at least the minimum number of epochs ago.
+    let minimum_dz_epoch_to_finalize = program_config
+        .checked_minimum_epoch_duration_to_finalize_rewards()
+        .map(|duration| distribution.dz_epoch.saturating_add_duration(duration))
+        .ok_or_else(|| {
+            msg!("Minimum epoch duration to finalize rewards is misconfigured");
+            ProgramError::InvalidAccountData
+        })?;
+
+    if minimum_dz_epoch_to_finalize > program_config.next_dz_epoch {
+        msg!(
+            "DZ epoch must be at least {} (currently {}) to finalize rewards",
+            minimum_dz_epoch_to_finalize,
+            program_config.next_dz_epoch
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // If the distribution rewards have already been finalized, we have nothing to do.
     try_require_unfinalized_distribution_rewards(&distribution)?;
