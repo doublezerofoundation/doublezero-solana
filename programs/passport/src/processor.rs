@@ -11,6 +11,7 @@ use doublezero_program_tools::{
 use solana_account_info::AccountInfo;
 use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
+use solana_program::program::invoke;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction as system_instruction;
@@ -208,6 +209,20 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         msg!("Invalid seeds for access request (account {})", account_index);
         return Err(ProgramError::InvalidSeeds);
     }
+
+    // Validate the signature of the requesting validator
+    let message: [u8; 48] = {
+        let mut buf = [0u8; 48];
+        buf[..16].copy_from_slice(b"solana_validator");
+        buf[16..].copy_from_slice(service_key.as_ref());
+        buf
+    };
+    let sig_verify_ix = solana_ed25519_program::new_ed25519_instruction_with_signature(
+        &message,
+        &ed25519_signature,
+        validator_id.as_ref().try_into().unwrap(),
+    );
+    invoke(&sig_verify_ix, &[])?;
 
     // manually create the account instruction to override the usual minimum rent exemption
     // balance transfer and instead put down the refundable 1 SOL deposit
