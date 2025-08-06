@@ -100,18 +100,16 @@ impl From<ConfigureProgramAccounts> for Vec<AccountMeta> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RequestAccessAccounts {
     pub program_config_key: Pubkey,
-    pub validator_id_key: Pubkey,
     pub payer_key: Pubkey,
     pub new_access_request_key: Pubkey,
 }
 
 impl RequestAccessAccounts {
-    pub fn new(validator_id_key: &Pubkey, payer_key: &Pubkey, service_key: &Pubkey) -> Self {
+    pub fn new(payer_key: &Pubkey, service_key: &Pubkey, validator_id_key: &Pubkey) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
-            validator_id_key: *validator_id_key,
             payer_key: *payer_key,
-            new_access_request_key: AccessRequest::find_address(service_key).0,
+            new_access_request_key: AccessRequest::find_address(service_key, validator_id_key).0,
         }
     }
 }
@@ -120,14 +118,12 @@ impl From<RequestAccessAccounts> for Vec<AccountMeta> {
     fn from(accounts: RequestAccessAccounts) -> Self {
         let RequestAccessAccounts {
             program_config_key,
-            validator_id_key,
             payer_key,
             new_access_request_key,
         } = accounts;
 
         vec![
             AccountMeta::new_readonly(program_config_key, false),
-            AccountMeta::new_readonly(validator_id_key, false),
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_access_request_key, false),
             AccountMeta::new_readonly(solana_system_interface::program::ID, false),
@@ -137,17 +133,21 @@ impl From<RequestAccessAccounts> for Vec<AccountMeta> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GrantAccessAccounts {
-    pub program_config_key: Pubkey,
     pub dz_ledger_sentinel_key: Pubkey,
     pub access_request_key: Pubkey,
+    pub rent_beneficiary_key: Pubkey,
 }
 
 impl GrantAccessAccounts {
-    pub fn new(dz_ledger_sentinel_key: &Pubkey, access_request_key: &Pubkey) -> Self {
+    pub fn new(
+        dz_ledger_sentinel_key: &Pubkey,
+        access_request_key: &Pubkey,
+        rent_beneficiary_key: &Pubkey,
+    ) -> Self {
         Self {
-            program_config_key: ProgramConfig::find_address().0,
             dz_ledger_sentinel_key: *dz_ledger_sentinel_key,
             access_request_key: *access_request_key,
+            rent_beneficiary_key: *rent_beneficiary_key,
         }
     }
 }
@@ -155,22 +155,21 @@ impl GrantAccessAccounts {
 impl From<GrantAccessAccounts> for Vec<AccountMeta> {
     fn from(accounts: GrantAccessAccounts) -> Self {
         let GrantAccessAccounts {
-            program_config_key,
             dz_ledger_sentinel_key,
             access_request_key,
+            rent_beneficiary_key,
         } = accounts;
 
         vec![
-            AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new(dz_ledger_sentinel_key, true),
             AccountMeta::new(access_request_key, false),
+            AccountMeta::new(rent_beneficiary_key, false),
         ]
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DenyAccessAccounts {
-    pub program_config_key: Pubkey,
     pub dz_ledger_sentinel_key: Pubkey,
     pub access_request_key: Pubkey,
 }
@@ -178,7 +177,6 @@ pub struct DenyAccessAccounts {
 impl DenyAccessAccounts {
     pub fn new(dz_ledger_sentinel_key: &Pubkey, access_request_key: &Pubkey) -> Self {
         Self {
-            program_config_key: ProgramConfig::find_address().0,
             dz_ledger_sentinel_key: *dz_ledger_sentinel_key,
             access_request_key: *access_request_key,
         }
@@ -188,13 +186,11 @@ impl DenyAccessAccounts {
 impl From<DenyAccessAccounts> for Vec<AccountMeta> {
     fn from(accounts: DenyAccessAccounts) -> Self {
         let DenyAccessAccounts {
-            program_config_key,
             dz_ledger_sentinel_key,
             access_request_key,
         } = accounts;
 
         vec![
-            AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new(dz_ledger_sentinel_key, true),
             AccountMeta::new(access_request_key, false),
         ]

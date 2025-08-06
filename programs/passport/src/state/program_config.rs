@@ -15,6 +15,11 @@ pub struct ProgramConfig {
     /// Authority that grants or denies access to the DoubleZero Ledger network.
     pub sentinel_key: Pubkey,
 
+    /// Number of lamports needed on deposit to make an access request
+    /// Will be refunded on successful GrantAccess minus 10_000 processing fee
+    /// Will be forfeit on DenyAccess
+    pub access_request_deposit_parameters: AccessRequestDepositParameters,
+
     /// 8 * 32 bytes of a storage gap in case more fields need to be added.
     _storage_gap: StorageGap<8>,
 }
@@ -41,7 +46,14 @@ impl ProgramConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
+#[repr(C, align(8))]
+pub struct AccessRequestDepositParameters {
+    pub request_deposit_lamports: u32,
+    pub request_fee_lamports: u32,
+}
+
 const _: () = assert!(
-    size_of::<ProgramConfig>() == 328,
+    size_of::<ProgramConfig>() == 336,
     "`ProgramConfig` size changed"
 );

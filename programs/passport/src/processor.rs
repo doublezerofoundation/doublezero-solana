@@ -11,7 +11,6 @@ use doublezero_program_tools::{
 use solana_account_info::AccountInfo;
 use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
-use solana_program::program::invoke;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction as system_instruction;
@@ -155,6 +154,23 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             msg!("Set sentinel_key: {}", sentinel_key);
             program_config.sentinel_key = sentinel_key;
         }
+        ProgramConfiguration::AccessRequestDeposit {
+            request_deposit_lamports: deposit_lamports,
+            request_fee_lamports: fee_lamports,
+        } => {
+            if fee_lamports >= deposit_lamports {
+                msg!("Processing fee must be less than the deposit");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            msg!("Set access_request_deposit_parameters");
+            let deposit_params = &mut program_config.access_request_deposit_parameters;
+            msg!("  request_deposit_lamports: {}", deposit_lamports);
+            deposit_params.request_deposit_lamports = deposit_lamports;
+
+            msg!("  request_fee_lamports: {}", fee_lamports);
+            deposit_params.request_fee_lamports = fee_lamports;
+        }
     }
 
     Ok(())
@@ -176,10 +192,9 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
 
     // Instruction accounts are expected in the following order:
     // - 0: Program config
-    // - 1: Validator ID
-    // - 2: Payer (funder and rent beneficiary)
-    // - 3: New access request account
-    // - 4: System program
+    // - 1: Payer (funder and rent beneficiary)
+    // - 2: New access request account
+    // - 3: System program
 
     let mut accounts_iter = accounts.iter().enumerate();
 
@@ -190,22 +205,15 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     // Make sure program is not paused and we're accepting new accounts at this time
     try_require_unpaused(&program_config)?;
 
-    // Account 1 should be the validator for which access is being requested.
-    // Make sure the validator in the access request matches the validator ID account
-    let (_, validator_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
-    if validator_info.key != &validator_id {
-        msg!("Validator access request must match the validator account");
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    // Account 2 must be the payer. The system program will automatically ensure this account is a signer and writable
+    // Account 1 must be the payer. The system program will automatically ensure this account is a signer and writable
     // in order to transfer the lamports to create the new account.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
     let (account_index, new_access_request_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
+    // Account 2 must be the new access request account
     let (expected_access_request_key, access_request_bump) =
-        AccessRequest::find_address(&service_key);
+        AccessRequest::find_address(&service_key, &validator_id);
 
     // Enforce the account location and seed validity
     if new_access_request_info.key != &expected_access_request_key {
@@ -215,20 +223,6 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         );
         return Err(ProgramError::InvalidSeeds);
     }
-
-    // Validate the signature of the requesting validator
-    let message: [u8; 48] = {
-        let mut buf = [0u8; 48];
-        buf[..16].copy_from_slice(b"solana_validator");
-        buf[16..].copy_from_slice(service_key.as_ref());
-        buf
-    };
-    let sig_verify_ix = solana_ed25519_program::new_ed25519_instruction_with_signature(
-        &message,
-        &ed25519_signature,
-        validator_id.as_ref().try_into().unwrap(),
-    );
-    invoke(&sig_verify_ix, &[])?;
 
     // manually create the account instruction to override the usual minimum rent exemption
     // balance transfer and instead put down the refundable 1 SOL deposit
@@ -254,6 +248,8 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         zero_copy::try_initialize::<AccessRequest>(new_access_request_info, None)?;
     access_request.service_key = service_key;
     access_request.rent_beneficiary_key = *payer_info.key;
+    access_request.validator_id = validator_id;
+    access_request.signature = ed25519_signature;
 
     msg!("Initialized user access request {}", service_key);
 
@@ -261,26 +257,74 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
 }
 
 fn try_grant_access(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Grant access request");
+
+    // Instruction accounts are expected in the following order:
+    // - 0: DZ Ledger Sentinel
+    // - 1: New access request account
+    // - 2: Rent beneficiary (original payer)
     let mut accounts_iter = accounts.iter().enumerate();
 
-    VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Sentinel)?;
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Sentinel)?;
 
-    // Send the sentinel 10_000 lamports from access request rent for executing this transaction.
-    // Send remaining rent lamports to rent beneficiary.
-    //
-    // Only the sentinel can call this instruction.
-    todo!();
+    let access_request =
+        ZeroCopyAccount::<AccessRequest>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let (_, sentinel_info) = authorized_use.authority;
+    let program_config = authorized_use.program_config;
+
+    let request_fee = program_config
+        .access_request_deposit_parameters
+        .request_fee_lamports as u64;
+    let mut access_request_lamports = access_request.info.try_borrow_mut_lamports()?;
+    let request_refund = access_request_lamports.saturating_sub(request_fee);
+
+    **sentinel_info.lamports.borrow_mut() += request_fee;
+
+    let (_, rent_beneficiary_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+    **rent_beneficiary_info.lamports.borrow_mut() += request_refund;
+
+    // Zero out the access request lamports to close the account
+    **access_request_lamports = 0;
+
+    msg!("Grant {} access", access_request.service_key);
+    msg!(
+        "Return {} lamports to {}",
+        request_refund,
+        rent_beneficiary_info.key,
+    );
+
+    Ok(())
 }
 
 fn try_deny_access(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Deny access request");
+
+    // Instruction accounts are expected in the following order:
+    // - 0: DZ Ledger Sentinel
+    // - 1: New access request account
     let mut accounts_iter = accounts.iter().enumerate();
 
-    VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Sentinel)?;
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Sentinel)?;
 
-    // Send the sentinel full rent when closing the access request account.
-    //
-    // Only the sentinel can call this instruction.
-    todo!();
+    let access_request =
+        ZeroCopyAccount::<AccessRequest>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let (_, sentinel_info) = authorized_use.authority;
+
+    let mut access_request_lamports = access_request.info.try_borrow_mut_lamports()?;
+    let forfeit_deposit = **access_request_lamports;
+
+    **sentinel_info.lamports.borrow_mut() += forfeit_deposit;
+    **access_request_lamports = 0;
+
+    msg!("Deny {} access", access_request.service_key);
+    msg!("Requestor forfeit {} lamports", forfeit_deposit);
+
+    Ok(())
 }
 
 //
@@ -326,8 +370,8 @@ impl Authority {
 }
 
 struct VerifiedProgramAuthority<'a, 'b> {
-    _program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
-    _authority: (usize, &'a AccountInfo<'b>),
+    program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
+    authority: (usize, &'a AccountInfo<'b>),
 }
 
 impl<'a, 'b> TryNextAccounts<'a, 'b, Authority> for VerifiedProgramAuthority<'a, 'b> {
@@ -343,8 +387,8 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, Authority> for VerifiedProgramAuthority<'a,
             authority.try_next_as_authorized_account(accounts_iter, &program_config.data)?;
 
         Ok(Self {
-            _program_config: program_config,
-            _authority: (index, authority_info),
+            program_config,
+            authority: (index, authority_info),
         })
     }
 }
