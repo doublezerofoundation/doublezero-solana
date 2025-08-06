@@ -160,25 +160,25 @@ async fn test_configure_distribution() {
         "Program log: Distribution rewards have already been finalized"
     );
 
-    // // Cannot finalize again.
+    // Cannot finalize again.
 
-    // let payer_key = test_setup.payer_signer.pubkey();
+    let payer_key = test_setup.payer_signer.pubkey();
 
-    // let finalize_distribution_rewards_ix = try_build_instruction(
-    //     &ID,
-    //     FinalizeDistributionRewardsAccounts::new(&payer_key, dz_epoch),
-    //     &RevenueDistributionInstructionData::FinalizeDistributionRewards,
-    // )
-    // .unwrap();
-    // let (tx_err, program_logs) = test_setup
-    //     .unwrap_simulation_error(&[finalize_distribution_rewards_ix], &[])
-    //     .await;
-    // assert_eq!(
-    //     tx_err,
-    //     TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
-    // );
-    // assert_eq!(
-    //     program_logs.get(2).unwrap(),
-    //     "Program log: Distribution rewards have already been finalized"
-    // );
+    let finalize_distribution_rewards_ix = try_build_instruction(
+        &ID,
+        FinalizeDistributionRewardsAccounts::new(&payer_key, dz_epoch),
+        &RevenueDistributionInstructionData::FinalizeDistributionRewards,
+    )
+    .unwrap();
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(&[finalize_distribution_rewards_ix], &[])
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Distribution rewards have already been finalized"
+    );
 }
