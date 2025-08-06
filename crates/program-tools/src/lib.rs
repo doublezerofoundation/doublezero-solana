@@ -9,8 +9,6 @@ use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-pub const LAMPORTS_PER_SOL: u64 = 1_000_000_000;
-
 /// If there is a discriminator used for any data, it should be 8 bytes long. For account data
 /// represented as a C-struct, 8 bytes is a convenient size for the discriminator.
 ///

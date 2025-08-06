@@ -6,7 +6,6 @@ use doublezero_program_tools::{
     },
     recipe::{create_account::try_create_account, Invoker},
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
-    LAMPORTS_PER_SOL,
 };
 use solana_account_info::AccountInfo;
 use solana_cpi::invoke_signed_unchecked;
@@ -229,7 +228,9 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     let create_account_ix = system_instruction::create_account(
         payer_info.key,
         &expected_access_request_key,
-        LAMPORTS_PER_SOL,
+        program_config
+            .access_request_deposit_parameters
+            .request_deposit_lamports as u64,
         zero_copy::data_end::<AccessRequest>() as u64,
         &ID,
     );
