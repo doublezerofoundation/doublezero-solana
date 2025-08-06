@@ -59,7 +59,7 @@ pub enum DistributionPaymentsConfiguration {
         total_lamports_owed: u64,
         merkle_root: Hash,
     },
-    FinalizeSolanaValidatorPayments,
+    FinalizePayments,
     UpdateUncollectibleSol(u64),
 }
 

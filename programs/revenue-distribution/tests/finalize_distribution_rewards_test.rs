@@ -6,7 +6,8 @@ use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
         account::{ConfigureDistributionRewardsAccounts, FinalizeDistributionRewardsAccounts},
-        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        RevenueDistributionInstructionData,
     },
     state::{self, Distribution},
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
@@ -21,11 +22,11 @@ use solana_sdk::{
 };
 
 //
-// Configure distribution.
+// Finalize distribution rewards.
 //
 
 #[tokio::test]
-async fn test_configure_distribution() {
+async fn test_finalize_distribution_rewards() {
     let mut test_setup = common::start_test().await;
 
     let admin_signer = Keypair::new();
@@ -48,7 +49,7 @@ async fn test_configure_distribution() {
     let dz_epoch = DoubleZeroEpoch::new(1);
 
     let total_contributors = 69;
-    let contributor_rewards_merkle_root = Hash::new_unique();
+    let rewards_merkle_root = Hash::new_unique();
 
     test_setup
         .initialize_program()
@@ -96,7 +97,28 @@ async fn test_configure_distribution() {
             dz_epoch,
             &rewards_accountant_signer,
             total_contributors,
-            contributor_rewards_merkle_root,
+            rewards_merkle_root,
+        )
+        .await
+        .unwrap();
+
+    // Cannot finalize until payments have not been finalized.
+
+    let (tx_err, program_logs) = cannot_finalize_distribution_rewards(&test_setup, dz_epoch).await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Payments must be finalized before rewards can be finalized"
+    );
+
+    test_setup
+        .configure_distribution_payments(
+            dz_epoch,
+            &payments_accountant_signer,
+            [DistributionPaymentsConfiguration::FinalizePayments],
         )
         .await
         .unwrap();
@@ -175,7 +197,8 @@ async fn test_configure_distribution() {
     );
 
     let mut expected_distribution = Distribution::default();
-    expected_distribution.set_is_contributor_rewards_finalized(true);
+    expected_distribution.set_are_payments_finalized(true);
+    expected_distribution.set_are_rewards_finalized(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;
@@ -185,7 +208,7 @@ async fn test_configure_distribution() {
         .solana_validator_fee_parameters
         .base_block_rewards = ValidatorFee::new(solana_validator_base_block_rewards_fee).unwrap();
     expected_distribution.total_contributors = total_contributors;
-    expected_distribution.contributor_rewards_merkle_root = contributor_rewards_merkle_root;
+    expected_distribution.rewards_merkle_root = rewards_merkle_root;
     assert_eq!(distribution, expected_distribution);
 
     // Cannot configure distribution rewards after finalization.
@@ -195,7 +218,7 @@ async fn test_configure_distribution() {
         ConfigureDistributionRewardsAccounts::new(&rewards_accountant_signer.pubkey(), dz_epoch),
         &RevenueDistributionInstructionData::ConfigureDistributionRewards {
             total_contributors,
-            merkle_root: contributor_rewards_merkle_root,
+            merkle_root: rewards_merkle_root,
         },
     )
     .unwrap();

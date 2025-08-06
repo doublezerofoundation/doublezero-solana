@@ -101,7 +101,7 @@ async fn test_configure_distribution_payments() {
                     merkle_root: solana_validator_payments_merkle_root,
                 },
                 DistributionPaymentsConfiguration::UpdateUncollectibleSol(69),
-                DistributionPaymentsConfiguration::FinalizeSolanaValidatorPayments,
+                DistributionPaymentsConfiguration::FinalizePayments,
                 DistributionPaymentsConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
             ],
         )
@@ -111,7 +111,7 @@ async fn test_configure_distribution_payments() {
     let (distribution_key, distribution, _, _) = test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
-    expected_distribution.set_is_solana_validator_payments_finalized(true);
+    expected_distribution.set_are_payments_finalized(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;

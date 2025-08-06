@@ -16,7 +16,7 @@ use solana_sdk::signature::{Keypair, Signer};
 //
 
 #[tokio::test]
-async fn test_configure_distribution() {
+async fn test_configure_distribution_rewards() {
     let mut test_setup = common::start_test().await;
 
     let admin_signer = Keypair::new();
@@ -82,14 +82,14 @@ async fn test_configure_distribution() {
     let dz_epoch = DoubleZeroEpoch::new(1);
 
     let total_contributors = 69;
-    let contributor_rewards_merkle_root = Hash::new_unique();
+    let rewards_merkle_root = Hash::new_unique();
 
     test_setup
         .configure_distribution_rewards(
             dz_epoch,
             &rewards_accountant_signer,
             total_contributors,
-            contributor_rewards_merkle_root,
+            rewards_merkle_root,
         )
         .await
         .unwrap();
@@ -106,6 +106,6 @@ async fn test_configure_distribution() {
         .solana_validator_fee_parameters
         .base_block_rewards = ValidatorFee::new(solana_validator_base_block_rewards_fee).unwrap();
     expected_distribution.total_contributors = total_contributors;
-    expected_distribution.contributor_rewards_merkle_root = contributor_rewards_merkle_root;
+    expected_distribution.rewards_merkle_root = rewards_merkle_root;
     assert_eq!(distribution, expected_distribution);
 }

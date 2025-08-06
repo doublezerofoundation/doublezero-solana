@@ -840,8 +840,8 @@ fn try_configure_distribution_payments(
             total_lamports_owed,
             merkle_root,
         } => {
-            if distribution.is_solana_validator_payments_finalized() {
-                msg!("Solana validator payments have already been finalized");
+            if distribution.are_payments_finalized() {
+                msg!("Payments have already been finalized");
                 return Err(ProgramError::InvalidAccountData);
             }
 
@@ -854,14 +854,14 @@ fn try_configure_distribution_payments(
             msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
             distribution.solana_validator_payments_merkle_root = merkle_root;
         }
-        DistributionPaymentsConfiguration::FinalizeSolanaValidatorPayments => {
-            if distribution.is_solana_validator_payments_finalized() {
-                msg!("Solana validator payments have already been finalized");
+        DistributionPaymentsConfiguration::FinalizePayments => {
+            if distribution.are_payments_finalized() {
+                msg!("Payments have already been finalized");
                 return Err(ProgramError::InvalidAccountData);
             }
 
-            msg!("Finalized Solana validator payments");
-            distribution.set_is_solana_validator_payments_finalized(true);
+            msg!("Finalized payments");
+            distribution.set_are_payments_finalized(true);
         }
         DistributionPaymentsConfiguration::UpdateUncollectibleSol(amount) => {
             // TODO: We will not want to allow this to be updated after we sweep the 2Z swapped from
@@ -913,8 +913,8 @@ fn try_configure_distribution_rewards(
     msg!("set total_contributors: {}", total_contributors);
     distribution.total_contributors = total_contributors;
 
-    msg!("Set contributor_rewards_merkle_root: {}", merkle_root);
-    distribution.contributor_rewards_merkle_root = merkle_root;
+    msg!("Set rewards_merkle_root: {}", merkle_root);
+    distribution.rewards_merkle_root = merkle_root;
 
     Ok(())
 }
@@ -951,6 +951,12 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    // Payments must have been finalized before rewards can be finalized.
+    if !distribution.are_payments_finalized() {
+        msg!("Payments must be finalized before rewards can be finalized");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
     // The distribution must have been created at least the minimum number of epochs ago.
     let minimum_dz_epoch_to_finalize = program_config
         .checked_minimum_epoch_duration_to_finalize_rewards()
@@ -972,7 +978,7 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     // If the distribution rewards have already been finalized, we have nothing to do.
     try_require_unfinalized_distribution_rewards(&distribution)?;
 
-    distribution.set_is_contributor_rewards_finalized(true);
+    distribution.set_are_rewards_finalized(true);
 
     // The rewards accountant can pay with another account. But most likely this account
     // will be the same as the payments accountant. This account will need to be writable
@@ -1931,7 +1937,7 @@ fn try_require_unpaused(program_config: &ProgramConfig) -> ProgramResult {
 }
 
 fn try_require_unfinalized_distribution_rewards(distribution: &Distribution) -> ProgramResult {
-    if distribution.is_contributor_rewards_finalized() {
+    if distribution.are_rewards_finalized() {
         msg!("Distribution rewards have already been finalized");
         return Err(ProgramError::InvalidAccountData);
     }
