@@ -13,7 +13,8 @@ use crate::{
 
 /// Account representing distribution information for a given DoubleZero epoch.
 ///
-/// TODO: Do we add a gap? Unused data will cost the accountant a real amount of SOL per epoch.
+/// TODO: Do we add a gap? Unused data will cost the accountant a real amount of
+/// SOL per epoch.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct Distribution {
@@ -22,9 +23,9 @@ pub struct Distribution {
 
     pub flags: Flags,
 
-    /// The community burn rate, which acts as a lower-bound to burn rewards. This burn rate is
-    /// computed at the time the new distribution is created via a simple formula configurable by
-    /// the accountant.
+    /// The community burn rate, which acts as a lower-bound to burn rewards.
+    /// This burn rate is computed at the time the new distribution is created
+    /// via a simple formula configurable by the accountant.
     pub community_burn_rate: BurnRate,
 
     /// This seed will be used to sign for token transfers.
@@ -34,8 +35,8 @@ pub struct Distribution {
     pub token_2z_pda_bump_seed: u8,
     _padding: [u8; 2],
 
-    /// Because the validator fee can change between epochs, we will save what it was at the time
-    /// this account was created.
+    /// Because the validator fee can change between epochs, we will save what
+    /// it was at the time this account was created.
     pub solana_validator_fee_parameters: SolanaValidatorFeeParameters,
 
     pub solana_validator_payments_merkle_root: Hash,
@@ -45,20 +46,28 @@ pub struct Distribution {
 
     pub contributor_rewards_merkle_root: Hash,
 
-    /// Tracking the total number of contributors. Off-chain processes can monitor how many are
-    /// left to redeem when comparing to [num_contributors_redeemed].
+    /// Tracking the total number of contributors. Off-chain processes can
+    /// monitor how many are left to redeem when comparing to
+    /// [num_contributors_redeemed].
     ///
     /// [num_contributors_redeemed]: Self::num_contributors_redeemed
     pub total_contributors: u32,
 
-    /// Tracking how many contributors redeemed rewards. Off-chain processes can monitor how many
-    /// are left to redeem when comparing to [total_contributors].
+    /// Tracking how many contributors redeemed rewards. Off-chain processes
+    /// can monitor how many are left to redeem when comparing to
+    /// [total_contributors].
     ///
     /// [total_contributors]: Self::total_contributors
     pub num_contributors_redeemed: u32,
 
     pub collected_prepaid_2z_payments: u64,
     pub collected_lamports_converted_to_2z: u64,
+
+    /// The amount of SOL that was owed in past distributions. The payments
+    /// accountant can configure this amount to alleviate the system from
+    /// carrying bad debt perpetually. This amount is subtracted from the
+    /// total amount owed to the system.
+    pub uncollectible_sol_amount: u64,
 
     _storage_gap: StorageGap<4>,
 }
@@ -101,11 +110,16 @@ impl Distribution {
             should_finalize,
         );
     }
+
+    pub fn total_sol_owed(&self) -> Option<u64> {
+        self.total_solana_validator_payments_owed
+            .checked_sub(self.uncollectible_sol_amount)
+    }
 }
 
 //
 
 const _: () = assert!(
-    size_of::<Distribution>() == 296,
+    size_of::<Distribution>() == 304,
     "`Distribution` size changed"
 );

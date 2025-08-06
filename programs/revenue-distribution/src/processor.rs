@@ -20,8 +20,9 @@ use spl_token::instruction as token_instruction;
 
 use crate::{
     instruction::{
-        ContributorRewardsConfiguration, DistributionConfiguration, JournalConfiguration,
-        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionConfiguration,
+        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
@@ -62,6 +63,9 @@ fn try_process_instruction(
         }
         RevenueDistributionInstructionData::InitializeDistribution => {
             try_initialize_distribution(accounts)
+        }
+        RevenueDistributionInstructionData::ConfigureDistributionPayments(setting) => {
+            try_configure_distribution_payments(accounts, setting)
         }
         RevenueDistributionInstructionData::ConfigureDistribution(data) => {
             try_configure_distribution(accounts, data)
@@ -790,24 +794,30 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     Ok(())
 }
 
-fn try_configure_distribution(
+fn try_configure_distribution_payments(
     accounts: &[AccountInfo],
-    setting: DistributionConfiguration,
+    setting: DistributionPaymentsConfiguration,
 ) -> ProgramResult {
-    msg!("Configure distribution");
+    msg!("Configure distribution payments");
 
     // We expect the following accounts for this instruction:
-    // - 0: Program config account.
-    // - 1: Accountant account.
-    // - 2: Distribution account.
+    // - 0: Program config.
+    // - 1: Payments accountant.
+    // - 2: Distribution.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 2 must be the program config account.
+    // Account 0 must be the program config.
+    // Account 1 must be the payments accountant.
+    //
+    // This method verifies that account 1 is the payments accountant and is a signer.
+    VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::PaymentsAccountant)?;
+
+    // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     match setting {
-        DistributionConfiguration::UpdateSolanaValidatorPayments {
+        DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
             total_lamports_owed,
             merkle_root,
         } => {
@@ -815,12 +825,6 @@ fn try_configure_distribution(
                 msg!("Solana validator payments have already been finalized");
                 return Err(ProgramError::InvalidAccountData);
             }
-
-            // Only the payments accountant can determine what Solana validators owe.
-            VerifiedProgramAuthority::try_next_accounts(
-                &mut accounts_iter,
-                Authority::PaymentsAccountant,
-            )?;
 
             msg!(
                 "Set total_solana_validator_payments_owed: {}",
@@ -831,21 +835,47 @@ fn try_configure_distribution(
             msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
             distribution.solana_validator_payments_merkle_root = merkle_root;
         }
-        DistributionConfiguration::FinalizeSolanaValidatorPayments => {
+        DistributionPaymentsConfiguration::FinalizeSolanaValidatorPayments => {
             if distribution.is_solana_validator_payments_finalized() {
                 msg!("Solana validator payments have already been finalized");
                 return Err(ProgramError::InvalidAccountData);
             }
 
-            // Only the payments accountant can finalize Solana validator payments.
-            VerifiedProgramAuthority::try_next_accounts(
-                &mut accounts_iter,
-                Authority::PaymentsAccountant,
-            )?;
-
             msg!("Finalized Solana validator payments");
             distribution.set_is_solana_validator_payments_finalized(true);
         }
+        DistributionPaymentsConfiguration::UpdateUncollectibleSol(amount) => {
+            // TODO: We will not want to allow this to be updated after we sweep the 2Z swapped from
+            // SOL into this distribution because that will cause chaos.
+            //
+            // We will need to add a flag to indicate that the distribution has been swept. This
+            // setting will require that the flag has not been set yet.
+
+            msg!("Set uncollectible_sol_amount: {}", amount);
+            distribution.uncollectible_sol_amount = amount;
+        }
+    }
+
+    Ok(())
+}
+
+fn try_configure_distribution(
+    accounts: &[AccountInfo],
+    setting: DistributionConfiguration,
+) -> ProgramResult {
+    msg!("Configure distribution");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Distribution.
+    // - 1: Program config.
+    // - 2: Rewards accountant.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the distribution.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    match setting {
         DistributionConfiguration::UpdateContributorRewards {
             total_contributors,
             merkle_root,

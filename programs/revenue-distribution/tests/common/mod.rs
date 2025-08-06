@@ -7,15 +7,17 @@ use doublezero_revenue_distribution::{
     instruction::{
         account::{
             ConfigureContributorRewardsAccounts, ConfigureDistributionAccounts,
-            ConfigureJournalAccounts, ConfigureProgramAccounts,
-            DenyPrepaidConnectionAccessAccounts, GrantPrepaidConnectionAccessAccounts,
-            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
-            InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
-            InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
-            SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
+            ConfigureDistributionPaymentsAccounts, ConfigureJournalAccounts,
+            ConfigureProgramAccounts, DenyPrepaidConnectionAccessAccounts,
+            GrantPrepaidConnectionAccessAccounts, InitializeContributorRewardsAccounts,
+            InitializeDistributionAccounts, InitializeJournalAccounts,
+            InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
+            LoadPrepaidConnectionAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
+            TerminatePrepaidConnectionAccounts,
         },
-        ContributorRewardsConfiguration, DistributionConfiguration, JournalConfiguration,
-        ProgramConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionConfiguration,
+        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
+        RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
@@ -421,6 +423,42 @@ impl ProgramTestWithOwner {
             self.recent_blockhash,
             &[initialize_distribution_ix],
             &[payer_signer, accountant_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
+    pub async fn configure_distribution_payments<const N: usize>(
+        &mut self,
+        dz_epoch: DoubleZeroEpoch,
+        payments_accountant_signer: &Keypair,
+        setting: [DistributionPaymentsConfiguration; N],
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let configure_program_ixs = setting
+            .into_iter()
+            .map(|setting| {
+                try_build_instruction(
+                    &ID,
+                    ConfigureDistributionPaymentsAccounts::new(
+                        &payments_accountant_signer.pubkey(),
+                        dz_epoch,
+                    ),
+                    &RevenueDistributionInstructionData::ConfigureDistributionPayments(setting),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &configure_program_ixs,
+            &[payer_signer, payments_accountant_signer],
         )
         .await?;
 

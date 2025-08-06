@@ -54,16 +54,21 @@ pub enum ProgramFlagConfiguration {
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum DistributionConfiguration {
-    UpdateSolanaValidatorPayments {
-        total_lamports_owed: u64,
-        merkle_root: Hash,
-    },
-    FinalizeSolanaValidatorPayments,
     UpdateContributorRewards {
         total_contributors: u32,
         merkle_root: Hash,
     },
     FinalizeContributorRewards,
+}
+
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
+pub enum DistributionPaymentsConfiguration {
+    UpdateSolanaValidatorPayments {
+        total_lamports_owed: u64,
+        merkle_root: Hash,
+    },
+    FinalizeSolanaValidatorPayments,
+    UpdateUncollectibleSol(u64),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
@@ -79,6 +84,7 @@ pub enum RevenueDistributionInstructionData {
     InitializeJournal,
     ConfigureJournal(JournalConfiguration),
     InitializeDistribution,
+    ConfigureDistributionPayments(DistributionPaymentsConfiguration),
     ConfigureDistribution(DistributionConfiguration),
     InitializePrepaidConnection {
         user_key: Pubkey,
@@ -109,6 +115,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::configure_journal");
     pub const INITIALIZE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_distribution");
+    pub const CONFIGURE_DISTRIBUTION_PAYMENTS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::configure_distribution_payments");
     pub const CONFIGURE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_distribution");
     pub const INITIALIZE_PREPAID_CONNECTION: Discriminator<DISCRIMINATOR_LEN> =
@@ -142,6 +150,10 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             }
             Self::INITIALIZE_JOURNAL => Ok(Self::InitializeJournal),
             Self::INITIALIZE_DISTRIBUTION => Ok(Self::InitializeDistribution),
+            Self::CONFIGURE_DISTRIBUTION_PAYMENTS => {
+                DistributionPaymentsConfiguration::deserialize_reader(reader)
+                    .map(Self::ConfigureDistributionPayments)
+            }
             Self::CONFIGURE_DISTRIBUTION => DistributionConfiguration::deserialize_reader(reader)
                 .map(Self::ConfigureDistribution),
             Self::INITIALIZE_PREPAID_CONNECTION => {
@@ -198,6 +210,10 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::InitializeJournal => Self::INITIALIZE_JOURNAL.serialize(writer),
             Self::InitializeDistribution => Self::INITIALIZE_DISTRIBUTION.serialize(writer),
+            Self::ConfigureDistributionPayments(setting) => {
+                Self::CONFIGURE_DISTRIBUTION_PAYMENTS.serialize(writer)?;
+                setting.serialize(writer)
+            }
             Self::ConfigureDistribution(setting) => {
                 Self::CONFIGURE_DISTRIBUTION.serialize(writer)?;
                 setting.serialize(writer)
