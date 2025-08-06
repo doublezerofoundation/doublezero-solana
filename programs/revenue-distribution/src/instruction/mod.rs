@@ -53,15 +53,6 @@ pub enum ProgramFlagConfiguration {
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
-pub enum DistributionConfiguration {
-    UpdateContributorRewards {
-        total_contributors: u32,
-        merkle_root: Hash,
-    },
-    FinalizeContributorRewards,
-}
-
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum DistributionPaymentsConfiguration {
     UpdateSolanaValidatorPayments {
         total_lamports_owed: u64,
@@ -85,7 +76,11 @@ pub enum RevenueDistributionInstructionData {
     ConfigureJournal(JournalConfiguration),
     InitializeDistribution,
     ConfigureDistributionPayments(DistributionPaymentsConfiguration),
-    ConfigureDistribution(DistributionConfiguration),
+    ConfigureDistributionRewards {
+        total_contributors: u32,
+        merkle_root: Hash,
+    },
+    FinalizeDistributionRewards,
     InitializePrepaidConnection {
         user_key: Pubkey,
         decimals: u8,
@@ -117,8 +112,10 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_distribution");
     pub const CONFIGURE_DISTRIBUTION_PAYMENTS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_distribution_payments");
-    pub const CONFIGURE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::configure_distribution");
+    pub const CONFIGURE_DISTRIBUTION_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::configure_distribution_rewards");
+    pub const FINALIZE_DISTRIBUTION_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::finalize_distribution_rewards");
     pub const INITIALIZE_PREPAID_CONNECTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_prepaid_connection");
     pub const GRANT_PREPAID_CONNECTION_ACCESS: Discriminator<DISCRIMINATOR_LEN> =
@@ -154,8 +151,16 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 DistributionPaymentsConfiguration::deserialize_reader(reader)
                     .map(Self::ConfigureDistributionPayments)
             }
-            Self::CONFIGURE_DISTRIBUTION => DistributionConfiguration::deserialize_reader(reader)
-                .map(Self::ConfigureDistribution),
+            Self::CONFIGURE_DISTRIBUTION_REWARDS => {
+                let total_contributors = BorshDeserialize::deserialize_reader(reader)?;
+                let merkle_root = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::ConfigureDistributionRewards {
+                    total_contributors,
+                    merkle_root,
+                })
+            }
+            Self::FINALIZE_DISTRIBUTION_REWARDS => Ok(Self::FinalizeDistributionRewards),
             Self::INITIALIZE_PREPAID_CONNECTION => {
                 let user_key = BorshDeserialize::deserialize_reader(reader)?;
                 let decimals = BorshDeserialize::deserialize_reader(reader)?;
@@ -214,9 +219,16 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::CONFIGURE_DISTRIBUTION_PAYMENTS.serialize(writer)?;
                 setting.serialize(writer)
             }
-            Self::ConfigureDistribution(setting) => {
-                Self::CONFIGURE_DISTRIBUTION.serialize(writer)?;
-                setting.serialize(writer)
+            Self::ConfigureDistributionRewards {
+                total_contributors,
+                merkle_root,
+            } => {
+                Self::CONFIGURE_DISTRIBUTION_REWARDS.serialize(writer)?;
+                total_contributors.serialize(writer)?;
+                merkle_root.serialize(writer)
+            }
+            Self::FinalizeDistributionRewards => {
+                Self::FINALIZE_DISTRIBUTION_REWARDS.serialize(writer)
             }
             Self::InitializePrepaidConnection { user_key, decimals } => {
                 Self::INITIALIZE_PREPAID_CONNECTION.serialize(writer)?;

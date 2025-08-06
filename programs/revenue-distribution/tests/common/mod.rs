@@ -6,18 +6,17 @@ use doublezero_program_tools::{
 use doublezero_revenue_distribution::{
     instruction::{
         account::{
-            ConfigureContributorRewardsAccounts, ConfigureDistributionAccounts,
-            ConfigureDistributionPaymentsAccounts, ConfigureJournalAccounts,
+            ConfigureContributorRewardsAccounts, ConfigureDistributionPaymentsAccounts,
+            ConfigureDistributionRewardsAccounts, ConfigureJournalAccounts,
             ConfigureProgramAccounts, DenyPrepaidConnectionAccessAccounts,
-            GrantPrepaidConnectionAccessAccounts, InitializeContributorRewardsAccounts,
-            InitializeDistributionAccounts, InitializeJournalAccounts,
-            InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
-            LoadPrepaidConnectionAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
-            TerminatePrepaidConnectionAccounts,
+            FinalizeDistributionRewardsAccounts, GrantPrepaidConnectionAccessAccounts,
+            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
+            InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
+            InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
+            SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
         },
-        ContributorRewardsConfiguration, DistributionConfiguration,
-        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
-        RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionPaymentsConfiguration, JournalConfiguration,
+        ProgramConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
@@ -439,7 +438,7 @@ impl ProgramTestWithOwner {
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let configure_program_ixs = setting
+        let configure_distribution_payments_ixs = setting
             .into_iter()
             .map(|setting| {
                 try_build_instruction(
@@ -457,7 +456,7 @@ impl ProgramTestWithOwner {
         let new_blockhash = process_instructions_for_test(
             &self.banks_client,
             self.recent_blockhash,
-            &configure_program_ixs,
+            &configure_distribution_payments_ixs,
             &[payer_signer, payments_accountant_signer],
         )
         .await?;
@@ -467,35 +466,56 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn configure_distribution<const N: usize>(
+    pub async fn configure_distribution_rewards(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
         accountant_signer: &Keypair,
-        setting: [DistributionConfiguration; N],
+        total_contributors: u32,
+        merkle_root: Hash,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let configure_program_ixs = setting
-            .into_iter()
-            .map(|setting| {
-                try_build_instruction(
-                    &ID,
-                    ConfigureDistributionAccounts::new(
-                        &accountant_signer.pubkey(),
-                        dz_epoch,
-                        Some(&payer_signer.pubkey()),
-                    ),
-                    &RevenueDistributionInstructionData::ConfigureDistribution(setting),
-                )
-                .unwrap()
-            })
-            .collect::<Vec<_>>();
+        let configure_distribution_rewards_ix = try_build_instruction(
+            &ID,
+            ConfigureDistributionRewardsAccounts::new(&accountant_signer.pubkey(), dz_epoch),
+            &RevenueDistributionInstructionData::ConfigureDistributionRewards {
+                total_contributors,
+                merkle_root,
+            },
+        )
+        .unwrap();
 
         let new_blockhash = process_instructions_for_test(
             &self.banks_client,
             self.recent_blockhash,
-            &configure_program_ixs,
+            &[configure_distribution_rewards_ix],
             &[payer_signer, accountant_signer],
+        )
+        .await?;
+
+        self.recent_blockhash = new_blockhash;
+
+        Ok(self)
+    }
+
+    pub async fn finalize_distribution_rewards(
+        &mut self,
+        dz_epoch: DoubleZeroEpoch,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let finalize_distribution_rewards_ix = try_build_instruction(
+            &ID,
+            FinalizeDistributionRewardsAccounts::new(&payer_signer.pubkey(), dz_epoch),
+            &RevenueDistributionInstructionData::FinalizeDistributionRewards,
+        )
+        .unwrap();
+
+        let new_blockhash = process_instructions_for_test(
+            &self.banks_client,
+            self.recent_blockhash,
+            &[finalize_distribution_rewards_ix],
+            &[payer_signer],
         )
         .await?;
 
@@ -735,7 +755,7 @@ impl ProgramTestWithOwner {
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let configure_contributor_rewards_ix = setting
+        let configure_contributor_rewards_ixs = setting
             .into_iter()
             .map(|setting| {
                 try_build_instruction(
@@ -753,7 +773,7 @@ impl ProgramTestWithOwner {
         let new_blockhash = process_instructions_for_test(
             &self.banks_client,
             self.recent_blockhash,
-            &configure_contributor_rewards_ix,
+            &configure_contributor_rewards_ixs,
             &[payer_signer, rewards_manager_signer],
         )
         .await?;

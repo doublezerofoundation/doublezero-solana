@@ -2,14 +2,23 @@ mod common;
 
 //
 
+use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
-    instruction::{DistributionConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
+    instruction::{
+        account::{ConfigureDistributionRewardsAccounts, FinalizeDistributionRewardsAccounts},
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
+    },
     state::{self, Distribution},
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
+    ID,
 };
 use solana_hash::Hash;
 use solana_program_test::tokio;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::{
+    instruction::InstructionError,
+    signature::{Keypair, Signer},
+    transaction::TransactionError,
+};
 
 //
 // Configure distribution.
@@ -33,6 +42,13 @@ async fn test_configure_distribution() {
 
     // Relay settings.
     let contributor_reward_claim_relay_lamports = 10_000;
+
+    // Distribution rewards.
+
+    let dz_epoch = DoubleZeroEpoch::new(1);
+
+    let total_contributors = 69;
+    let contributor_rewards_merkle_root = Hash::new_unique();
 
     test_setup
         .initialize_program()
@@ -75,34 +91,23 @@ async fn test_configure_distribution() {
         .unwrap()
         .initialize_distribution(&rewards_accountant_signer)
         .await
+        .unwrap()
+        .configure_distribution_rewards(
+            dz_epoch,
+            &rewards_accountant_signer,
+            total_contributors,
+            contributor_rewards_merkle_root,
+        )
+        .await
         .unwrap();
 
-    // Test inputs.
-
-    let dz_epoch = DoubleZeroEpoch::new(1);
-
-    let total_contributors = 69;
-    let contributor_rewards_merkle_root = Hash::new_unique();
+    //
 
     let (_, _, distribution_lamports_balance_before, _) =
         test_setup.fetch_distribution(dz_epoch).await;
 
     test_setup
-        .configure_distribution(
-            dz_epoch,
-            &rewards_accountant_signer,
-            [
-                DistributionConfiguration::UpdateContributorRewards {
-                    total_contributors: total_contributors + 1,
-                    merkle_root: contributor_rewards_merkle_root,
-                },
-                DistributionConfiguration::UpdateContributorRewards {
-                    total_contributors,
-                    merkle_root: contributor_rewards_merkle_root,
-                },
-                DistributionConfiguration::FinalizeContributorRewards,
-            ],
-        )
+        .finalize_distribution_rewards(dz_epoch)
         .await
         .unwrap();
 
@@ -127,4 +132,53 @@ async fn test_configure_distribution() {
     expected_distribution.total_contributors = total_contributors;
     expected_distribution.contributor_rewards_merkle_root = contributor_rewards_merkle_root;
     assert_eq!(distribution, expected_distribution);
+
+    // Cannot configure distribution rewards after finalization.
+
+    let configure_distribution_rewards_ix = try_build_instruction(
+        &ID,
+        ConfigureDistributionRewardsAccounts::new(&rewards_accountant_signer.pubkey(), dz_epoch),
+        &RevenueDistributionInstructionData::ConfigureDistributionRewards {
+            total_contributors,
+            merkle_root: contributor_rewards_merkle_root,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            &[configure_distribution_rewards_ix],
+            &[&rewards_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Distribution rewards have already been finalized"
+    );
+
+    // // Cannot finalize again.
+
+    // let payer_key = test_setup.payer_signer.pubkey();
+
+    // let finalize_distribution_rewards_ix = try_build_instruction(
+    //     &ID,
+    //     FinalizeDistributionRewardsAccounts::new(&payer_key, dz_epoch),
+    //     &RevenueDistributionInstructionData::FinalizeDistributionRewards,
+    // )
+    // .unwrap();
+    // let (tx_err, program_logs) = test_setup
+    //     .unwrap_simulation_error(&[finalize_distribution_rewards_ix], &[])
+    //     .await;
+    // assert_eq!(
+    //     tx_err,
+    //     TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    // );
+    // assert_eq!(
+    //     program_logs.get(2).unwrap(),
+    //     "Program log: Distribution rewards have already been finalized"
+    // );
 }

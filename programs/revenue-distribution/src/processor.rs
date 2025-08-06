@@ -11,6 +11,7 @@ use doublezero_program_tools::{
 };
 use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
 use solana_cpi::invoke_signed_unchecked;
+use solana_hash::Hash;
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
@@ -20,9 +21,8 @@ use spl_token::instruction as token_instruction;
 
 use crate::{
     instruction::{
-        ContributorRewardsConfiguration, DistributionConfiguration,
-        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
-        ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionPaymentsConfiguration, JournalConfiguration,
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
@@ -67,8 +67,12 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::ConfigureDistributionPayments(setting) => {
             try_configure_distribution_payments(accounts, setting)
         }
-        RevenueDistributionInstructionData::ConfigureDistribution(data) => {
-            try_configure_distribution(accounts, data)
+        RevenueDistributionInstructionData::ConfigureDistributionRewards {
+            total_contributors,
+            merkle_root,
+        } => try_configure_distribution_rewards(accounts, total_contributors, merkle_root),
+        RevenueDistributionInstructionData::FinalizeDistributionRewards => {
+            try_finalize_distribution_rewards(accounts)
         }
         RevenueDistributionInstructionData::InitializePrepaidConnection { user_key, decimals } => {
             try_initialize_prepaid_connection(accounts, user_key, decimals)
@@ -810,7 +814,13 @@ fn try_configure_distribution_payments(
     // Account 1 must be the payments accountant.
     //
     // This method verifies that account 1 is the payments accountant and is a signer.
-    VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::PaymentsAccountant)?;
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::PaymentsAccountant,
+    )?;
+
+    // Make sure the program is not paused.
+    try_require_unpaused(&authorized_use.program_config)?;
 
     // Account 2 must be the distribution.
     let mut distribution =
@@ -859,97 +869,104 @@ fn try_configure_distribution_payments(
     Ok(())
 }
 
-fn try_configure_distribution(
+fn try_configure_distribution_rewards(
     accounts: &[AccountInfo],
-    setting: DistributionConfiguration,
+    total_contributors: u32,
+    merkle_root: Hash,
 ) -> ProgramResult {
     msg!("Configure distribution");
 
     // We expect the following accounts for this instruction:
-    // - 0: Distribution.
-    // - 1: Program config.
-    // - 2: Rewards accountant.
+    // - 0: Program config.
+    // - 1: Rewards accountant.
+    // - 2: Distribution.
     let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    // Account 1 must be the rewards accountant.
+    //
+    // This method verifies that account 1 is the rewards accountant and is a signer.
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::RewardsAccountant,
+    )?;
+
+    // Make sure the program is not paused.
+    try_require_unpaused(&authorized_use.program_config)?;
+
+    // Account 2 must be the distribution.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // If the distribution rewards have already been finalized, we have nothing to do.
+    try_require_unfinalized_distribution_rewards(&distribution)?;
+
+    msg!("set total_contributors: {}", total_contributors);
+    distribution.total_contributors = total_contributors;
+
+    msg!("Set contributor_rewards_merkle_root: {}", merkle_root);
+    distribution.contributor_rewards_merkle_root = merkle_root;
+
+    Ok(())
+}
+
+fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Finalize distribution rewards");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Distribution.
+    // - 2: Payer (to pay for contributor claim relay lamports).
+    // - 3: System program.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    try_require_unpaused(&program_config)?;
+
+    // In order to finalize contributor rewards, the program config must have a non-zero
+    // amount of lamports to pay for each contributor reward claim. By providing these
+    // lamports to the distribution account, the contributor reward claims will not cost any
+    // gas to the invoker of this claim.
+    let contributor_reward_claim_lamports = program_config
+        .checked_relay_contributor_reward_claim_lamports()
+        .ok_or_else(|| {
+            msg!("Contributor reward claim relay lamports are misconfigured");
+            ProgramError::InvalidAccountData
+        })?;
 
     // Account 0 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    match setting {
-        DistributionConfiguration::UpdateContributorRewards {
-            total_contributors,
-            merkle_root,
-        } => {
-            if distribution.is_contributor_rewards_finalized() {
-                msg!("Contributor rewards have already been finalized");
-                return Err(ProgramError::InvalidAccountData);
-            }
+    // If the distribution rewards have already been finalized, we have nothing to do.
+    try_require_unfinalized_distribution_rewards(&distribution)?;
 
-            // Only the rewards accountant can determine contributor rewards.
-            VerifiedProgramAuthority::try_next_accounts(
-                &mut accounts_iter,
-                Authority::RewardsAccountant,
-            )?;
+    distribution.set_is_contributor_rewards_finalized(true);
 
-            msg!("set total_contributors: {}", total_contributors);
-            distribution.total_contributors = total_contributors;
+    // The rewards accountant can pay with another account. But most likely this account
+    // will be the same as the payments accountant. This account will need to be writable
+    // in order to transfer lamports to the payer (but we do not need to check this because
+    // the transfer CPI call will fail if this account is not writable).
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-            msg!("Set contributor_rewards_merkle_root: {}", merkle_root);
-            distribution.contributor_rewards_merkle_root = merkle_root;
-        }
-        DistributionConfiguration::FinalizeContributorRewards => {
-            if distribution.is_contributor_rewards_finalized() {
-                msg!("Contributor rewards have already been finalized");
-                return Err(ProgramError::InvalidAccountData);
-            }
+    let total_contributors = distribution.total_contributors;
+    let transfer_amount =
+        contributor_reward_claim_lamports.saturating_mul(total_contributors.into());
 
-            // Only the rewards accountant can finalize contributor rewards.
-            let authorized_use = VerifiedProgramAuthority::try_next_accounts(
-                &mut accounts_iter,
-                Authority::RewardsAccountant,
-            )?;
+    let transfer_ix =
+        system_instruction::transfer(payer_info.key, distribution.info.key, transfer_amount);
 
-            // In order to finalize contributor rewards, the program config must have a non-zero
-            // amount of lamports to pay for each contributor reward claim. By providing these
-            // lamports to the distribution account, the contributor reward claims will not cost any
-            // gas to the invoker of this claim.
-            let contributor_reward_claim_lamports = authorized_use
-                .program_config
-                .checked_relay_contributor_reward_claim_lamports()
-                .ok_or_else(|| {
-                    msg!("Contributor reward claim relay lamports are misconfigured");
-                    ProgramError::InvalidAccountData
-                })?;
+    invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
 
-            msg!("Finalized contributor rewards");
-            distribution.set_is_contributor_rewards_finalized(true);
-
-            // The rewards accountant can pay with another account. But most likely this account
-            // will be the same as the payments accountant. This account will need to be writable
-            // in order to transfer lamports to the payer (but we do not need to check this because
-            // the transfer CPI call will fail if this account is not writable).
-            let (_, payer_info) =
-                try_next_enumerated_account(&mut accounts_iter, Default::default())?;
-
-            let total_contributors = distribution.total_contributors;
-            let transfer_amount =
-                contributor_reward_claim_lamports.saturating_mul(total_contributors.into());
-
-            let transfer_ix = system_instruction::transfer(
-                payer_info.key,
-                distribution.info.key,
-                transfer_amount,
-            );
-
-            invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
-
-            msg!(
-                "Transferred {} lamports to distribution for {} contributor claims",
-                transfer_amount,
-                total_contributors
-            );
-        }
-    }
+    msg!(
+        "Transferred {} lamports to distribution for {} contributor claims",
+        transfer_amount,
+        total_contributors
+    );
 
     Ok(())
 }
@@ -1880,6 +1897,15 @@ fn try_serialize_journal_entries(
 fn try_require_unpaused(program_config: &ProgramConfig) -> ProgramResult {
     if program_config.is_paused() {
         msg!("Program is paused");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    Ok(())
+}
+
+fn try_require_unfinalized_distribution_rewards(distribution: &Distribution) -> ProgramResult {
+    if distribution.is_contributor_rewards_finalized() {
+        msg!("Distribution rewards have already been finalized");
         return Err(ProgramError::InvalidAccountData);
     }
 
