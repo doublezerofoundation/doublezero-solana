@@ -258,6 +258,8 @@ impl ProgramTestWithOwner {
         dz_ledger_sentinel: &Keypair,
         access_request_key: &Pubkey,
     ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
         let deny_access_ix = try_build_instruction(
             &ID,
             DenyAccessAccounts::new(&dz_ledger_sentinel.pubkey(), access_request_key),
@@ -269,7 +271,7 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             self.recent_blockhash,
             &[deny_access_ix],
-            &[dz_ledger_sentinel],
+            &[payer_signer, dz_ledger_sentinel],
         )
         .await?;
 
