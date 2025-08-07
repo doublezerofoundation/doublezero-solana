@@ -8,11 +8,9 @@ use doublezero_program_tools::{
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
 };
 use solana_account_info::AccountInfo;
-use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
-use solana_system_interface::instruction as system_instruction;
 use solana_sysvar::{rent::Rent, Sysvar};
 
 use crate::{
@@ -96,6 +94,7 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         &ID,
         accounts,
         Some(&rent_sysvar),
+        None,
     )?;
 
     // Establish the discriminator. Set other fields using the configure program instruction.
@@ -223,25 +222,29 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // manually create the account instruction to override the usual minimum rent exemption
-    // balance transfer and instead put down the refundable deposit
-    let create_account_ix = system_instruction::create_account(
-        payer_info.key,
-        &expected_access_request_key,
-        program_config
-            .access_request_deposit_parameters
-            .request_deposit_lamports,
-        zero_copy::data_end::<AccessRequest>() as u64,
+    let access_request_data_len = zero_copy::data_end::<AccessRequest>();
+    let additional_lamports = program_config
+        .access_request_deposit_parameters
+        .request_deposit_lamports
+        - Rent::get()
+            .unwrap()
+            .minimum_balance(access_request_data_len);
+    try_create_account(
+        Invoker::Signer(payer_info.key),
+        Invoker::Pda {
+            key: &expected_access_request_key,
+            signer_seeds: &[
+                AccessRequest::SEED_PREFIX,
+                service_key.as_ref(),
+                &[access_request_bump],
+            ],
+        },
+        new_access_request_info.lamports(),
+        access_request_data_len,
         &ID,
-    );
-    invoke_signed_unchecked(
-        &create_account_ix,
         accounts,
-        &[&[
-            AccessRequest::SEED_PREFIX,
-            service_key.as_ref(),
-            &[access_request_bump],
-        ]],
+        None,                      // rent_sysvar
+        Some(additional_lamports), // additional lamports to seed the account
     )?;
 
     // Finalize init the access request with the user service and beneficiary keys

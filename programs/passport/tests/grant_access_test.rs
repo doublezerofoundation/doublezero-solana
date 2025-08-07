@@ -94,10 +94,7 @@ async fn test_grant_access() {
         .await
         .unwrap();
 
-    assert_eq!(
-        sentinel_before_balance + access_fee,
-        sentinel_after_balance
-    );
+    assert_eq!(sentinel_before_balance + access_fee, sentinel_after_balance);
 
     let txn_signer_cost_adjustment = 10_000;
     let expected_payer_balance =

@@ -59,7 +59,6 @@ async fn test_request_access() {
         service_key,
         validator_id,
         rent_beneficiary_key: test_setup.payer_signer.pubkey(),
-        signature: [1u8; 64],
     };
 
     let access_request_balance_after = test_setup

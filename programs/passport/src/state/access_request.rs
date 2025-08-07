@@ -2,22 +2,12 @@ use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
 use solana_pubkey::Pubkey;
 
-#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct AccessRequest {
     pub service_key: Pubkey,
     pub validator_id: Pubkey,
     pub rent_beneficiary_key: Pubkey,
-}
-
-impl Default for AccessRequest {
-    fn default() -> Self {
-        Self {
-            service_key: Pubkey::default(),
-            validator_id: Pubkey::default(),
-            rent_beneficiary_key: Pubkey::default(),
-        }
-    }
 }
 
 impl PrecomputedDiscriminator for AccessRequest {
