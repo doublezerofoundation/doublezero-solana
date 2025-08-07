@@ -67,6 +67,6 @@ async fn test_request_access() {
         .get_balance(access_request_key)
         .await
         .unwrap();
-    assert_eq!(access_request_balance_after, access_deposit as u64);
+    assert_eq!(access_request_balance_after, access_deposit);
     assert_eq!(access_request, expected_access_request);
 }

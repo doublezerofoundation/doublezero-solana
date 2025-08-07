@@ -181,7 +181,7 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     let AccessMode::SolanaValidator {
         validator_id,
         service_key,
-        ed25519_signature,
+        ..
     } = access_mode;
 
     if service_key == Pubkey::default() {
@@ -230,7 +230,7 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         &expected_access_request_key,
         program_config
             .access_request_deposit_parameters
-            .request_deposit_lamports as u64,
+            .request_deposit_lamports,
         zero_copy::data_end::<AccessRequest>() as u64,
         &ID,
     );
@@ -250,7 +250,6 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     access_request.service_key = service_key;
     access_request.rent_beneficiary_key = *payer_info.key;
     access_request.validator_id = validator_id;
-    access_request.signature = ed25519_signature;
 
     msg!("Initialized user access request {}", service_key);
 
@@ -278,7 +277,7 @@ fn try_grant_access(accounts: &[AccountInfo]) -> ProgramResult {
 
     let request_fee = program_config
         .access_request_deposit_parameters
-        .request_fee_lamports as u64;
+        .request_fee_lamports;
     let mut access_request_lamports = access_request.info.try_borrow_mut_lamports()?;
     let request_refund = access_request_lamports.saturating_sub(request_fee);
 

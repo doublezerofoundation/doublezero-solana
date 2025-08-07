@@ -8,7 +8,7 @@ use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 
 //
-// Initialize the access request
+// Deny the access request
 //
 
 #[tokio::test]
@@ -73,7 +73,7 @@ async fn test_deny_access() {
         .await
         .unwrap();
 
-    assert_eq!(access_request_balance, access_deposit as u64);
+    assert_eq!(access_request_balance, access_deposit);
     assert_eq!(access_request.service_key, service_key);
 
     test_setup
@@ -94,7 +94,7 @@ async fn test_deny_access() {
         .unwrap();
 
     assert_eq!(
-        sentinel_before_balance + access_deposit as u64,
+        sentinel_before_balance + access_deposit,
         sentinel_after_balance
     );
     let expected_payer_balance = payer_before_balance - 10_000; // deduct cost of processing the deny txn

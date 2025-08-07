@@ -49,11 +49,11 @@ impl ProgramConfig {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct AccessRequestDepositParameters {
-    pub request_deposit_lamports: u32,
-    pub request_fee_lamports: u32,
+    pub request_deposit_lamports: u64,
+    pub request_fee_lamports: u64,
 }
 
 const _: () = assert!(
-    size_of::<ProgramConfig>() == 336,
+    size_of::<ProgramConfig>() == 344,
     "`ProgramConfig` size changed"
 );

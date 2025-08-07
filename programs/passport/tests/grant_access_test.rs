@@ -8,7 +8,7 @@ use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 
 //
-// Initialize the access request
+// Grant the access request
 //
 
 #[tokio::test]
@@ -71,7 +71,7 @@ async fn test_grant_access() {
         .get_balance(access_request_key)
         .await
         .unwrap();
-    assert_eq!(access_request_balance, access_deposit as u64);
+    assert_eq!(access_request_balance, access_deposit);
     assert_eq!(access_request.service_key, service_key);
 
     test_setup
@@ -95,12 +95,13 @@ async fn test_grant_access() {
         .unwrap();
 
     assert_eq!(
-        sentinel_before_balance + access_fee as u64,
+        sentinel_before_balance + access_fee,
         sentinel_after_balance
     );
 
+    let txn_signer_cost_adjustment = 10_000;
     let expected_payer_balance =
-        payer_before_balance + access_deposit as u64 - access_fee as u64 - 10_000; // fee for submitting the grant request as the banks client payer
+        payer_before_balance + access_deposit - access_fee - txn_signer_cost_adjustment;
     assert_eq!(expected_payer_balance, payer_after_balance);
 
     let access_request_info = test_setup

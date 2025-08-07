@@ -13,8 +13,8 @@ pub enum ProgramConfiguration {
     Flag(ProgramFlagConfiguration),
     Sentinel(Pubkey),
     AccessRequestDeposit {
-        request_deposit_lamports: u32,
-        request_fee_lamports: u32,
+        request_deposit_lamports: u64,
+        request_fee_lamports: u64,
     },
 }
 
