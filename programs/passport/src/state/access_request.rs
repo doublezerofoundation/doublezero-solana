@@ -29,15 +29,8 @@ impl PrecomputedDiscriminator for AccessRequest {
 impl AccessRequest {
     pub const SEED_PREFIX: &'static [u8] = b"access_request";
 
-    pub fn find_address(service_key: &Pubkey, validator_id: &Pubkey) -> (Pubkey, u8) {
-        Pubkey::find_program_address(
-            &[
-                Self::SEED_PREFIX,
-                service_key.as_ref(),
-                validator_id.as_ref(),
-            ],
-            &crate::ID,
-        )
+    pub fn find_address(service_key: &Pubkey) -> (Pubkey, u8) {
+        Pubkey::find_program_address(&[Self::SEED_PREFIX, service_key.as_ref()], &crate::ID)
     }
 
     pub fn access_request_message(service_key: &Pubkey) -> [u8; 48] {

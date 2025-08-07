@@ -212,7 +212,7 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
 
     // Account 2 must be the new access request account
     let (expected_access_request_key, access_request_bump) =
-        AccessRequest::find_address(&service_key, &validator_id);
+        AccessRequest::find_address(&service_key);
 
     // Enforce the account location and seed validity
     if new_access_request_info.key != &expected_access_request_key {
@@ -224,7 +224,7 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     }
 
     // manually create the account instruction to override the usual minimum rent exemption
-    // balance transfer and instead put down the refundable 1 SOL deposit
+    // balance transfer and instead put down the refundable deposit
     let create_account_ix = system_instruction::create_account(
         payer_info.key,
         &expected_access_request_key,
@@ -261,9 +261,10 @@ fn try_grant_access(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Grant access request");
 
     // Instruction accounts are expected in the following order:
-    // - 0: DZ Ledger Sentinel
-    // - 1: New access request account
-    // - 2: Rent beneficiary (original payer)
+    // - 0: Program Config
+    // - 1: DZ Ledger Sentinel
+    // - 2: New access request account
+    // - 3: Rent beneficiary (original payer)
     let mut accounts_iter = accounts.iter().enumerate();
 
     let authorized_use =
@@ -304,8 +305,9 @@ fn try_deny_access(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Deny access request");
 
     // Instruction accounts are expected in the following order:
-    // - 0: DZ Ledger Sentinel
-    // - 1: New access request account
+    // - 0: Program Config
+    // - 1: DZ Ledger Sentinel
+    // - 2: New access request account
     let mut accounts_iter = accounts.iter().enumerate();
 
     let authorized_use =
