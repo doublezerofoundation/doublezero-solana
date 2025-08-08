@@ -14,9 +14,9 @@ use doublezero_revenue_distribution::{
             InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
             InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
             SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
-            VerifyDistributionPaymentAccounts,
+            VerifyDistributionMerkleRootAccounts,
         },
-        ContributorRewardsConfiguration, DistributionPaymentKind,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind,
         DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
         RevenueDistributionInstructionData,
     },
@@ -43,6 +43,7 @@ use spl_token::{
     instruction as token_instruction,
     state::{Account as TokenAccount, AccountState as SplTokenAccountState, Mint},
 };
+use svm_hash::merkle::MerkleProof;
 
 pub const TOTAL_2Z_SUPPLY: u64 = 10_000_000_000 * u64::pow(10, 8);
 
@@ -758,24 +759,32 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn verify_distribution_payment(
+    pub async fn verify_distribution_merkle_root(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        payment_kind: DistributionPaymentKind,
+        distribution_merkle_root_kinds_and_proofs: Vec<(DistributionMerkleRootKind, MerkleProof)>,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let verify_distribution_payment_ix = try_build_instruction(
-            &ID,
-            VerifyDistributionPaymentAccounts::new(dz_epoch),
-            &RevenueDistributionInstructionData::VerifyDistributionPayment(payment_kind),
-        )
-        .unwrap();
+        let verify_distribution_merkle_root_ixs = distribution_merkle_root_kinds_and_proofs
+            .into_iter()
+            .map(|(kind, proof)| {
+                try_build_instruction(
+                    &ID,
+                    VerifyDistributionMerkleRootAccounts::new(dz_epoch),
+                    &RevenueDistributionInstructionData::VerifyDistributionMerkleRoot {
+                        kind,
+                        proof,
+                    },
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
 
         self.cached_blockhash = process_instructions_for_test(
             &mut self.banks_client,
             &self.cached_blockhash,
-            &[verify_distribution_payment_ix],
+            &verify_distribution_merkle_root_ixs,
             &[payer_signer],
         )
         .await?;

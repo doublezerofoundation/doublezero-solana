@@ -159,7 +159,7 @@ impl_unit_share!(
 
 // TODO: Remove this once validator-payments incorporates computing merkle
 // roots.
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SolanaValidatorPayment {
     pub node_id: Pubkey,
     pub amount: u64,

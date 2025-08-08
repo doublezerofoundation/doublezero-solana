@@ -69,11 +69,11 @@ pub enum ContributorRewardsConfiguration {
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
-pub enum DistributionPaymentKind {
-    SolanaValidator {
-        payment_owed: SolanaValidatorPayment,
-        proof: MerkleProof,
-    },
+pub enum DistributionMerkleRootKind {
+    SolanaValidatorPayment(SolanaValidatorPayment),
+    RewardShare(
+        // TODO: Add rewards share struct when created
+    ),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,7 +104,10 @@ pub enum RevenueDistributionInstructionData {
     InitializeContributorRewards(Pubkey),
     SetRewardsManager(Pubkey),
     ConfigureContributorRewards(ContributorRewardsConfiguration),
-    VerifyDistributionPayment(DistributionPaymentKind),
+    VerifyDistributionMerkleRoot {
+        kind: DistributionMerkleRootKind,
+        proof: MerkleProof,
+    },
 }
 
 impl RevenueDistributionInstructionData {
@@ -142,8 +145,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::set_rewards_manager");
     pub const CONFIGURE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_contributor_rewards");
-    pub const VERIFY_DISTRIBUTION_PAYMENT: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::verify_distribution_payment");
+    pub const VERIFY_DISTRIBUTION_MERKLE_ROOT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::verify_distribution_merkle_root");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -201,8 +204,11 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 ContributorRewardsConfiguration::deserialize_reader(reader)
                     .map(Self::ConfigureContributorRewards)
             }
-            Self::VERIFY_DISTRIBUTION_PAYMENT => {
-                BorshDeserialize::deserialize_reader(reader).map(Self::VerifyDistributionPayment)
+            Self::VERIFY_DISTRIBUTION_MERKLE_ROOT => {
+                let kind = BorshDeserialize::deserialize_reader(reader)?;
+                let proof = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::VerifyDistributionMerkleRoot { kind, proof })
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -279,9 +285,10 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::CONFIGURE_CONTRIBUTOR_REWARDS.serialize(writer)?;
                 setting.serialize(writer)
             }
-            Self::VerifyDistributionPayment(kind) => {
-                Self::VERIFY_DISTRIBUTION_PAYMENT.serialize(writer)?;
-                kind.serialize(writer)
+            Self::VerifyDistributionMerkleRoot { kind, proof } => {
+                Self::VERIFY_DISTRIBUTION_MERKLE_ROOT.serialize(writer)?;
+                kind.serialize(writer)?;
+                proof.serialize(writer)
             }
         }
     }

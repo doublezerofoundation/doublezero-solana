@@ -4,7 +4,7 @@ mod common;
 
 use doublezero_revenue_distribution::{
     instruction::{
-        DistributionPaymentKind, DistributionPaymentsConfiguration, ProgramConfiguration,
+        DistributionMerkleRootKind, DistributionPaymentsConfiguration, ProgramConfiguration,
         ProgramFlagConfiguration,
     },
     types::{DoubleZeroEpoch, SolanaValidatorPayment},
@@ -15,11 +15,11 @@ use solana_sdk::signature::{Keypair, Signer};
 use svm_hash::merkle::{merkle_root_from_byte_ref_leaves, MerkleProof};
 
 //
-// Verify distribution payment.
+// Verify distribution merkle root.
 //
 
 #[tokio::test]
-async fn test_verify_distribution_payment() {
+async fn test_verify_distribution_merkle_root() {
     let mut test_setup = common::start_test().await;
 
     let admin_signer = Keypair::new();
@@ -114,22 +114,28 @@ async fn test_verify_distribution_payment() {
         .await
         .unwrap();
 
-    for (i, payment_owed) in payments_data.iter().copied().enumerate() {
-        let proof = MerkleProof::from_byte_ref_leaves(
-            &leaves,
-            i,
-            Some(SolanaValidatorPayment::LEAF_PREFIX),
-        )
-        .unwrap();
-
-        test_setup
-            .verify_distribution_payment(
-                dz_epoch,
-                DistributionPaymentKind::SolanaValidator {
-                    payment_owed,
-                    proof,
-                },
+    let kinds_and_proofs = payments_data
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(i, payment_owed)| {
+            let proof = MerkleProof::from_byte_ref_leaves(
+                &leaves,
+                i,
+                Some(SolanaValidatorPayment::LEAF_PREFIX),
             )
+            .unwrap();
+
+            (
+                DistributionMerkleRootKind::SolanaValidatorPayment(payment_owed),
+                proof,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for chunk in kinds_and_proofs.chunks(64) {
+        test_setup
+            .verify_distribution_merkle_root(dz_epoch, chunk.to_vec())
             .await
             .unwrap();
     }

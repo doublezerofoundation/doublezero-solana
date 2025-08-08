@@ -19,11 +19,11 @@ use solana_pubkey::Pubkey;
 use solana_system_interface::instruction as system_instruction;
 use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
-use svm_hash::sha2::Hash;
+use svm_hash::{merkle::MerkleProof, sha2::Hash};
 
 use crate::{
     instruction::{
-        ContributorRewardsConfiguration, DistributionPaymentKind,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind,
         DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
         ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
@@ -102,8 +102,8 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::ConfigureContributorRewards(setting) => {
             try_configure_contributor_rewards(accounts, setting)
         }
-        RevenueDistributionInstructionData::VerifyDistributionPayment(kind) => {
-            try_verify_distribution_payment(accounts, kind)
+        RevenueDistributionInstructionData::VerifyDistributionMerkleRoot { kind, proof } => {
+            try_verify_distribution_merkle_root(accounts, kind, proof)
         }
     }
 }
@@ -1741,9 +1741,10 @@ fn try_configure_contributor_rewards(
     Ok(())
 }
 
-fn try_verify_distribution_payment(
+fn try_verify_distribution_merkle_root(
     accounts: &[AccountInfo],
-    kind: DistributionPaymentKind,
+    kind: DistributionMerkleRootKind,
+    proof: MerkleProof,
 ) -> ProgramResult {
     msg!("Verify distribution payment");
 
@@ -1752,22 +1753,23 @@ fn try_verify_distribution_payment(
     let distribution =
         ZeroCopyAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    let DistributionPaymentKind::SolanaValidator {
-        payment_owed,
-        proof,
-    } = kind;
+    match kind {
+        DistributionMerkleRootKind::SolanaValidatorPayment(payment_owed) => {
+            let merkle_root = payment_owed.merkle_root(proof);
 
-    let merkle_root = payment_owed.merkle_root(proof);
+            if merkle_root != distribution.solana_validator_payments_merkle_root.into() {
+                msg!("Invalid merkle root: {}", merkle_root);
+                return Err(ProgramError::InvalidInstructionData);
+            }
 
-    if merkle_root != distribution.solana_validator_payments_merkle_root.into() {
-        msg!("Invalid merkle root: {}", merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
+            msg!("Solana validator");
+            msg!("  node_id: {}", payment_owed.node_id);
+            msg!("  amount: {}", payment_owed.amount);
+        }
+        DistributionMerkleRootKind::RewardShare() => {
+            todo!()
+        }
     }
-
-    msg!("Solana validator");
-    msg!("  node_id: {}", payment_owed.node_id);
-    msg!("  amount: {}", payment_owed.amount);
-
     Ok(())
 }
 
