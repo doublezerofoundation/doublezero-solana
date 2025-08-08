@@ -2,7 +2,11 @@ mod common;
 
 //
 
-use doublezero_passport::instruction::{ProgramConfiguration, ProgramFlagConfiguration};
+use doublezero_passport::{
+    instruction::{ProgramConfiguration, ProgramFlagConfiguration},
+    state::AccessRequest,
+};
+use doublezero_program_tools::zero_copy;
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
@@ -66,12 +70,19 @@ async fn test_grant_access() {
 
     let (access_request_key, access_request) = test_setup.fetch_access_request(&service_key).await;
 
+    let request_rent = test_setup
+        .banks_client
+        .get_rent()
+        .await
+        .unwrap()
+        .minimum_balance(zero_copy::data_end::<AccessRequest>());
+
     let access_request_balance = test_setup
         .banks_client
         .get_balance(access_request_key)
         .await
         .unwrap();
-    assert_eq!(access_request_balance, access_deposit);
+    assert_eq!(access_request_balance, access_deposit + request_rent);
     assert_eq!(access_request.service_key, service_key);
 
     test_setup
@@ -97,8 +108,9 @@ async fn test_grant_access() {
     assert_eq!(sentinel_before_balance + access_fee, sentinel_after_balance);
 
     let txn_signer_cost_adjustment = 10_000;
-    let expected_payer_balance =
-        payer_before_balance + access_deposit - access_fee - txn_signer_cost_adjustment;
+    let expected_payer_balance = payer_before_balance + access_deposit + request_rent
+        - access_fee
+        - txn_signer_cost_adjustment;
     assert_eq!(expected_payer_balance, payer_after_balance);
 
     let access_request_info = test_setup

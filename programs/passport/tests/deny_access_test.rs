@@ -2,7 +2,11 @@ mod common;
 
 //
 
-use doublezero_passport::instruction::{ProgramConfiguration, ProgramFlagConfiguration};
+use doublezero_passport::{
+    instruction::{ProgramConfiguration, ProgramFlagConfiguration},
+    state::AccessRequest,
+};
+use doublezero_program_tools::zero_copy;
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
@@ -67,7 +71,14 @@ async fn test_deny_access() {
         .await
         .unwrap();
 
-    assert_eq!(access_request_balance, access_deposit);
+    let request_rent = test_setup
+        .banks_client
+        .get_rent()
+        .await
+        .unwrap()
+        .minimum_balance(zero_copy::data_end::<AccessRequest>());
+
+    assert_eq!(access_request_balance - request_rent, access_deposit);
     assert_eq!(access_request.service_key, service_key);
 
     test_setup
@@ -82,8 +93,8 @@ async fn test_deny_access() {
         .unwrap();
 
     assert_eq!(
-        sentinel_before_balance + access_deposit,
-        sentinel_after_balance
+        sentinel_before_balance + access_deposit + request_rent,
+        sentinel_after_balance,
     );
 
     let access_request_info = test_setup
