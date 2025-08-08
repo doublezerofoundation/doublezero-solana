@@ -16,7 +16,6 @@ pub fn try_create_token_account(
     current_lamports: u64,
     accounts: &[AccountInfo],
     rent_sysvar: Option<&Rent>,
-    additional_lamports: Option<u64>,
 ) -> ProgramResult {
     super::create_account::try_create_account(
         payer,
@@ -26,7 +25,7 @@ pub fn try_create_token_account(
         &spl_token::ID,
         accounts,
         rent_sysvar,
-        additional_lamports,
+        None, // No additional lamports for token accounts
     )?;
 
     let initialize_token_account_ix = spl_token::instruction::initialize_account3(

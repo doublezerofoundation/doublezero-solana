@@ -218,13 +218,6 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let access_request_data_len = zero_copy::data_end::<AccessRequest>();
-    let additional_lamports = program_config
-        .access_request_deposit_parameters
-        .request_deposit_lamports
-        - Rent::get()
-            .unwrap()
-            .minimum_balance(access_request_data_len);
     try_create_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
@@ -236,11 +229,15 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
             ],
         },
         new_access_request_info.lamports(),
-        access_request_data_len,
+        zero_copy::data_end::<AccessRequest>(),
         &ID,
         accounts,
-        None,                      // rent_sysvar
-        Some(additional_lamports), // additional lamports to seed the account
+        None, // rent_sysvar
+        Some(
+            program_config
+                .access_request_deposit_parameters
+                .request_deposit_lamports,
+        ), // additional lamports to seed the account
     )?;
 
     // Finalize init the access request with the user service and beneficiary keys

@@ -180,7 +180,6 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         new_reserve_2z_info.lamports(),
         accounts,
         Some(&rent_sysvar),
-        None, // additional_lamports
     )?;
 
     // Set the bump seeds and pause the program.
@@ -537,7 +536,6 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         new_journal_2z_token_pda_info.lamports(),
         accounts,
         Some(&rent_sysvar),
-        None, // additional_lamports
     )?;
 
     // After initializing the journal account, set the token account key.
@@ -747,7 +745,6 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         new_distribution_2z_token_pda_info.lamports(),
         accounts,
         Some(&rent_sysvar),
-        None, // additional_lamports
     )?;
 
     // Finally, initialize some distribution account fields.

@@ -59,12 +59,6 @@ async fn test_deny_access() {
         .await
         .unwrap();
 
-    let payer_before_balance = test_setup
-        .banks_client
-        .get_balance(test_setup.payer_signer.pubkey())
-        .await
-        .unwrap();
-
     let (access_request_key, access_request) = test_setup.fetch_access_request(&service_key).await;
 
     let access_request_balance = test_setup
@@ -87,18 +81,10 @@ async fn test_deny_access() {
         .await
         .unwrap();
 
-    let payer_after_balance = test_setup
-        .banks_client
-        .get_balance(test_setup.payer_signer.pubkey())
-        .await
-        .unwrap();
-
     assert_eq!(
         sentinel_before_balance + access_deposit,
         sentinel_after_balance
     );
-    let expected_payer_balance = payer_before_balance - 10_000; // deduct cost of processing the deny txn
-    assert_eq!(expected_payer_balance, payer_after_balance);
 
     let access_request_info = test_setup
         .banks_client

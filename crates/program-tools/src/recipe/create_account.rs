@@ -23,7 +23,7 @@ pub fn try_create_account(
         None => Rent::get().unwrap().minimum_balance(data_len),
     };
 
-    let lamports = rent + additional_lamports.unwrap_or(0);
+    let lamports = additional_lamports.unwrap_or_default().saturating_add(rent);
 
     if current_lamports == 0 {
         // PC Load Letter?
