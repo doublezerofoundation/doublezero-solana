@@ -10,9 +10,12 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+serde_json.workspace = true
 solana-client.workspace = true
 solana-commitment-config.workspace = true
 solana-sdk.workspace = true
+tokio.workspace = true
+url.workspace = true
 
 [[bin]]
 name = "2z-solana"

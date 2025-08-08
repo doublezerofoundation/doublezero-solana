@@ -12,10 +12,11 @@ pub use validator::*;
 
 //
 
-use crate::payer::SolanaPayerOptions;
 use anyhow::Result;
 use clap::Subcommand;
 use solana_sdk::pubkey::Pubkey;
+
+use crate::payer::{SolanaPayerOptions, Wallet};
 
 #[derive(Debug, Subcommand)]
 pub enum DoubleZero2zSolanaCommand {
@@ -28,14 +29,8 @@ pub enum DoubleZero2zSolanaCommand {
     /// Network contributor reward commands.
     Contributor(ContributorCliCommand),
 
-    /// Initialize the journal account. This command can only be called once.
-    InitializeJournal {
-        #[command(flatten)]
-        solana_payer_options: SolanaPayerOptions,
-    },
-
-    /// Initialize the program config account. This command can only be called once.
-    InitializeProgram {
+    /// Initialize program config and journal. Also set admin to yourself.
+    Initialize {
         #[command(flatten)]
         solana_payer_options: SolanaPayerOptions,
     },
@@ -56,7 +51,7 @@ pub enum DoubleZero2zSolanaCommand {
 }
 
 impl DoubleZero2zSolanaCommand {
-    pub fn into_execute(self) -> Result<()> {
+    pub async fn try_into_execute(self) -> Result<()> {
         match self {
             DoubleZero2zSolanaCommand::Admin(admin) => match admin.command {
                 AdminSubCommand::ConfigureJournal {
@@ -107,11 +102,11 @@ impl DoubleZero2zSolanaCommand {
                 }
                 AtaSubCommand::Fetch {
                     recipient,
-                    solana_rpc_options,
+                    solana_connection_options,
                 } => {
                     println!("Fetch");
                     println!("  recipient: {recipient}");
-                    println!("  solana_rpc_options: {solana_rpc_options:?}");
+                    println!("  solana_connection_options: {solana_connection_options:?}");
                 }
             },
             DoubleZero2zSolanaCommand::Contributor(contributor) => match contributor.command {
@@ -149,19 +144,19 @@ impl DoubleZero2zSolanaCommand {
                 }
                 ContributorSubCommand::Fetch {
                     service_key,
-                    solana_rpc_options,
+                    solana_connection_options,
                 } => {
                     println!("Fetch");
                     println!("  service_key: {service_key:?}");
-                    println!("  solana_rpc_options: {solana_rpc_options:?}");
+                    println!("  solana_connection_options: {solana_connection_options:?}");
                 }
                 ContributorSubCommand::FetchByManager {
                     rewards_manager_key,
-                    solana_rpc_options,
+                    solana_connection_options,
                 } => {
                     println!("FetchByManager");
                     println!("  rewards_manager_key: {rewards_manager_key}");
-                    println!("  solana_rpc_options: {solana_rpc_options:?}");
+                    println!("  solana_connection_options: {solana_connection_options:?}");
                 }
                 ContributorSubCommand::Initialize {
                     service_key,
@@ -172,17 +167,16 @@ impl DoubleZero2zSolanaCommand {
                     println!("  solana_payer_options: {solana_payer_options:?}");
                 }
             },
-            DoubleZero2zSolanaCommand::InitializeJournal {
+            DoubleZero2zSolanaCommand::Initialize {
                 solana_payer_options,
             } => {
-                println!("InitializeJournal");
+                println!("Initialize");
                 println!("  solana_payer_options: {solana_payer_options:?}");
-            }
-            DoubleZero2zSolanaCommand::InitializeProgram {
-                solana_payer_options,
-            } => {
-                println!("InitializeProgram");
-                println!("  solana_payer_options: {solana_payer_options:?}");
+
+                let wallet = Wallet::try_from(solana_payer_options)?;
+
+                let balance = wallet.get_balance(&wallet.pubkey()).await?;
+                println!("  balance: {balance}");
             }
             DoubleZero2zSolanaCommand::Prepaid(prepaid) => match prepaid.command {
                 PrepaidSubCommand::Initialize {
@@ -216,12 +210,12 @@ impl DoubleZero2zSolanaCommand {
                 ValidatorSubCommand::ComputeRevenue {
                     epoch,
                     out_filename,
-                    solana_rpc_options,
+                    solana_connection_options,
                 } => {
                     println!("ComputeRevenue");
                     println!("  epoch: {epoch:?}");
                     println!("  out_filename: {out_filename:?}");
-                    println!("  solana_rpc_options: {solana_rpc_options:?}");
+                    println!("  solana_connection_options: {solana_connection_options:?}");
                 }
                 ValidatorSubCommand::FetchComputedRevenue {
                     epoch,

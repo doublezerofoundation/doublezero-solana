@@ -1416,9 +1416,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "serde_json",
  "solana-client",
  "solana-commitment-config",
  "solana-sdk",
+ "tokio",
+ "url",
 ]
 
 [[package]]

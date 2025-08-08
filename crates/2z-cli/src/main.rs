@@ -11,6 +11,7 @@ struct DoubleZero2zApp {
     command: DoubleZero2zSolanaCommand,
 }
 
-fn main() -> Result<()> {
-    DoubleZero2zApp::parse().command.into_execute()
+#[tokio::main]
+async fn main() -> Result<()> {
+    DoubleZero2zApp::parse().command.try_into_execute().await
 }
