@@ -5,7 +5,9 @@ use doublezero_program_tools::{
         TryNextAccounts, UpgradeAuthority,
     },
     recipe::{
-        create_account::try_create_account, create_token_account::try_create_token_account, Invoker,
+        create_account::{try_create_account, CreateAccountOptions},
+        create_token_account::try_create_token_account,
+        Invoker,
     },
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
 };
@@ -151,8 +153,10 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         zero_copy::data_end::<ProgramConfig>(),
         &ID,
         accounts,
-        Some(&rent_sysvar),
-        None, // additional_lamports
+        CreateAccountOptions {
+            rent_sysvar: Some(&rent_sysvar),
+            additional_lamports: None,
+        },
     )?;
 
     // Account 2 must be the new reserve 2Z token account. This account should not exist yet.
@@ -507,8 +511,10 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         MAX_PERMITTED_DATA_INCREASE,
         &ID,
         accounts,
-        Some(&rent_sysvar),
-        None, // additional_lamports
+        CreateAccountOptions {
+            rent_sysvar: Some(&rent_sysvar),
+            additional_lamports: None,
+        },
     )?;
 
     // Account 2 must be the new 2Z token account. This account should not exist yet.
@@ -715,8 +721,10 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         zero_copy::data_end::<Distribution>(),
         &ID,
         accounts,
-        Some(&rent_sysvar),
-        None, // additional_lamports
+        CreateAccountOptions {
+            rent_sysvar: Some(&rent_sysvar),
+            additional_lamports: None,
+        },
     )?;
 
     // Account 2 must be the new 2Z token account. This account should not exist yet.
@@ -1135,8 +1143,7 @@ fn try_initialize_prepaid_connection(
         zero_copy::data_end::<PrepaidConnection>(),
         &ID,
         accounts,
-        None, // rent_sysvar
-        None, // additional_lamports
+        Default::default(),
     )?;
 
     // Finalize initialize the prepaid connection with the user and beneficiary keys.
@@ -1634,8 +1641,7 @@ fn try_initialize_contributor_rewards(
         zero_copy::data_end::<ContributorRewards>(),
         &ID,
         accounts,
-        None, // rent_sysvar
-        None, // additional_lamports
+        Default::default(),
     )?;
 
     // Finally, initialize the contributor rewards with the service key.

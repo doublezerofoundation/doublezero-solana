@@ -29,7 +29,7 @@ use doublezero_revenue_distribution::{
 };
 use solana_loader_v3_interface::{get_program_data_address, state::UpgradeableLoaderState};
 use solana_program_pack::Pack;
-use solana_program_test::{BanksClient, BanksClientError, ProgramTest};
+use solana_program_test::{BanksClient, BanksClientError, ProgramTest, ProgramTestBanksClientExt};
 use solana_pubkey::Pubkey;
 use solana_sdk::{
     account::Account,
@@ -173,22 +173,26 @@ pub struct IndexedProgramLog<'a> {
 }
 
 impl ProgramTestWithOwner {
-    pub async fn get_latest_blockhash(&self) -> Hash {
-        self.banks_client.get_latest_blockhash().await.unwrap()
+    pub async fn get_latest_blockhash(&mut self) -> Result<Hash, BanksClientError> {
+        let recent_blockhash = self.banks_client.get_latest_blockhash().await?;
+        self.banks_client
+            .get_new_latest_blockhash(&recent_blockhash)
+            .await
+            .map_err(Into::into)
     }
 
     // TODO: Is there a better way to do this?
     pub async fn unwrap_simulation_error(
-        &self,
+        &mut self,
         instructions: &[Instruction],
         signers: &[&Keypair],
     ) -> (TransactionError, Vec<String>) {
+        let recent_blockhash = self.get_latest_blockhash().await.unwrap();
+
         let payer_signer = &self.payer_signer;
 
         let mut tx_signers = vec![payer_signer];
         tx_signers.extend_from_slice(signers);
-
-        let recent_blockhash = self.get_latest_blockhash().await;
 
         let transaction = new_transaction(instructions, &tx_signers, recent_blockhash);
 
@@ -213,7 +217,8 @@ impl ProgramTestWithOwner {
         let transfer_ix =
             solana_system_interface::instruction::transfer(&payer_signer.pubkey(), dst_key, amount);
 
-        process_instructions_for_test(&self.banks_client, &[transfer_ix], &[payer_signer]).await?;
+        process_instructions_for_test(&mut self.banks_client, &[transfer_ix], &[payer_signer])
+            .await?;
 
         Ok(self)
     }
@@ -237,7 +242,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[token_transfer_ix],
             &[payer_signer, owner_signer],
         )
@@ -265,7 +270,7 @@ impl ProgramTestWithOwner {
         );
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[remove_me_ix, initialize_program_ix],
             &[payer_signer],
         )
@@ -286,7 +291,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[set_admin_ix],
             &[payer_signer, owner_signer],
         )
@@ -315,7 +320,7 @@ impl ProgramTestWithOwner {
             .collect::<Vec<_>>();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &configure_program_ixs,
             &[payer_signer, admin_signer],
         )
@@ -340,7 +345,7 @@ impl ProgramTestWithOwner {
             solana_system_interface::instruction::transfer(&payer_signer.pubkey(), &journal_key, 1);
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[remove_me_ix, initialize_journal_ix],
             &[payer_signer],
         )
@@ -369,7 +374,7 @@ impl ProgramTestWithOwner {
             .collect::<Vec<_>>();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &configure_program_ixs,
             &[payer_signer, admin_signer],
         )
@@ -398,7 +403,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[initialize_distribution_ix],
             &[payer_signer, accountant_signer],
         )
@@ -431,7 +436,7 @@ impl ProgramTestWithOwner {
             .collect::<Vec<_>>();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &configure_distribution_payments_ixs,
             &[payer_signer, payments_accountant_signer],
         )
@@ -460,7 +465,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[configure_distribution_rewards_ix],
             &[payer_signer, accountant_signer],
         )
@@ -483,7 +488,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[finalize_distribution_rewards_ix],
             &[payer_signer],
         )
@@ -517,7 +522,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[initialize_prepaid_connection_ix],
             &[payer_signer, token_transfer_authority_signer],
         )
@@ -544,7 +549,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[grant_prepaid_connection_access_ix],
             &[payer_signer, dz_ledger_sentinel_signer],
         )
@@ -574,7 +579,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[deny_prepaid_connection_access_ix],
             &[payer_signer, dz_ledger_sentinel_signer],
         )
@@ -608,7 +613,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[initialize_prepaid_connection_ix],
             &[payer_signer, token_transfer_authority_signer],
         )
@@ -637,7 +642,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[terminate_prepaid_connection_ix],
             &[payer_signer],
         )
@@ -660,7 +665,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[initialize_contributor_rewards_ix],
             &[payer_signer],
         )
@@ -685,7 +690,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[set_rewards_manager_ix],
             &[payer_signer, contributor_manager_signer],
         )
@@ -718,7 +723,7 @@ impl ProgramTestWithOwner {
             .collect::<Vec<_>>();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &configure_contributor_rewards_ixs,
             &[payer_signer, rewards_manager_signer],
         )
@@ -742,7 +747,7 @@ impl ProgramTestWithOwner {
         .unwrap();
 
         process_instructions_for_test(
-            &self.banks_client,
+            &mut self.banks_client,
             &[verify_distribution_payment_ix],
             &[payer_signer],
         )
@@ -910,11 +915,15 @@ impl ProgramTestWithOwner {
 }
 
 pub async fn process_instructions_for_test(
-    banks_client: &BanksClient,
+    banks_client: &mut BanksClient,
     instructions: &[Instruction],
     signers: &[&Keypair],
 ) -> Result<(), BanksClientError> {
     let recent_blockhash = banks_client.get_latest_blockhash().await?;
+    let recent_blockhash = banks_client
+        .get_new_latest_blockhash(&recent_blockhash)
+        .await
+        .map_err(|_| BanksClientError::ClientError("failed to get new blockhash"))?;
 
     let transaction = new_transaction(instructions, signers, recent_blockhash);
 
