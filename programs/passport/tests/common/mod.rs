@@ -23,7 +23,7 @@ use solana_sdk::{
     instruction::Instruction,
     message::{v0::Message, VersionedMessage},
     signature::{Keypair, Signer},
-    transaction::VersionedTransaction,
+    transaction::{TransactionError, VersionedTransaction},
 };
 
 pub struct TestAccount {
@@ -100,6 +100,31 @@ impl ProgramTestWithOwner {
         self.recent_blockhash = new_blockhash;
 
         Ok(self)
+    }
+
+    pub async fn unwrap_simulation_error(
+        &self,
+        instructions: &[Instruction],
+        signers: &[&Keypair],
+    ) -> (TransactionError, Vec<String>) {
+        let payer_signer = &self.payer_signer;
+
+        let mut tx_signers = vec![payer_signer];
+        tx_signers.extend_from_slice(signers);
+
+        let recent_blockhash = self.banks_client.get_latest_blockhash().await.unwrap();
+
+        let transaction = new_transaction(instructions, &tx_signers, recent_blockhash);
+
+        let simulated_tx = self
+            .banks_client
+            .simulate_transaction(transaction)
+            .await
+            .unwrap();
+
+        let tx_err = simulated_tx.result.unwrap().unwrap_err();
+
+        (tx_err, simulated_tx.simulation_details.unwrap().logs)
     }
 
     pub async fn initialize_program(&mut self) -> Result<&mut Self, BanksClientError> {
@@ -338,4 +363,15 @@ pub async fn process_instructions_for_test(
     banks_client.process_transaction(transaction).await?;
 
     banks_client.get_latest_blockhash().await
+}
+
+fn new_transaction(
+    instructions: &[Instruction],
+    signers: &[&Keypair],
+    recent_blockhash: Hash,
+) -> VersionedTransaction {
+    let message =
+        Message::try_compile(&signers[0].pubkey(), instructions, &[], recent_blockhash).unwrap();
+
+    VersionedTransaction::try_new(VersionedMessage::V0(message), signers).unwrap()
 }
