@@ -6,9 +6,8 @@ use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
-use solana_hash::Hash;
 use solana_pubkey::Pubkey;
-use svm_hash::merkle::MerkleProof;
+use svm_hash::{merkle::MerkleProof, sha2::Hash};
 
 use crate::types::{DoubleZeroEpoch, EpochDuration, SolanaValidatorPayment};
 

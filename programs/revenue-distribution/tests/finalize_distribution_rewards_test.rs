@@ -13,13 +13,13 @@ use doublezero_revenue_distribution::{
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
     ID,
 };
-use solana_hash::Hash;
 use solana_program_test::tokio;
 use solana_sdk::{
     instruction::InstructionError,
     signature::{Keypair, Signer},
     transaction::TransactionError,
 };
+use svm_hash::sha2::Hash;
 
 //
 // Finalize distribution rewards.

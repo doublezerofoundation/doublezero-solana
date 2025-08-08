@@ -1474,7 +1474,6 @@ dependencies = [
  "doublezero-program-tools",
  "solana-account-info",
  "solana-cpi",
- "solana-hash",
  "solana-instruction",
  "solana-loader-v3-interface",
  "solana-msg",

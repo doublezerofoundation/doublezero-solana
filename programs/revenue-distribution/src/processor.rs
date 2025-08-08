@@ -11,13 +11,13 @@ use doublezero_program_tools::{
 };
 use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
 use solana_cpi::invoke_signed_unchecked;
-use solana_hash::Hash;
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction as system_instruction;
 use solana_sysvar::{rent::Rent, Sysvar};
 use spl_token::instruction as token_instruction;
+use svm_hash::sha2::Hash;
 
 use crate::{
     instruction::{
