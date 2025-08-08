@@ -57,7 +57,6 @@ async fn test_request_access() {
 
     let expected_access_request = AccessRequest {
         service_key,
-        validator_id,
         rent_beneficiary_key: test_setup.payer_signer.pubkey(),
     };
 

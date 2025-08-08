@@ -6,7 +6,6 @@ use solana_pubkey::Pubkey;
 #[repr(C, align(8))]
 pub struct AccessRequest {
     pub service_key: Pubkey,
-    pub validator_id: Pubkey,
     pub rent_beneficiary_key: Pubkey,
 }
 
@@ -30,6 +29,6 @@ impl AccessRequest {
 }
 
 const _: () = assert!(
-    size_of::<AccessRequest>() == 96,
+    size_of::<AccessRequest>() == 64,
     "`AccessRequest` size changed"
 );

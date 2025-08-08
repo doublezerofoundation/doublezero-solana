@@ -177,11 +177,7 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
 fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> ProgramResult {
     msg!("Initiate access request");
 
-    let AccessMode::SolanaValidator {
-        validator_id,
-        service_key,
-        ..
-    } = access_mode;
+    let AccessMode::SolanaValidator { service_key, .. } = access_mode;
 
     if service_key == Pubkey::default() {
         msg!("User service key cannot be zero address");
@@ -252,7 +248,6 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         zero_copy::try_initialize::<AccessRequest>(new_access_request_info, None)?;
     access_request.service_key = service_key;
     access_request.rent_beneficiary_key = *payer_info.key;
-    access_request.validator_id = validator_id;
 
     msg!("Initialized user access request {}", service_key);
 
