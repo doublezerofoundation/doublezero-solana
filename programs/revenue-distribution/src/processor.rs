@@ -21,8 +21,9 @@ use spl_token::instruction as token_instruction;
 
 use crate::{
     instruction::{
-        ContributorRewardsConfiguration, DistributionPaymentsConfiguration, JournalConfiguration,
-        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionPaymentKind,
+        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
@@ -98,6 +99,9 @@ fn try_process_instruction(
         }
         RevenueDistributionInstructionData::ConfigureContributorRewards(setting) => {
             try_configure_contributor_rewards(accounts, setting)
+        }
+        RevenueDistributionInstructionData::VerifyDistributionPayment(kind) => {
+            try_verify_distribution_payment(accounts, kind)
         }
     }
 }
@@ -1727,6 +1731,36 @@ fn try_configure_contributor_rewards(
             contributor_rewards.recipient_shares = recipients;
         }
     }
+
+    Ok(())
+}
+
+fn try_verify_distribution_payment(
+    accounts: &[AccountInfo],
+    kind: DistributionPaymentKind,
+) -> ProgramResult {
+    msg!("Verify distribution payment");
+
+    // We expect only the distribution account for this instruction.
+    let mut accounts_iter = accounts.iter().enumerate();
+    let distribution =
+        ZeroCopyAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let DistributionPaymentKind::SolanaValidator {
+        payment_owed,
+        proof,
+    } = kind;
+
+    let merkle_root = payment_owed.merkle_root(proof);
+
+    if merkle_root != distribution.solana_validator_payments_merkle_root.into() {
+        msg!("Invalid merkle root: {}", merkle_root);
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    msg!("Solana validator");
+    msg!("  node_id: {}", payment_owed.node_id);
+    msg!("  amount: {}", payment_owed.amount);
 
     Ok(())
 }

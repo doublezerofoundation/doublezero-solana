@@ -8,8 +8,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
 use solana_hash::Hash;
 use solana_pubkey::Pubkey;
+use svm_hash::merkle::MerkleProof;
 
-use crate::types::{DoubleZeroEpoch, EpochDuration};
+use crate::types::{DoubleZeroEpoch, EpochDuration, SolanaValidatorPayment};
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ProgramConfiguration {
@@ -68,6 +69,14 @@ pub enum ContributorRewardsConfiguration {
     Recipients(Vec<(Pubkey, u16)>),
 }
 
+#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
+pub enum DistributionPaymentKind {
+    SolanaValidator {
+        payment_owed: SolanaValidatorPayment,
+        proof: MerkleProof,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RevenueDistributionInstructionData {
     InitializeProgram,
@@ -96,6 +105,7 @@ pub enum RevenueDistributionInstructionData {
     InitializeContributorRewards(Pubkey),
     SetRewardsManager(Pubkey),
     ConfigureContributorRewards(ContributorRewardsConfiguration),
+    VerifyDistributionPayment(DistributionPaymentKind),
 }
 
 impl RevenueDistributionInstructionData {
@@ -133,6 +143,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::set_rewards_manager");
     pub const CONFIGURE_CONTRIBUTOR_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_contributor_rewards");
+    pub const VERIFY_DISTRIBUTION_PAYMENT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::verify_distribution_payment");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -189,6 +201,9 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             Self::CONFIGURE_CONTRIBUTOR_REWARDS => {
                 ContributorRewardsConfiguration::deserialize_reader(reader)
                     .map(Self::ConfigureContributorRewards)
+            }
+            Self::VERIFY_DISTRIBUTION_PAYMENT => {
+                BorshDeserialize::deserialize_reader(reader).map(Self::VerifyDistributionPayment)
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -264,6 +279,10 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             Self::ConfigureContributorRewards(setting) => {
                 Self::CONFIGURE_CONTRIBUTOR_REWARDS.serialize(writer)?;
                 setting.serialize(writer)
+            }
+            Self::VerifyDistributionPayment(kind) => {
+                Self::VERIFY_DISTRIBUTION_PAYMENT.serialize(writer)?;
+                kind.serialize(writer)
             }
         }
     }

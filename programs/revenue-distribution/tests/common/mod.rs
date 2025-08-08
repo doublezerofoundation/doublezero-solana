@@ -14,9 +14,11 @@ use doublezero_revenue_distribution::{
             InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
             InitializeProgramAccounts, LoadPrepaidConnectionAccounts, SetAdminAccounts,
             SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
+            VerifyDistributionPaymentAccounts,
         },
-        ContributorRewardsConfiguration, DistributionPaymentsConfiguration, JournalConfiguration,
-        ProgramConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionPaymentKind,
+        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
+        RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
@@ -719,6 +721,30 @@ impl ProgramTestWithOwner {
             &self.banks_client,
             &configure_contributor_rewards_ixs,
             &[payer_signer, rewards_manager_signer],
+        )
+        .await?;
+
+        Ok(self)
+    }
+
+    pub async fn verify_distribution_payment(
+        &mut self,
+        dz_epoch: DoubleZeroEpoch,
+        payment_kind: DistributionPaymentKind,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let verify_distribution_payment_ix = try_build_instruction(
+            &ID,
+            VerifyDistributionPaymentAccounts::new(dz_epoch),
+            &RevenueDistributionInstructionData::VerifyDistributionPayment(payment_kind),
+        )
+        .unwrap();
+
+        process_instructions_for_test(
+            &self.banks_client,
+            &[verify_distribution_payment_ix],
+            &[payer_signer],
         )
         .await?;
 
