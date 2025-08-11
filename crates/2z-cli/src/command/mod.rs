@@ -14,9 +14,6 @@ pub use validator::*;
 
 use anyhow::Result;
 use clap::Subcommand;
-use solana_sdk::pubkey::Pubkey;
-
-use crate::payer::{SolanaPayerOptions, Wallet};
 
 #[derive(Debug, Subcommand)]
 pub enum DoubleZero2zSolanaCommand {
@@ -29,22 +26,8 @@ pub enum DoubleZero2zSolanaCommand {
     /// Network contributor reward commands.
     Contributor(ContributorCliCommand),
 
-    /// Initialize program config and journal. Also set admin to yourself.
-    Initialize {
-        #[command(flatten)]
-        solana_payer_options: SolanaPayerOptions,
-    },
-
     /// Prepaid connection commands.
     Prepaid(PrepaidCliCommand),
-
-    /// Set the admin key. Only the upgrade authority can execute this command.
-    SetAdmin {
-        admin_key: Pubkey,
-
-        #[command(flatten)]
-        solana_payer_options: SolanaPayerOptions,
-    },
 
     /// Solana validator commands.
     Validator(ValidatorCliCommand),
@@ -53,44 +36,7 @@ pub enum DoubleZero2zSolanaCommand {
 impl DoubleZero2zSolanaCommand {
     pub async fn try_into_execute(self) -> Result<()> {
         match self {
-            DoubleZero2zSolanaCommand::Admin(admin) => match admin.command {
-                AdminSubCommand::ConfigureJournal {
-                    activation_cost,
-                    cost_per_epoch,
-                    payer_options,
-                } => {
-                    println!("ConfigureJournal");
-                    println!("  activation_cost: {activation_cost:?}");
-                    println!("  cost_per_epoch: {cost_per_epoch:?}");
-                    println!("  payer_options: {payer_options:?}");
-                }
-                AdminSubCommand::ConfigureProgram {
-                    pause,
-                    unpause,
-                    accountant_key,
-                    sol_2z_swap_program_id,
-                    solana_validator_fee_percentage,
-                    calculation_grace_period_seconds,
-                    prepaid_connection_termination_relay_lamports,
-                    payer_options,
-                } => {
-                    println!("ConfigureProgram");
-                    println!(".. pause: {pause:?}");
-                    println!(".. unpause: {unpause:?}");
-                    println!(".. accountant_key: {accountant_key:?}");
-                    println!(".. sol_2z_swap_program_id: {sol_2z_swap_program_id:?}");
-                    println!(
-                        ".. solana_validator_fee_percentage: {solana_validator_fee_percentage:?}"
-                    );
-                    println!(
-                        ".. calculation_grace_period_seconds: {calculation_grace_period_seconds:?}"
-                    );
-                    println!(
-                        ".. prepaid_connection_termination_relay_lamports: {prepaid_connection_termination_relay_lamports:?}"
-                    );
-                    println!(".. payer_options: {payer_options:?}");
-                }
-            },
+            DoubleZero2zSolanaCommand::Admin(admin) => admin.command.try_into_execute().await?,
             DoubleZero2zSolanaCommand::Ata(ata) => match ata.command {
                 AtaSubCommand::Create {
                     recipient,
@@ -167,17 +113,6 @@ impl DoubleZero2zSolanaCommand {
                     println!("  solana_payer_options: {solana_payer_options:?}");
                 }
             },
-            DoubleZero2zSolanaCommand::Initialize {
-                solana_payer_options,
-            } => {
-                println!("Initialize");
-                println!("  solana_payer_options: {solana_payer_options:?}");
-
-                let wallet = Wallet::try_from(solana_payer_options)?;
-
-                let balance = wallet.get_balance(&wallet.pubkey()).await?;
-                println!("  balance: {balance}");
-            }
             DoubleZero2zSolanaCommand::Prepaid(prepaid) => match prepaid.command {
                 PrepaidSubCommand::Initialize {
                     service_key,
@@ -198,14 +133,6 @@ impl DoubleZero2zSolanaCommand {
                     println!("  solana_payer_options: {solana_payer_options:?}");
                 }
             },
-            DoubleZero2zSolanaCommand::SetAdmin {
-                admin_key,
-                solana_payer_options,
-            } => {
-                println!("SetAdmin");
-                println!("  admin_key: {admin_key}");
-                println!("  solana_payer_options: {solana_payer_options:?}");
-            }
             DoubleZero2zSolanaCommand::Validator(validator) => match validator.command {
                 ValidatorSubCommand::ComputeRevenue {
                     epoch,

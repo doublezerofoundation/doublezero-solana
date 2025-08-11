@@ -4,7 +4,11 @@ use anyhow::{bail, Error, Result};
 use clap::Args;
 use solana_client::nonblocking::{pubsub_client::PubsubClient, rpc_client::RpcClient};
 use solana_commitment_config::CommitmentConfig;
+use solana_sdk::pubkey::Pubkey;
 use url::Url;
+
+const SOLANA_MAINNET_GENESIS_HASH: Pubkey =
+    solana_sdk::pubkey!("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
 
 #[derive(Debug, Args)]
 pub struct DoubleZeroLedgerRpcOptions {
@@ -28,9 +32,16 @@ pub struct SolanaConnectionOptions {
 pub struct Connection {
     pub rpc_client: RpcClient,
     pub ws_url: Url,
+    pub is_mainnet: bool,
 }
 
 impl Connection {
+    pub async fn cache_if_mainnet(&mut self) -> Result<()> {
+        let genesis_hash = self.get_genesis_hash().await?;
+        self.is_mainnet = genesis_hash.to_bytes() == SOLANA_MAINNET_GENESIS_HASH.to_bytes();
+        Ok(())
+    }
+
     pub async fn new_websocket_client(&self) -> Result<PubsubClient> {
         PubsubClient::new(self.ws_url.as_ref())
             .await
@@ -47,7 +58,7 @@ impl TryFrom<SolanaConnectionOptions> for Connection {
             ws_url,
         } = opts;
 
-        let url_or_moniker = url_or_moniker.as_ref().map(|s| s.as_str()).unwrap_or("m");
+        let url_or_moniker = url_or_moniker.as_deref().unwrap_or("m");
         let rpc_url = Url::parse(normalize_to_url_if_moniker(url_or_moniker))?;
 
         let ws_url = match ws_url {
@@ -72,6 +83,7 @@ impl TryFrom<SolanaConnectionOptions> for Connection {
                 CommitmentConfig::confirmed(),
             ),
             ws_url,
+            is_mainnet: false,
         })
     }
 }

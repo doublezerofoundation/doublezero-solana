@@ -10,10 +10,13 @@ version.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+doublezero-program-tools.workspace = true
+doublezero-revenue-distribution = { workspace = true, features = ["no-entrypoint"] }
 serde_json.workspace = true
 solana-client.workspace = true
 solana-commitment-config.workspace = true
 solana-sdk.workspace = true
+solana-transaction-status-client-types.workspace = true
 tokio.workspace = true
 url.workspace = true
 
