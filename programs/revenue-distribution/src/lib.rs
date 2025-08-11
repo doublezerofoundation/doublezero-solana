@@ -1,6 +1,6 @@
 pub mod env;
 pub mod instruction;
-#[cfg(not(feature = "no-entrypoint"))]
+#[cfg(feature = "entrypoint")]
 mod processor;
 pub mod state;
 pub mod types;
