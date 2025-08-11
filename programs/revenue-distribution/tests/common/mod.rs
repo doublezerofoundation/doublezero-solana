@@ -76,7 +76,7 @@ pub async fn start_test_with_accounts(accounts: Vec<TestAccount>) -> ProgramTest
         .unwrap(),
         ..Default::default()
     };
-    program_test.add_account(program_data_key(), program_data_acct);
+    program_test.add_account(get_program_data_address(&ID), program_data_acct);
 
     let mint_data = Mint {
         mint_authority: owner_signer.pubkey().into(),
@@ -164,10 +164,6 @@ pub fn generate_token_accounts_for_test(mint_key: &Pubkey, owners: &[Pubkey]) ->
             }
         })
         .collect()
-}
-
-pub fn program_data_key() -> Pubkey {
-    get_program_data_address(&ID)
 }
 
 pub struct IndexedProgramLog<'a> {
@@ -296,7 +292,7 @@ impl ProgramTestWithOwner {
 
         let set_admin_ix = try_build_instruction(
             &ID,
-            SetAdminAccounts::new(&program_data_key(), &owner_signer.pubkey()),
+            SetAdminAccounts::new(&ID, &owner_signer.pubkey()),
             &RevenueDistributionInstructionData::SetAdmin(*admin_key),
         )
         .unwrap();
