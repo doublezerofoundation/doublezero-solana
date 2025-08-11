@@ -267,7 +267,7 @@ impl ProgramTestWithOwner {
 
         let initialize_program_ix = try_build_instruction(
             &ID,
-            InitializeProgramAccounts::new(&payer_signer.pubkey()),
+            InitializeProgramAccounts::new(&payer_signer.pubkey(), &DOUBLEZERO_MINT_KEY),
             &RevenueDistributionInstructionData::InitializeProgram,
         )
         .unwrap();
@@ -348,7 +348,7 @@ impl ProgramTestWithOwner {
 
         let initialize_journal_ix = try_build_instruction(
             &ID,
-            InitializeJournalAccounts::new(&payer_signer.pubkey()),
+            InitializeJournalAccounts::new(&payer_signer.pubkey(), &DOUBLEZERO_MINT_KEY),
             &RevenueDistributionInstructionData::InitializeJournal,
         )
         .unwrap();
@@ -412,6 +412,7 @@ impl ProgramTestWithOwner {
                 &accountant_signer.pubkey(),
                 &payer_signer.pubkey(),
                 program_config.next_dz_epoch,
+                &DOUBLEZERO_MINT_KEY,
             ),
             &RevenueDistributionInstructionData::InitializeDistribution,
         )
@@ -529,6 +530,7 @@ impl ProgramTestWithOwner {
             &ID,
             InitializePrepaidConnectionAccounts::new(
                 source_2z_token_account_key,
+                &DOUBLEZERO_MINT_KEY,
                 &token_transfer_authority_signer.pubkey(),
                 &payer_signer.pubkey(),
                 user_key,
@@ -624,6 +626,7 @@ impl ProgramTestWithOwner {
             &ID,
             LoadPrepaidConnectionAccounts::new(
                 source_2z_token_account_key,
+                &DOUBLEZERO_MINT_KEY,
                 &token_transfer_authority_signer.pubkey(),
                 user_key,
             ),

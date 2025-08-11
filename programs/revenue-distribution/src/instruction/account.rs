@@ -8,7 +8,6 @@ use crate::{
         ProgramConfig,
     },
     types::DoubleZeroEpoch,
-    DOUBLEZERO_MINT_KEY,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -16,16 +15,18 @@ pub struct InitializeProgramAccounts {
     pub payer_key: Pubkey,
     pub new_program_config_key: Pubkey,
     pub reserve_2z_key: Pubkey,
+    pub dz_mint_key: Pubkey,
 }
 
 impl InitializeProgramAccounts {
-    pub fn new(payer_key: &Pubkey) -> Self {
+    pub fn new(payer_key: &Pubkey, dz_mint_key: &Pubkey) -> Self {
         let new_program_config_key = ProgramConfig::find_address().0;
 
         Self {
             payer_key: *payer_key,
             new_program_config_key,
             reserve_2z_key: find_2z_token_pda_address(&new_program_config_key).0,
+            dz_mint_key: *dz_mint_key,
         }
     }
 }
@@ -36,13 +37,14 @@ impl From<InitializeProgramAccounts> for Vec<AccountMeta> {
             payer_key,
             new_program_config_key,
             reserve_2z_key,
+            dz_mint_key,
         } = accounts;
 
         vec![
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_program_config_key, false),
             AccountMeta::new(reserve_2z_key, false),
-            AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
+            AccountMeta::new_readonly(dz_mint_key, false),
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new_readonly(system_program::ID, false),
         ]
@@ -116,16 +118,18 @@ pub struct InitializeJournalAccounts {
     pub payer_key: Pubkey,
     pub new_journal_key: Pubkey,
     pub journal_2z_token_pda_key: Pubkey,
+    pub dz_mint_key: Pubkey,
 }
 
 impl InitializeJournalAccounts {
-    pub fn new(payer_key: &Pubkey) -> Self {
+    pub fn new(payer_key: &Pubkey, dz_mint_key: &Pubkey) -> Self {
         let new_journal_key = Journal::find_address().0;
 
         Self {
             payer_key: *payer_key,
             new_journal_key,
             journal_2z_token_pda_key: find_2z_token_pda_address(&new_journal_key).0,
+            dz_mint_key: *dz_mint_key,
         }
     }
 }
@@ -136,13 +140,14 @@ impl From<InitializeJournalAccounts> for Vec<AccountMeta> {
             payer_key,
             new_journal_key,
             journal_2z_token_pda_key,
+            dz_mint_key,
         } = accounts;
 
         vec![
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_journal_key, false),
             AccountMeta::new(journal_2z_token_pda_key, false),
-            AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
+            AccountMeta::new_readonly(dz_mint_key, false),
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new_readonly(system_program::ID, false),
         ]
@@ -189,12 +194,18 @@ pub struct InitializeDistributionAccounts {
     pub payer_key: Pubkey,
     pub new_distribution_key: Pubkey,
     pub distribution_2z_token_pda_key: Pubkey,
+    pub dz_mint_key: Pubkey,
     pub journal_key: Pubkey,
     pub journal_2z_token_pda_key: Pubkey,
 }
 
 impl InitializeDistributionAccounts {
-    pub fn new(accountant_key: &Pubkey, payer_key: &Pubkey, dz_epoch: DoubleZeroEpoch) -> Self {
+    pub fn new(
+        accountant_key: &Pubkey,
+        payer_key: &Pubkey,
+        dz_epoch: DoubleZeroEpoch,
+        dz_mint_key: &Pubkey,
+    ) -> Self {
         let new_distribution_key = Distribution::find_address(dz_epoch).0;
         let journal_key = Journal::find_address().0;
 
@@ -204,6 +215,7 @@ impl InitializeDistributionAccounts {
             payer_key: *payer_key,
             new_distribution_key,
             distribution_2z_token_pda_key: find_2z_token_pda_address(&new_distribution_key).0,
+            dz_mint_key: *dz_mint_key,
             journal_key,
             journal_2z_token_pda_key: find_2z_token_pda_address(&journal_key).0,
         }
@@ -218,6 +230,7 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
             payer_key,
             new_distribution_key,
             distribution_2z_token_pda_key,
+            dz_mint_key,
             journal_key,
             journal_2z_token_pda_key,
         } = accounts;
@@ -228,7 +241,7 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
             AccountMeta::new(payer_key, true),
             AccountMeta::new(new_distribution_key, false),
             AccountMeta::new(distribution_2z_token_pda_key, false),
-            AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
+            AccountMeta::new_readonly(dz_mint_key, false),
             AccountMeta::new_readonly(spl_token::ID, false),
             AccountMeta::new(journal_key, false),
             AccountMeta::new(journal_2z_token_pda_key, false),
@@ -342,6 +355,7 @@ pub struct InitializePrepaidConnectionAccounts {
     pub program_config_key: Pubkey,
     pub journal_key: Pubkey,
     pub source_2z_token_account_key: Pubkey,
+    pub dz_mint_key: Pubkey,
     pub token_transfer_authority_key: Pubkey,
     pub reserve_2z_key: Pubkey,
     pub payer_key: Pubkey,
@@ -351,6 +365,7 @@ pub struct InitializePrepaidConnectionAccounts {
 impl InitializePrepaidConnectionAccounts {
     pub fn new(
         source_2z_token_account_key: &Pubkey,
+        dz_mint_key: &Pubkey,
         token_transfer_authority_key: &Pubkey,
         payer_key: &Pubkey,
         user_key: &Pubkey,
@@ -361,6 +376,7 @@ impl InitializePrepaidConnectionAccounts {
             program_config_key,
             journal_key: Journal::find_address().0,
             source_2z_token_account_key: *source_2z_token_account_key,
+            dz_mint_key: *dz_mint_key,
             token_transfer_authority_key: *token_transfer_authority_key,
             reserve_2z_key: find_2z_token_pda_address(&program_config_key).0,
             payer_key: *payer_key,
@@ -375,6 +391,7 @@ impl From<InitializePrepaidConnectionAccounts> for Vec<AccountMeta> {
             program_config_key,
             journal_key,
             source_2z_token_account_key,
+            dz_mint_key,
             token_transfer_authority_key,
             reserve_2z_key,
             payer_key,
@@ -385,7 +402,7 @@ impl From<InitializePrepaidConnectionAccounts> for Vec<AccountMeta> {
             AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new_readonly(journal_key, false),
             AccountMeta::new(source_2z_token_account_key, false),
-            AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
+            AccountMeta::new_readonly(dz_mint_key, false),
             AccountMeta::new(reserve_2z_key, false),
             AccountMeta::new_readonly(token_transfer_authority_key, true),
             AccountMeta::new_readonly(spl_token::ID, false),
@@ -488,6 +505,7 @@ pub struct LoadPrepaidConnectionAccounts {
     pub journal_key: Pubkey,
     pub prepaid_connection_key: Pubkey,
     pub source_2z_token_account_key: Pubkey,
+    pub dz_mint_key: Pubkey,
     pub journal_2z_token_pda_key: Pubkey,
     pub token_transfer_authority_key: Pubkey,
 }
@@ -495,6 +513,7 @@ pub struct LoadPrepaidConnectionAccounts {
 impl LoadPrepaidConnectionAccounts {
     pub fn new(
         source_2z_token_account_key: &Pubkey,
+        dz_mint_key: &Pubkey,
         token_transfer_authority_key: &Pubkey,
         user_key: &Pubkey,
     ) -> Self {
@@ -506,6 +525,7 @@ impl LoadPrepaidConnectionAccounts {
             journal_key,
             prepaid_connection_key: PrepaidConnection::find_address(user_key).0,
             source_2z_token_account_key: *source_2z_token_account_key,
+            dz_mint_key: *dz_mint_key,
             journal_2z_token_pda_key: find_2z_token_pda_address(&journal_key).0,
             token_transfer_authority_key: *token_transfer_authority_key,
         }
@@ -519,6 +539,7 @@ impl From<LoadPrepaidConnectionAccounts> for Vec<AccountMeta> {
             journal_key,
             prepaid_connection_key,
             source_2z_token_account_key,
+            dz_mint_key,
             journal_2z_token_pda_key,
             token_transfer_authority_key,
         } = accounts;
@@ -528,7 +549,7 @@ impl From<LoadPrepaidConnectionAccounts> for Vec<AccountMeta> {
             AccountMeta::new(journal_key, false),
             AccountMeta::new(prepaid_connection_key, false),
             AccountMeta::new(source_2z_token_account_key, false),
-            AccountMeta::new_readonly(DOUBLEZERO_MINT_KEY, false),
+            AccountMeta::new_readonly(dz_mint_key, false),
             AccountMeta::new(journal_2z_token_pda_key, false),
             AccountMeta::new_readonly(token_transfer_authority_key, true),
             AccountMeta::new_readonly(spl_token::ID, false),
