@@ -1411,7 +1411,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "doublezero-2z-solana-cli"
+name = "doublezero-2z-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
