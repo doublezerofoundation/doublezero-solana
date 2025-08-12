@@ -7,11 +7,14 @@ ROOT_DIR=$(cd "$(dirname "$0")/.."; pwd)
 LOCALNET_DIR=$ROOT_DIR/localnet
 LOCALNET_CACHE_DIR=$LOCALNET_DIR/cache
 
+REVENUE_DISTRIBUTION_PROGRAM_ID=dzrevZC94tBLwuHw1dyynZxaXTWyp7yocsinyEVPtt4
+PASSPORT_PROGRAM_ID=dzpt2dM8g9qsLxpdddnVvKfjkCLVXd82jrrQVJigCPV
+
 mkdir -p $LOCALNET_CACHE_DIR
 
 ### Dump program accounts from Solana devnet into test-ledger
-solana program dump -u d dzrevZC94tBLwuHw1dyynZxaXTWyp7yocsinyEVPtt4 $LOCALNET_CACHE_DIR/dzrevZC94tBLwuHw1dyynZxaXTWyp7yocsinyEVPtt4.so
-solana program dump -u d dzpt2dM8g9qsLxpdddnVvKfjkCLVXd82jrrQVJigCPV $LOCALNET_CACHE_DIR/dzpt2dM8g9qsLxpdddnVvKfjkCLVXd82jrrQVJigCPV.so
+solana program dump -u d $REVENUE_DISTRIBUTION_PROGRAM_ID $LOCALNET_CACHE_DIR/$REVENUE_DISTRIBUTION_PROGRAM_ID.so
+solana program dump -u d $PASSPORT_PROGRAM_ID $LOCALNET_CACHE_DIR/$PASSPORT_PROGRAM_ID.so
 
 DEFAULT_USER_KEYPAIR=$HOME/.config/solana/id.json
 
@@ -26,12 +29,12 @@ USER_KEY=$(solana address)
 solana-test-validator -u d \
     --reset \
     --upgradeable-program \
-    dzrevZC94tBLwuHw1dyynZxaXTWyp7yocsinyEVPtt4 \
-    $LOCALNET_CACHE_DIR/dzrevZC94tBLwuHw1dyynZxaXTWyp7yocsinyEVPtt4.so \
+    $REVENUE_DISTRIBUTION_PROGRAM_ID \
+    $LOCALNET_CACHE_DIR/$REVENUE_DISTRIBUTION_PROGRAM_ID.so \
     $USER_KEY \
     --upgradeable-program \
-    dzpt2dM8g9qsLxpdddnVvKfjkCLVXd82jrrQVJigCPV \
-    $LOCALNET_CACHE_DIR/dzpt2dM8g9qsLxpdddnVvKfjkCLVXd82jrrQVJigCPV.so \
+    $PASSPORT_PROGRAM_ID \
+    $LOCALNET_CACHE_DIR/$PASSPORT_PROGRAM_ID.so \
     $USER_KEY \
     --clone \
     devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
