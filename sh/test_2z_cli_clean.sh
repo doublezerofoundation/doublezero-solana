@@ -12,6 +12,10 @@ $CLI_BIN contributor -h
 $CLI_BIN prepaid -h
 $CLI_BIN validator -h
 
+### Establish another payer.
+solana-keygen new --silent --no-bip39-passphrase -o another_payer.json
+solana airdrop -u l 69 -k another_payer.json
+
 ### Execute `admin initialize`.
 $CLI_BIN admin initialize -u l -v
 
@@ -19,4 +23,4 @@ $CLI_BIN admin initialize -u l -v
 $CLI_BIN admin set-admin -u l -v devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
 
 ### Execute `admin set-admin` with fee payer.
-$CLI_BIN admin set-admin -u l -v $(solana address)
+$CLI_BIN admin set-admin -u l -v --fee-payer another_payer.json $(solana address)
