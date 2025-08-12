@@ -9,9 +9,7 @@ use doublezero_program_tools::{
         create_token_account::try_create_token_account,
         Invoker,
     },
-    types::Flags,
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
-    PrecomputedDiscriminator,
 };
 use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
 use solana_cpi::invoke_signed_unchecked;
@@ -2005,10 +2003,11 @@ fn try_require_unfinalized_distribution_rewards(distribution: &Distribution) -> 
 ///
 /// # Why are we migrating?
 ///
-/// The program deployed on Solana devnet was not upgraded to the latest build.
-/// Because the program was initialized with an older program config and
-/// journal schemas, these accounts need to effectively be blown away and
-/// re-initialized.
+/// The program deployed on Solana devnet was migrated to fix the program
+/// config (https://github.com/doublezerofoundation/doublezero-solana/pull/23).
+/// This instruction processor is used to reset the program config to the
+/// original state. It is safe to perform this migration multiple times because
+/// the program config will not be migrated again.
 fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Migrate program accounts");
 
@@ -2024,123 +2023,12 @@ fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
     // authority).
     UpgradeAuthority::try_next_accounts(&mut accounts_iter, &ID)?;
 
-    // Account 2 must be the payer.
-    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+    // Account 2 must be the program config.
+    let mut program_config =
+        ZeroCopyMutAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    // Account 3 must be the program config account.
-    let (account_index, program_config_info) = try_next_enumerated_account(
-        &mut accounts_iter,
-        NextAccountOptions {
-            must_be_writable: true,
-            ..Default::default()
-        },
-    )?;
-
-    let (expected_program_config_key, program_config_bump) = ProgramConfig::find_address();
-
-    if program_config_info.key != &expected_program_config_key {
-        msg!(
-            "Invalid address for program config (account {})",
-            account_index
-        );
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    // Because we cannot deserialize the program config completely, we will
-    // partially deserialize it to make sure the program is paused.
-    let program_config_info_data = program_config_info.data.borrow();
-
-    if !ProgramConfig::has_discriminator(&program_config_info_data) {
-        msg!("Program config is not a valid program config");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    // Deserialize flags. This operation is safe because we know the program
-    // config has at least as many bytes for the flags.
-    let flags =
-        bytemuck::from_bytes::<Flags>(&program_config_info_data[8..(8 + size_of::<Flags>())]);
-
-    if !flags.bit(ProgramConfig::FLAG_IS_PAUSED_BIT) {
-        msg!("Program is not paused");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    if flags.bit(ProgramConfig::FLAG_IS_MIGRATED_BIT) {
-        msg!("Program config is already migrated");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    drop(program_config_info_data);
-
-    let rent_exemption_lamports = Rent::get().unwrap().minimum_balance(PROGRAM_CONFIG_SIZE);
-
-    // Send lamports to the program config account to cover the rent.
-    let transfer_ix = system_instruction::transfer(
-        payer_info.key,
-        &expected_program_config_key,
-        rent_exemption_lamports.saturating_sub(program_config_info.lamports()),
-    );
-
-    invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
-
-    const PROGRAM_CONFIG_SIZE: usize = zero_copy::data_end::<ProgramConfig>();
-
-    // Resize to the correct size.
-    program_config_info.resize(PROGRAM_CONFIG_SIZE)?;
-
-    // Fill with zeros to be extra safe.
-    solana_program_memory::sol_memset(
-        &mut program_config_info.data.borrow_mut()[..],
-        0,
-        PROGRAM_CONFIG_SIZE,
-    );
-
-    let (_, reserve_2z_bump) = state::find_2z_token_pda_address(&expected_program_config_key);
-
-    // Set the bump seeds and pause the program.
-    let (mut program_config, _) =
-        zero_copy::try_initialize::<ProgramConfig>(program_config_info, None)?;
-    program_config.bump_seed = program_config_bump;
-    program_config.reserve_2z_bump_seed = reserve_2z_bump;
-
-    msg!("Pause program");
-    program_config.set_is_paused(true);
-
-    msg!("Set program config as migrated");
-    program_config.set_is_migrated(true);
-
-    // Account 4 must be the journal account.
-    let (account_index, journal_info) = try_next_enumerated_account(
-        &mut accounts_iter,
-        NextAccountOptions {
-            must_be_writable: true,
-            ..Default::default()
-        },
-    )?;
-
-    let (expected_journal_key, journal_bump) = Journal::find_address();
-
-    if journal_info.key != &expected_journal_key {
-        msg!("Invalid address for journal (account {})", account_index);
-        return Err(ProgramError::InvalidAccountData);
-    }
-
-    // Fill with zeros to be extra safe.
-    //
-    // NOTE: We do not resize the journal account because it is already the
-    // correct size.
-    solana_program_memory::sol_memset(
-        &mut journal_info.data.borrow_mut()[..],
-        0,
-        MAX_PERMITTED_DATA_INCREASE,
-    );
-
-    let (_, journal_2z_token_pda_bump) = state::find_2z_token_pda_address(&expected_journal_key);
-
-    // Set the bump seeds.
-    let (mut journal, _) = zero_copy::try_initialize::<Journal>(journal_info, None)?;
-    journal.bump_seed = journal_bump;
-    journal.token_2z_pda_bump_seed = journal_2z_token_pda_bump;
+    msg!("No longer migrated");
+    program_config.set_is_migrated(false);
 
     Ok(())
 }

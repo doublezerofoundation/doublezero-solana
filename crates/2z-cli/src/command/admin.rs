@@ -215,11 +215,7 @@ impl AdminSubCommand {
 
                 let migrate_program_accounts_ix = try_build_instruction(
                     &REVENUE_DISTRIBUTION_PROGRAM_ID,
-                    MigrateProgramAccounts::new(
-                        &REVENUE_DISTRIBUTION_PROGRAM_ID,
-                        &wallet_key,
-                        &wallet_key,
-                    ),
+                    MigrateProgramAccounts::new(&REVENUE_DISTRIBUTION_PROGRAM_ID, &wallet_key),
                     &RevenueDistributionInstructionData::MigrateProgramAccounts,
                 )?;
 

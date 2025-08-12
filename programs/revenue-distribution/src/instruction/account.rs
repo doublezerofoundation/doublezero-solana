@@ -56,19 +56,15 @@ impl From<InitializeProgramAccounts> for Vec<AccountMeta> {
 pub struct MigrateProgramAccounts {
     pub program_data_key: Pubkey,
     pub owner_key: Pubkey,
-    pub payer_key: Pubkey,
     pub program_config_key: Pubkey,
-    pub journal_key: Pubkey,
 }
 
 impl MigrateProgramAccounts {
-    pub fn new(program_id: &Pubkey, owner_key: &Pubkey, payer_key: &Pubkey) -> Self {
+    pub fn new(program_id: &Pubkey, owner_key: &Pubkey) -> Self {
         Self {
             program_data_key: get_program_data_address(program_id).0,
             owner_key: *owner_key,
-            payer_key: *payer_key,
             program_config_key: ProgramConfig::find_address().0,
-            journal_key: Journal::find_address().0,
         }
     }
 }
@@ -78,18 +74,13 @@ impl From<MigrateProgramAccounts> for Vec<AccountMeta> {
         let MigrateProgramAccounts {
             program_data_key,
             owner_key,
-            payer_key,
             program_config_key,
-            journal_key,
         } = accounts;
 
         vec![
             AccountMeta::new_readonly(program_data_key, false),
             AccountMeta::new_readonly(owner_key, true),
-            AccountMeta::new(payer_key, true),
             AccountMeta::new(program_config_key, false),
-            AccountMeta::new(journal_key, false),
-            AccountMeta::new_readonly(system_program::ID, false),
         ]
     }
 }

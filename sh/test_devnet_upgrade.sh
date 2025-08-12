@@ -19,4 +19,4 @@ echo "Waiting 15 seconds for program upgrade to finalize"
 sleep 15
 
 ### Execute `admin migrate-program-accounts`.
-# $CLI_BIN admin migrate-program-accounts -u l -v
+$CLI_BIN admin migrate-program-accounts -u l -v
