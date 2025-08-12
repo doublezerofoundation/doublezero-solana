@@ -9,7 +9,9 @@ use doublezero_program_tools::{
         create_token_account::try_create_token_account,
         Invoker,
     },
+    types::Flags,
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
+    PrecomputedDiscriminator,
 };
 use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
 use solana_cpi::invoke_signed_unchecked;
@@ -54,6 +56,9 @@ fn try_process_instruction(
 
     match ix_data {
         RevenueDistributionInstructionData::InitializeProgram => try_initialize_program(accounts),
+        RevenueDistributionInstructionData::MigrateProgramAccounts => {
+            try_migrate_program_accounts(accounts)
+        }
         RevenueDistributionInstructionData::SetAdmin(admin_key) => {
             try_set_admin(accounts, admin_key)
         }
@@ -478,13 +483,15 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     // - 5: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be a signer and writable (i.e., payer) because it will be sending lamports
-    // to the new journal account when the system program allocates data to it. But because the
-    // create-program instruction requires that this account is a signer and is writable, we do
-    // not need to explicitly check these fields in its account info.
+    // Account 0 must be a signer and writable (i.e., payer) because it will be
+    // sending lamports to the new journal account when the system program
+    // allocates data to it. But because the create-program instruction requires
+    // that this account is a signer and is writable, we do not need to
+    // explicitly check these fields in its account info.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 1 must be the new journal account. This account should not exist yet.
+    // Account 1 must be the new journal account. This account should not exist
+    // yet.
     let (account_index, new_journal_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
@@ -496,11 +503,13 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // We declare this because Rent will be used multiple times in this instruction.
+    // We declare this because Rent will be used multiple times in this
+    // instruction.
     let rent_sysvar = Rent::get().unwrap();
 
-    // NOTE: We are creating the journal account with the max allowable size for CPI (10kb). By
-    // doing this, we avoid having to realloc when the journal entries size changes.
+    // NOTE: We are creating the journal account with the max allowable size for
+    // CPI (10kb). By doing this, we avoid having to realloc when the journal
+    // entries size changes.
     try_create_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
@@ -517,7 +526,8 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         },
     )?;
 
-    // Account 2 must be the new 2Z token account. This account should not exist yet.
+    // Account 2 must be the new 2Z token account. This account should not exist
+    // yet.
     let (_, new_journal_2z_token_pda_info, journal_2z_token_pda_bump) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &expected_journal_key,
@@ -548,7 +558,7 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         Some(&rent_sysvar),
     )?;
 
-    // After initializing the journal account, set the token account key.
+    // Set the bump seeds.
     let (mut journal, _) = zero_copy::try_initialize::<Journal>(new_journal_info, None)?;
     journal.bump_seed = journal_bump;
     journal.token_2z_pda_bump_seed = journal_2z_token_pda_bump;
@@ -1981,6 +1991,132 @@ fn try_require_unfinalized_distribution_rewards(distribution: &Distribution) -> 
         msg!("Distribution rewards have already been finalized");
         return Err(ProgramError::InvalidAccountData);
     }
+
+    Ok(())
+}
+
+//
+// Here be dragons.
+//
+
+/// This instruction processor is a special instruction that will not always be
+/// used after a program upgrade. This docstring should be updated whenever the
+/// upgrade authority must perform a special migration.
+///
+/// # Why are we migrating?
+///
+/// The program deployed on Solana devnet was not upgraded to the latest build.
+/// Because the program was initialized with an older program config and
+/// journal schemas, these accounts need to effectively be blown away and
+/// re-initialized.
+fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Migrate program accounts");
+
+    // We expect the following accounts for this instruction:
+    // - 0: This program's program data account (BPF Loader Upgradeable
+    //      program).
+    // - 1: The program's owner (i.e., upgrade authority).
+    // - 2: Program config.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program data belonging to this program.
+    // Account 1 must be the owner of the program data (i.e., the upgrade
+    // authority).
+    UpgradeAuthority::try_next_accounts(&mut accounts_iter, &ID)?;
+
+    // Account 2 must be the program config account.
+    let (account_index, program_config_info) = try_next_enumerated_account(
+        &mut accounts_iter,
+        NextAccountOptions {
+            must_be_writable: true,
+            ..Default::default()
+        },
+    )?;
+
+    let (expected_program_config_key, program_config_bump) = ProgramConfig::find_address();
+
+    if program_config_info.key != &expected_program_config_key {
+        msg!(
+            "Invalid address for program config (account {})",
+            account_index
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Because we cannot deserialize the program config completely, we will
+    // partially deserialize it to make sure the program is paused.
+    let program_config_info_data = program_config_info.data.borrow();
+
+    if !ProgramConfig::has_discriminator(&program_config_info_data) {
+        msg!("Program config is not a valid program config");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Deserialize flags. This operation is safe because we know the program
+    // config has at least as many bytes for the flags.
+    let flags =
+        bytemuck::from_bytes::<Flags>(&program_config_info_data[8..(8 + size_of::<Flags>())]);
+
+    if !flags.bit(ProgramConfig::FLAG_IS_PAUSED_BIT) {
+        msg!("Program is not paused");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    drop(program_config_info_data);
+
+    // Resize to the correct size.
+    program_config_info.resize(zero_copy::data_end::<ProgramConfig>())?;
+
+    // Fill with zeros to be extra safe.
+    solana_program_memory::sol_memset(
+        &mut program_config_info.data.borrow_mut()[..],
+        0,
+        zero_copy::data_end::<ProgramConfig>(),
+    );
+
+    let (_, reserve_2z_bump) = state::find_2z_token_pda_address(&expected_program_config_key);
+
+    // Set the bump seeds and pause the program.
+    let (mut program_config, _) =
+        zero_copy::try_initialize::<ProgramConfig>(program_config_info, None)?;
+    program_config.bump_seed = program_config_bump;
+    program_config.reserve_2z_bump_seed = reserve_2z_bump;
+
+    msg!("Pause program");
+    program_config.set_is_paused(true);
+
+    // Account 3 must be the journal account.
+    let (account_index, journal_info) = try_next_enumerated_account(
+        &mut accounts_iter,
+        NextAccountOptions {
+            must_be_writable: true,
+            ..Default::default()
+        },
+    )?;
+
+    let (expected_journal_key, journal_bump) = Journal::find_address();
+
+    if journal_info.key != &expected_journal_key {
+        msg!("Invalid address for journal (account {})", account_index);
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Fill with zeros to be extra safe.
+    //
+    // NOTE: We do not resize the journal account because it is already the
+    // correct size.
+    solana_program_memory::sol_memset(
+        &mut journal_info.data.borrow_mut()[..],
+        0,
+        MAX_PERMITTED_DATA_INCREASE,
+    );
+
+    let (_, journal_2z_token_pda_bump) = state::find_2z_token_pda_address(&expected_journal_key);
+
+    // Set the bump seeds.
+    let (mut journal, _) = zero_copy::try_initialize::<Journal>(journal_info, None)?;
+    journal.bump_seed = journal_bump;
+    journal.token_2z_pda_bump_seed = journal_2z_token_pda_bump;
 
     Ok(())
 }
