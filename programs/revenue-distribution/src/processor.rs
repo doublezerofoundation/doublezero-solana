@@ -2024,7 +2024,10 @@ fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
     // authority).
     UpgradeAuthority::try_next_accounts(&mut accounts_iter, &ID)?;
 
-    // Account 2 must be the program config account.
+    // Account 2 must be the payer.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // Account 3 must be the program config account.
     let (account_index, program_config_info) = try_next_enumerated_account(
         &mut accounts_iter,
         NextAccountOptions {
@@ -2064,14 +2067,27 @@ fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
 
     drop(program_config_info_data);
 
+    let rent_exemption_lamports = Rent::get().unwrap().minimum_balance(PROGRAM_CONFIG_SIZE);
+
+    // Send lamports to the program config account to cover the rent.
+    let transfer_ix = system_instruction::transfer(
+        payer_info.key,
+        &expected_program_config_key,
+        rent_exemption_lamports.saturating_sub(program_config_info.lamports()),
+    );
+
+    invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
+
+    const PROGRAM_CONFIG_SIZE: usize = zero_copy::data_end::<ProgramConfig>();
+
     // Resize to the correct size.
-    program_config_info.resize(zero_copy::data_end::<ProgramConfig>())?;
+    program_config_info.resize(PROGRAM_CONFIG_SIZE)?;
 
     // Fill with zeros to be extra safe.
     solana_program_memory::sol_memset(
         &mut program_config_info.data.borrow_mut()[..],
         0,
-        zero_copy::data_end::<ProgramConfig>(),
+        PROGRAM_CONFIG_SIZE,
     );
 
     let (_, reserve_2z_bump) = state::find_2z_token_pda_address(&expected_program_config_key);
@@ -2085,7 +2101,7 @@ fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Pause program");
     program_config.set_is_paused(true);
 
-    // Account 3 must be the journal account.
+    // Account 4 must be the journal account.
     let (account_index, journal_info) = try_next_enumerated_account(
         &mut accounts_iter,
         NextAccountOptions {
