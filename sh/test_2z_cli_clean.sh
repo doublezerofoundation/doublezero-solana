@@ -4,23 +4,48 @@ set -eu
 
 CLI_BIN=target/release/2z
 
-### Check help menus.
 $CLI_BIN -h
-$CLI_BIN admin -h
-$CLI_BIN ata -h
-$CLI_BIN contributor -h
-$CLI_BIN prepaid -h
-$CLI_BIN validator -h
+echo
 
 ### Establish another payer.
+
+echo "solana-keygen new --silent --no-bip39-passphrase -o another_payer.json"
 solana-keygen new --silent --no-bip39-passphrase -o another_payer.json
 solana airdrop -u l 69 -k another_payer.json
 
-### Execute `admin initialize`.
+### Admin commands.
+
+$CLI_BIN admin -h
+echo
+
+echo "admin initialize -u l -v"
 $CLI_BIN admin initialize -u l -v
+echo
 
-### Execute `admin set-admin` without fee payer.
+echo "admin set-admin -u l -v devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj"
 $CLI_BIN admin set-admin -u l -v devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
+echo
 
-### Execute `admin set-admin` with fee payer.
+echo "admin set-admin -u l -v --fee-payer another_payer.json $(solana address)"
 $CLI_BIN admin set-admin -u l -v --fee-payer another_payer.json $(solana address)
+echo
+
+### ATA commands.
+
+$CLI_BIN ata -h
+echo
+
+### Contributor commands.
+
+$CLI_BIN contributor -h
+echo
+
+### Prepaid commands.
+
+$CLI_BIN prepaid -h
+echo
+
+### Validator commands.
+
+$CLI_BIN validator -h
+echo
