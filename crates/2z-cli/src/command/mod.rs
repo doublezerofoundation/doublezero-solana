@@ -17,7 +17,7 @@ use clap::Subcommand;
 
 #[derive(Debug, Subcommand)]
 pub enum DoubleZero2zSolanaCommand {
-    /// Admin commands (hidden).
+    /// Admin commands.
     #[command(hide = true)]
     Admin(AdminCliCommand),
 
