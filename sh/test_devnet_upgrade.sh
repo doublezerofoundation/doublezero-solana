@@ -2,10 +2,13 @@
 
 set -eu
 
+ROOT_DIR=$(cd "$(dirname "$0")/.."; pwd)
+
 ### First build the Revenue Distribution program.
-cargo build-sbf -- \
-    -p doublezero-revenue-distribution \
-    --features development,entrypoint
+cd $ROOT_DIR/programs/revenue-distribution && \
+    cargo build-sbf -- --features development,entrypoint
+
+cd $ROOT_DIR
 
 ### Upgrade Revenue Distribution program.
 solana program deploy \
