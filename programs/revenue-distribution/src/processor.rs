@@ -2065,6 +2065,11 @@ fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidAccountData);
     }
 
+    if flags.bit(ProgramConfig::FLAG_IS_MIGRATED_BIT) {
+        msg!("Program config is already migrated");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
     drop(program_config_info_data);
 
     let rent_exemption_lamports = Rent::get().unwrap().minimum_balance(PROGRAM_CONFIG_SIZE);
@@ -2100,6 +2105,9 @@ fn try_migrate_program_accounts(accounts: &[AccountInfo]) -> ProgramResult {
 
     msg!("Pause program");
     program_config.set_is_paused(true);
+
+    msg!("Set program config as migrated");
+    program_config.set_is_migrated(true);
 
     // Account 4 must be the journal account.
     let (account_index, journal_info) = try_next_enumerated_account(
