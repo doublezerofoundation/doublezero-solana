@@ -5,3 +5,4 @@ target
 test-ledger
 .zed
 .DS_Store
+localnet/cache
