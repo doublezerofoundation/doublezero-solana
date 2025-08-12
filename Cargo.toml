@@ -3,6 +3,7 @@ exclude = []
 members = [
     "crates/2z-cli",
     "crates/program-tools",
+    "crates/sentinel",
     "crates/validator-revenue",
     "programs/passport",
     "programs/revenue-distribution",
@@ -14,7 +15,7 @@ edition = "2021"
 homepage = "https://doublezero.xyz"
 license = "Apache-2.0"
 repository = ""
-rust-version = "1.83"
+rust-version = "1.88"
 version = "0.1.0"
 
 [workspace.dependencies]
@@ -31,6 +32,7 @@ reqwest = { version = "0.12", features = ["json"] }
 ruint = { version = "1", features = ["bytemuck"] }
 serde = "1"
 serde_json = "1"
+solana-account-decoder-client-types = "2"
 solana-account-info = "2"
 solana-client = "2"
 solana-commitment-config = "2"
@@ -50,6 +52,7 @@ solana-sysvar = "2"
 solana-transaction-status-client-types = "2"
 spl-token = { version = "8", features = ["no-entrypoint"] }
 svm-hash = "0.1.0-beta.3"
+thiserror = "2"
 tokio = "1"
 url = "2"
 
@@ -66,3 +69,6 @@ path = "crates/program-tools"
 
 [workspace.dependencies.doublezero-revenue-distribution]
 path = "programs/revenue-distribution"
+
+[workspace.dependencies.doublezero-passport]
+path = "programs/passport"
