@@ -14,6 +14,8 @@ solana-keygen new --silent --no-bip39-passphrase -o another_payer.json
 solana airdrop -u l 69 -k another_payer.json
 echo
 
+DUMMY_KEY=devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
+
 ### Admin commands.
 
 $CLI_BIN admin -h
@@ -33,7 +35,7 @@ $CLI_BIN admin set-admin \
     -u l \
     -v \
     --program passport \
-    devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
+    $DUMMY_KEY
 echo
 
 ### Set admin to upgrade authority.
@@ -52,7 +54,7 @@ $CLI_BIN admin set-admin \
     -u l \
     -v \
     --program revenue-distribution \
-    devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
+    $DUMMY_KEY
 echo
 
 ### Set admin to upgrade authority.
@@ -63,6 +65,43 @@ $CLI_BIN admin set-admin \
     --program revenue-distribution \
     --fee-payer another_payer.json \
     $(solana address)
+echo
+
+### Configure program.
+
+$CLI_BIN admin configure -h
+echo
+
+### Configure passport.
+
+$CLI_BIN admin configure passport -h
+echo
+
+echo "admin configure passport -u l -v --pause"
+$CLI_BIN admin configure passport -u l -v --pause
+echo
+
+echo "admin configure passport -u l -v --unpause"
+$CLI_BIN admin configure passport -u l -v --unpause
+echo
+
+### Configure revenue distribution.
+
+$CLI_BIN admin configure revenue-distribution -h
+echo
+
+echo "admin configure revenue-distribution -u l -v --pause"
+$CLI_BIN admin configure revenue-distribution \
+    -u l \
+    -v \
+    --pause \
+    --payments-accountant $DUMMY_KEY \
+    --rewards-accountant $DUMMY_KEY \
+    --sol-2z-swap-program $DUMMY_KEY
+echo
+
+echo "admin configure revenue-distribution -u l -v --unpause"
+$CLI_BIN admin configure revenue-distribution -u l -v --unpause
 echo
 
 ### ATA commands.
@@ -84,3 +123,8 @@ echo
 
 $CLI_BIN validator -h
 echo
+
+### Clean up.
+
+echo "rm another_payer.json"
+rm another_payer.json

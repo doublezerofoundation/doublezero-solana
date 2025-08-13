@@ -1,3 +1,9 @@
+mod configure;
+
+pub use configure::*;
+
+//
+
 use anyhow::Result;
 use clap::{Args, Subcommand, ValueEnum};
 use doublezero_passport::{
@@ -27,60 +33,10 @@ pub struct AdminCliCommand {
 
 #[derive(Debug, Subcommand)]
 pub enum AdminSubCommand {
-    /// Configure the journal account. Only the administrator can execute this command.
-    ConfigureJournal {
-        /// Activation cost for a prepaid connection.
-        #[arg(long)]
-        activation_cost: Option<u32>,
+    /// Configure a specified program.
+    Configure(AdminConfigureCliCommand),
 
-        /// Cost per DoubleZero epoch for a prepaid connection.
-        #[arg(long)]
-        cost_per_epoch: Option<u32>,
-
-        #[command(flatten)]
-        payer_options: SolanaPayerOptions,
-    },
-
-    /// Configure the program. Only the administrator can execute this command.
-    ConfigureProgram {
-        // Flags.
-        //
-        /// Whether to pause the program. Cannot be used with --unpause.
-        #[arg(long)]
-        pause: Option<bool>,
-
-        /// Whether to unpause the program. Cannot be used with --pause.
-        #[arg(long)]
-        unpause: Option<bool>,
-
-        // Other configuration.
-        //
-        /// Set the accountant key.
-        #[arg(long)]
-        accountant_key: Option<Pubkey>,
-
-        /// Set the SOL/2Z Swap program ID.
-        #[arg(long)]
-        sol_2z_swap_program_id: Option<Pubkey>,
-
-        /// Solana validator fee percentage (max: 100%).
-        #[arg(long)]
-        solana_validator_fee_percentage: Option<String>,
-
-        /// How long the accountant must wait to fetch telemetry data for reward calculations.
-        #[arg(long)]
-        calculation_grace_period_seconds: Option<u32>,
-
-        /// Amount to pay relayer to terminate a prepaid connection.
-        #[arg(long)]
-        prepaid_connection_termination_relay_lamports: Option<u32>,
-
-        //
-        #[command(flatten)]
-        payer_options: SolanaPayerOptions,
-    },
-
-    /// Initialize program config and journal. Also set admin to yourself.
+    /// Initialize specified program.
     Initialize {
         /// Relevant program.
         #[arg(long, short = 'p', value_enum)]
@@ -100,7 +56,7 @@ pub enum AdminSubCommand {
         solana_payer_options: SolanaPayerOptions,
     },
 
-    /// Set the admin key. Only the upgrade authority can execute this command.
+    /// Set the admin key for specified program.
     SetAdmin {
         /// Relevant program.
         #[arg(long, short = 'p', value_enum)]
@@ -116,25 +72,7 @@ pub enum AdminSubCommand {
 impl AdminSubCommand {
     pub async fn try_into_execute(self) -> Result<()> {
         match self {
-            AdminSubCommand::ConfigureJournal {
-                activation_cost: _,
-                cost_per_epoch: _,
-                payer_options: _,
-            } => {
-                todo!()
-            }
-            AdminSubCommand::ConfigureProgram {
-                pause: _,
-                unpause: _,
-                accountant_key: _,
-                sol_2z_swap_program_id: _,
-                solana_validator_fee_percentage: _,
-                calculation_grace_period_seconds: _,
-                prepaid_connection_termination_relay_lamports: _,
-                payer_options: _,
-            } => {
-                todo!()
-            }
+            AdminSubCommand::Configure(configure) => configure.command.try_into_execute().await,
             AdminSubCommand::Initialize {
                 program,
                 solana_payer_options,
