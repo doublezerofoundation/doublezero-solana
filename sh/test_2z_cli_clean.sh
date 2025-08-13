@@ -97,7 +97,13 @@ $CLI_BIN admin configure revenue-distribution \
     --pause \
     --payments-accountant $DUMMY_KEY \
     --rewards-accountant $DUMMY_KEY \
-    --sol-2z-swap-program $DUMMY_KEY
+    --sol-2z-swap-program $DUMMY_KEY \
+    --calculation-grace-period-seconds 3600 \
+    --prepaid-connection-termination-relay-lamports 100000 \
+    --solana-validator-fee-base-block-rewards 1.23 \
+    --solana-validator-fee-priority-block-rewards 45.67 \
+    --solana-validator-fee-inflation-rewards 0.89 \
+    --solana-validator-fee-jito-tips 100
 echo
 
 echo "admin configure revenue-distribution -u l -v --unpause"

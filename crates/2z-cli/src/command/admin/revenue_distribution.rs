@@ -1,0 +1,383 @@
+use anyhow::{anyhow, bail, Result};
+use doublezero_program_tools::{get_program_data_address, instruction::try_build_instruction};
+use doublezero_revenue_distribution::{
+    instruction::{
+        account::{
+            ConfigureProgramAccounts, InitializeJournalAccounts, InitializeProgramAccounts,
+            MigrateProgramAccounts, SetAdminAccounts,
+        },
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
+    },
+    state::{find_2z_token_pda_address, Journal, ProgramConfig},
+    ID,
+};
+use solana_sdk::{
+    compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey,
+};
+
+use crate::payer::{SolanaPayerOptions, Wallet};
+
+use super::ConfigureRevenueDistributionOptions;
+
+//
+// AdminSubCommand::Initialize.
+//
+
+pub async fn execute_initialize_program(solana_payer_options: SolanaPayerOptions) -> Result<()> {
+    let mut wallet = Wallet::try_from(solana_payer_options)?;
+    let wallet_key = wallet.pubkey();
+
+    wallet.connection.cache_if_mainnet().await?;
+
+    let dz_mint_key = if wallet.connection.is_mainnet {
+        doublezero_revenue_distribution::env::mainnet::DOUBLEZERO_MINT_KEY
+    } else {
+        doublezero_revenue_distribution::env::development::DOUBLEZERO_MINT_KEY
+    };
+
+    let initialize_program_ix = try_build_instruction(
+        &ID,
+        InitializeProgramAccounts::new(&wallet_key, &dz_mint_key),
+        &RevenueDistributionInstructionData::InitializeProgram,
+    )?;
+
+    let initialize_journal_ix = try_build_instruction(
+        &ID,
+        InitializeJournalAccounts::new(&wallet_key, &dz_mint_key),
+        &RevenueDistributionInstructionData::InitializeJournal,
+    )?;
+
+    let set_admin_ix = try_build_instruction(
+        &ID,
+        SetAdminAccounts::new(&ID, &wallet_key),
+        &RevenueDistributionInstructionData::SetAdmin(wallet_key),
+    )?;
+
+    // Precisely calculate the amount of compute units needed for the instructions.
+    // There should be ~5k CU buffer with this base.
+    let mut compute_unit_limit = 42_000;
+
+    let (program_config_key, bump) = ProgramConfig::find_address();
+    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+
+    let (_, bump) = find_2z_token_pda_address(&program_config_key);
+    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+
+    let (journal_key, bump) = Journal::find_address();
+    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+
+    let (_, bump) = find_2z_token_pda_address(&journal_key);
+    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+
+    let (_, bump) = get_program_data_address(&ID);
+    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+
+    let mut instructions = vec![
+        initialize_program_ix,
+        initialize_journal_ix,
+        set_admin_ix,
+        ComputeBudgetInstruction::set_compute_unit_limit(compute_unit_limit),
+    ];
+
+    if let Some(ref compute_unit_price_ix) = wallet.compute_unit_price_ix {
+        instructions.push(compute_unit_price_ix.clone());
+    }
+
+    let transaction = wallet.new_transaction(&instructions).await?;
+
+    let tx_sig = wallet
+        .send_and_confirm_transaction_with_spinner(&transaction)
+        .await?;
+    println!("Initialized Revenue Distribution program: {tx_sig}");
+
+    wallet.print_verbose_output(&[tx_sig]).await?;
+
+    Ok(())
+}
+
+//
+// AdminSubCommand::MigrateProgramAccounts.
+//
+
+pub async fn execute_migrate_program_accounts(
+    solana_payer_options: SolanaPayerOptions,
+) -> Result<()> {
+    let wallet = Wallet::try_from(solana_payer_options)?;
+    let wallet_key = wallet.pubkey();
+
+    let migrate_program_accounts_ix = try_build_instruction(
+        &ID,
+        MigrateProgramAccounts::new(&ID, &wallet_key),
+        &RevenueDistributionInstructionData::MigrateProgramAccounts,
+    )?;
+
+    let compute_unit_limit = 100_000;
+
+    let mut instructions = vec![
+        migrate_program_accounts_ix,
+        ComputeBudgetInstruction::set_compute_unit_limit(compute_unit_limit),
+    ];
+
+    if let Some(ref compute_unit_price_ix) = wallet.compute_unit_price_ix {
+        instructions.push(compute_unit_price_ix.clone());
+    }
+
+    let transaction = wallet.new_transaction(&instructions).await?;
+
+    let tx_sig = wallet
+        .send_and_confirm_transaction_with_spinner(&transaction)
+        .await?;
+    println!("Migrate program accounts: {tx_sig}");
+
+    wallet.print_verbose_output(&[tx_sig]).await?;
+
+    Ok(())
+}
+
+//
+// AdminSubCommand::SetAdmin.
+//
+
+pub async fn execute_set_admin(
+    admin_key: Pubkey,
+    solana_payer_options: SolanaPayerOptions,
+) -> Result<()> {
+    let wallet = Wallet::try_from(solana_payer_options)?;
+    let wallet_key = wallet.pubkey();
+
+    let set_admin_ix = try_build_instruction(
+        &ID,
+        SetAdminAccounts::new(&ID, &wallet_key),
+        &RevenueDistributionInstructionData::SetAdmin(admin_key),
+    )?;
+
+    // Precisely calculate the amount of compute units needed for the instructions.
+    // There should be ~3k CU buffer with this base.
+    let compute_unit_limit = 10_000;
+
+    let mut instructions = vec![
+        set_admin_ix,
+        ComputeBudgetInstruction::set_compute_unit_limit(compute_unit_limit),
+    ];
+
+    if let Some(ref compute_unit_price_ix) = wallet.compute_unit_price_ix {
+        instructions.push(compute_unit_price_ix.clone());
+    }
+
+    let transaction = wallet.new_transaction(&instructions).await?;
+
+    let tx_sig = wallet
+        .send_and_confirm_transaction_with_spinner(&transaction)
+        .await?;
+    println!("Set Revenue Distribution program admin: {tx_sig}");
+
+    wallet.print_verbose_output(&[tx_sig]).await?;
+
+    Ok(())
+}
+
+//
+// AdminConfigureSubCommand::RevenueDistribution.
+//
+
+pub async fn execute_configure_program(
+    configure_options: Box<ConfigureRevenueDistributionOptions>,
+    solana_payer_options: SolanaPayerOptions,
+) -> Result<()> {
+    let ConfigureRevenueDistributionOptions {
+        pause,
+        unpause,
+        payments_accountant,
+        rewards_accountant,
+        sol_2z_swap_program,
+        solana_validator_fee_base_block_rewards,
+        solana_validator_fee_priority_block_rewards,
+        solana_validator_fee_inflation_rewards,
+        solana_validator_fee_jito_tips,
+        calculation_grace_period_seconds,
+        prepaid_connection_termination_relay_lamports,
+        activation_cost: _,
+        cost_per_epoch: _,
+    } = *configure_options;
+
+    let wallet = Wallet::try_from(solana_payer_options)?;
+    let wallet_key = wallet.pubkey();
+
+    let mut instructions = vec![];
+    let mut compute_unit_limit = 5_000;
+
+    match (pause, unpause) {
+        (true, true) => {
+            bail!("Cannot use both --pause and --unpause at the same time");
+        }
+        (true, false) => {
+            let configure_program_ix = try_build_configure_program_instruction(
+                &wallet_key,
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(true)),
+            )?;
+            instructions.push(configure_program_ix);
+            compute_unit_limit += 2_000;
+        }
+        (false, true) => {
+            let configure_program_ix = try_build_configure_program_instruction(
+                &wallet_key,
+                ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
+            )?;
+            instructions.push(configure_program_ix);
+            compute_unit_limit += 2_000;
+        }
+        (false, false) => {}
+    }
+
+    if let Some(payments_accountant_key) = payments_accountant {
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::PaymentsAccountant(payments_accountant_key),
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 2_500;
+    }
+
+    if let Some(rewards_accountant_key) = rewards_accountant {
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::RewardsAccountant(rewards_accountant_key),
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 2_500;
+    }
+
+    if let Some(sol_2z_swap_program_id) = sol_2z_swap_program {
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::Sol2zSwapProgram(sol_2z_swap_program_id),
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 2_500;
+    }
+
+    if let Some(calculation_grace_period_seconds) = calculation_grace_period_seconds {
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::CalculationGracePeriodSeconds(calculation_grace_period_seconds),
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 2_000;
+    }
+
+    if let Some(prepaid_connection_termination_relay_lamports) =
+        prepaid_connection_termination_relay_lamports
+    {
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(
+                prepaid_connection_termination_relay_lamports,
+            ),
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 2_000;
+    }
+
+    // Handle Solana validator fee parameters if any are provided.
+    let has_any_fee = solana_validator_fee_base_block_rewards.is_some()
+        || solana_validator_fee_priority_block_rewards.is_some()
+        || solana_validator_fee_inflation_rewards.is_some()
+        || solana_validator_fee_jito_tips.is_some();
+
+    if has_any_fee {
+        // Parse all fee percentages, defaulting to 0 if not provided.
+        let base_block_rewards = parse_fee_percentage(solana_validator_fee_base_block_rewards)?;
+        let priority_block_rewards =
+            parse_fee_percentage(solana_validator_fee_priority_block_rewards)?;
+        let inflation_rewards = parse_fee_percentage(solana_validator_fee_inflation_rewards)?;
+        let jito_tips = parse_fee_percentage(solana_validator_fee_jito_tips)?;
+
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::SolanaValidatorFeeParameters {
+                base_block_rewards,
+                priority_block_rewards,
+                inflation_rewards,
+                jito_tips,
+                _unused: Default::default(),
+            },
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 4_000;
+    }
+
+    // NOTE: We may need to chunk these instructions if more configurations are
+    // added.
+
+    instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(
+        compute_unit_limit,
+    ));
+
+    if let Some(ref compute_unit_price_ix) = wallet.compute_unit_price_ix {
+        instructions.push(compute_unit_price_ix.clone());
+    }
+
+    let transaction = wallet.new_transaction(&instructions).await?;
+
+    let tx_sig = wallet
+        .send_and_confirm_transaction_with_spinner(&transaction)
+        .await?;
+    println!("Configured Revenue Distribution program: {tx_sig}");
+
+    wallet.print_verbose_output(&[tx_sig]).await?;
+
+    Ok(())
+}
+
+//
+
+fn try_build_configure_program_instruction(
+    admin_key: &Pubkey,
+    setting: ProgramConfiguration,
+) -> Result<Instruction> {
+    try_build_instruction(
+        &ID,
+        ConfigureProgramAccounts::new(admin_key),
+        &RevenueDistributionInstructionData::ConfigureProgram(setting),
+    )
+    .map_err(Into::into)
+}
+
+/// Parse a percentage string (e.g., "12.5" or "50.0") into a u16 value.
+/// The value is stored as basis points where 100% = 10,000.
+/// This gives us precision up to 0.01% (e.g., 12.34% = 1234).
+fn parse_fee_percentage(percentage_str: Option<String>) -> Result<u16> {
+    const MAX_PERCENTAGE: f64 = 100.0;
+
+    match percentage_str {
+        None => Ok(0),
+        Some(s) => {
+            // Check for excessive decimal precision.
+            if let Some(decimal_index) = s.find('.') {
+                let decimal_part = &s[decimal_index + 1..];
+                if decimal_part.len() > 2 {
+                    bail!(
+                        "Percentage value has too much precision (max 2 decimal places): {}",
+                        s
+                    );
+                }
+            }
+
+            let percentage = s
+                .parse::<f64>()
+                .map_err(|_| anyhow!("Invalid percentage value: {}", s))?;
+
+            // Values must be between 0.01% and 100%
+            if !(0.01..=MAX_PERCENTAGE).contains(&percentage) {
+                bail!(
+                    "Percentage must between 0.01% and 100%, got: {}",
+                    percentage
+                );
+            }
+
+            // This conversion is safe because we've already checked the value
+            // is between 0.01% and 100%.
+            Ok((percentage * MAX_PERCENTAGE).round() as u16)
+        }
+    }
+}
