@@ -45,7 +45,7 @@ jobs:
       - name: Generate ~/.config/solana/id.json
         run: solana-keygen new --silent --no-bip39-passphrase
       - name: Start Solana test validator in background
-        run: bash sh/run_local_validator_clean.sh > /dev/null 2>&1 &
+        run: bash sh/run_local_validator_fork_devnet.sh > /dev/null 2>&1 &
       - name: Build 2z CLI
         run: cargo build --release --bin 2z
       - name: Run 2z CLI tests
