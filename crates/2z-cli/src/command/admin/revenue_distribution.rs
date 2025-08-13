@@ -92,61 +92,61 @@ pub struct ConfigureRevenueDistributionOptions {
     // Other configuration.
     //
     /// Set the payments accountant key.
-    #[arg(long)]
+    #[arg(long, value_name = "PUBKEY")]
     pub payments_accountant: Option<Pubkey>,
 
     /// Set the rewards accountant key.
-    #[arg(long)]
+    #[arg(long, value_name = "PUBKEY")]
     pub rewards_accountant: Option<Pubkey>,
 
     /// Set the SOL/2Z Swap program ID.
-    #[arg(long)]
+    #[arg(long, value_name = "PUBKEY")]
     pub sol_2z_swap_program: Option<Pubkey>,
 
     /// Solana validator base block rewards fee percentage (max: 100%).
-    #[arg(long)]
+    #[arg(long, value_name = "PERCENTAGE")]
     pub solana_validator_base_block_rewards_fee: Option<String>,
 
     /// Solana validator priority block rewards fee percentage (max: 100%).
-    #[arg(long)]
+    #[arg(long, value_name = "PERCENTAGE")]
     pub solana_validator_priority_block_rewards_fee: Option<String>,
 
     /// Solana validator inflation rewards fee percentage (max: 100%).
-    #[arg(long)]
+    #[arg(long, value_name = "PERCENTAGE")]
     pub solana_validator_inflation_rewards_fee: Option<String>,
 
     /// Solana validator Jito tips fee percentage (max: 100%).
-    #[arg(long)]
+    #[arg(long, value_name = "PERCENTAGE")]
     pub solana_validator_jito_tips_fee: Option<String>,
 
     /// How long the accountant must wait to fetch telemetry data for reward calculations.
-    #[arg(long)]
+    #[arg(long, value_name = "SECONDS")]
     pub calculation_grace_period_seconds: Option<u32>,
 
     /// Amount to pay relayer to terminate a prepaid connection.
-    #[arg(long)]
+    #[arg(long, value_name = "LAMPORTS")]
     pub prepaid_connection_termination_relay_lamports: Option<u32>,
 
     /// Community burn rate limit percentage (max: 100%, precision: 7 decimals).
-    #[arg(long)]
+    #[arg(long, value_name = "PERCENTAGE")]
     pub community_burn_rate_limit: Option<String>,
 
-    #[arg(long)]
+    #[arg(long, value_name = "EPOCHS")]
     pub epochs_to_increasing_community_burn_rate: Option<u32>,
 
-    #[arg(long)]
+    #[arg(long, value_name = "EPOCHS")]
     pub epochs_to_community_burn_rate_limit: Option<u32>,
 
     /// Initial community burn rate percentage (max: 100%, precision: 7 decimals).
-    #[arg(long)]
+    #[arg(long, value_name = "PERCENTAGE")]
     pub initial_community_burn_rate: Option<String>,
 
     /// Activation cost for a prepaid connection.
-    #[arg(long)]
+    #[arg(long, value_name = "AMOUNT")]
     pub activation_cost: Option<u32>,
 
     /// Cost per DoubleZero epoch for a prepaid connection.
-    #[arg(long)]
+    #[arg(long, value_name = "AMOUNT")]
     pub cost_per_epoch: Option<u32>,
 }
 
@@ -215,13 +215,13 @@ pub async fn execute_initialize_program(solana_payer_options: SolanaPayerOptions
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Initialized Revenue Distribution program: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Initialized Revenue Distribution program: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
@@ -254,13 +254,13 @@ pub async fn execute_migrate_program_accounts(
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Migrate program accounts: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Migrated program accounts: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
@@ -296,13 +296,13 @@ pub async fn execute_set_admin(
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Set Revenue Distribution program admin: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Set Revenue Distribution program admin: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
@@ -496,13 +496,13 @@ pub async fn execute_configure_program(
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Configured Revenue Distribution program: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Configured Revenue Distribution program: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
@@ -543,7 +543,7 @@ fn parse_fee_percentage(percentage_str: String) -> Result<u16> {
         .map_err(|_| anyhow!("Invalid percentage value: {}", percentage_str))?;
 
     // Values must be between 0.01% and 100%
-    if !(0.01..=MAX_PERCENTAGE).contains(&percentage) {
+    if !(0.0..=MAX_PERCENTAGE).contains(&percentage) {
         bail!(
             "Percentage must between 0.01% and 100%, got: {}",
             percentage
@@ -578,7 +578,7 @@ fn parse_burn_rate_percentage(percentage_str: String) -> Result<u32> {
         .map_err(|_| anyhow!("Invalid percentage value: {}", percentage_str))?;
 
     // Values must be between 0.0000001% and 100%
-    if !(0.0000001..=MAX_PERCENTAGE).contains(&percentage) {
+    if !(0.0..=MAX_PERCENTAGE).contains(&percentage) {
         bail!(
             "Percentage must be between 0.0000001% and 100%, got: {}",
             percentage

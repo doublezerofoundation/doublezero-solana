@@ -115,13 +115,13 @@ pub async fn execute_initialize_program(solana_payer_options: SolanaPayerOptions
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Initialized Passport program: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Initialized Passport program: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
@@ -158,13 +158,13 @@ pub async fn execute_set_admin(
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Set Passport program admin: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Set Passport program admin: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
@@ -216,13 +216,13 @@ pub async fn execute_configure_program(
     }
 
     let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
-    let tx_sig = wallet
-        .send_and_confirm_transaction_with_spinner(&transaction)
-        .await?;
-    println!("Configured Passport program: {tx_sig}");
+    if let Some(tx_sig) = tx_sig {
+        println!("Configured Passport program: {tx_sig}");
 
-    wallet.print_verbose_output(&[tx_sig]).await?;
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
 
     Ok(())
 }
