@@ -185,19 +185,19 @@ pub struct ConfigureRevenueDistributionOptions {
 
     /// Solana validator base block rewards fee percentage (max: 100%).
     #[arg(long)]
-    pub solana_validator_fee_base_block_rewards: Option<String>,
+    pub solana_validator_base_block_rewards_fee: Option<String>,
 
     /// Solana validator priority block rewards fee percentage (max: 100%).
     #[arg(long)]
-    pub solana_validator_fee_priority_block_rewards: Option<String>,
+    pub solana_validator_priority_block_rewards_fee: Option<String>,
 
     /// Solana validator inflation rewards fee percentage (max: 100%).
     #[arg(long)]
-    pub solana_validator_fee_inflation_rewards: Option<String>,
+    pub solana_validator_inflation_rewards_fee: Option<String>,
 
     /// Solana validator Jito tips fee percentage (max: 100%).
     #[arg(long)]
-    pub solana_validator_fee_jito_tips: Option<String>,
+    pub solana_validator_jito_tips_fee: Option<String>,
 
     /// How long the accountant must wait to fetch telemetry data for reward calculations.
     #[arg(long)]

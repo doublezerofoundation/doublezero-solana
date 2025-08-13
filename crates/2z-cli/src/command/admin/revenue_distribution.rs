@@ -190,10 +190,10 @@ pub async fn execute_configure_program(
         payments_accountant,
         rewards_accountant,
         sol_2z_swap_program,
-        solana_validator_fee_base_block_rewards,
-        solana_validator_fee_priority_block_rewards,
-        solana_validator_fee_inflation_rewards,
-        solana_validator_fee_jito_tips,
+        solana_validator_base_block_rewards_fee,
+        solana_validator_priority_block_rewards_fee,
+        solana_validator_inflation_rewards_fee,
+        solana_validator_jito_tips_fee,
         calculation_grace_period_seconds,
         prepaid_connection_termination_relay_lamports,
         community_burn_rate_limit,
@@ -282,32 +282,38 @@ pub async fn execute_configure_program(
         compute_unit_limit += 2_000;
     }
 
-    // Handle Solana validator fee parameters if any are provided.
-    let has_any_fee = solana_validator_fee_base_block_rewards.is_some()
-        || solana_validator_fee_priority_block_rewards.is_some()
-        || solana_validator_fee_inflation_rewards.is_some()
-        || solana_validator_fee_jito_tips.is_some();
+    // All Solana validator fee parameters must be specified together in order to
+    // construct the configure program instruction.
+    match (
+        solana_validator_base_block_rewards_fee,
+        solana_validator_priority_block_rewards_fee,
+        solana_validator_inflation_rewards_fee,
+        solana_validator_jito_tips_fee,
+    ) {
+        (Some(base_str), Some(priority_str), Some(inflation_str), Some(jito_str)) => {
+            // Parse all fee percentages.
+            let base_block_rewards = parse_fee_percentage(base_str)?;
+            let priority_block_rewards = parse_fee_percentage(priority_str)?;
+            let inflation_rewards = parse_fee_percentage(inflation_str)?;
+            let jito_tips = parse_fee_percentage(jito_str)?;
 
-    if has_any_fee {
-        // Parse all fee percentages, defaulting to 0 if not provided.
-        let base_block_rewards = parse_fee_percentage(solana_validator_fee_base_block_rewards)?;
-        let priority_block_rewards =
-            parse_fee_percentage(solana_validator_fee_priority_block_rewards)?;
-        let inflation_rewards = parse_fee_percentage(solana_validator_fee_inflation_rewards)?;
-        let jito_tips = parse_fee_percentage(solana_validator_fee_jito_tips)?;
-
-        let configure_program_ix = try_build_configure_program_instruction(
-            &wallet_key,
-            ProgramConfiguration::SolanaValidatorFeeParameters {
-                base_block_rewards,
-                priority_block_rewards,
-                inflation_rewards,
-                jito_tips,
-                _unused: Default::default(),
-            },
-        )?;
-        instructions.push(configure_program_ix);
-        compute_unit_limit += 4_000;
+            let configure_program_ix = try_build_configure_program_instruction(
+                &wallet_key,
+                ProgramConfiguration::SolanaValidatorFeeParameters {
+                    base_block_rewards,
+                    priority_block_rewards,
+                    inflation_rewards,
+                    jito_tips,
+                    _unused: Default::default(),
+                },
+            )?;
+            instructions.push(configure_program_ix);
+            compute_unit_limit += 4_000;
+        }
+        (None, None, None, None) => {}
+        _ => {
+            bail!("Must specify all Solana validator fee parameters together (--solana-validator-base-block-rewards-fee, --solana-validator-priority-block-rewards-fee, --solana-validator-inflation-rewards-fee, --solana-validator-jito-tips-fee)");
+        }
     }
 
     // All required community burn rate parameters must be specified together in order to
@@ -337,7 +343,7 @@ pub async fn execute_configure_program(
         }
         (None, None, None, None) => {}
         _ => {
-            bail!("Must specify all required community burn rate parameters together (limit, epochs_to_increasing, epochs_to_limit)");
+            bail!("Must specify all required community burn rate parameters together (--community-burn-rate-limit, --epochs-to-increasing-community-burn-rate, --epochs-to-community-burn-rate-limit)");
         }
     }
 
@@ -385,40 +391,35 @@ fn try_build_configure_program_instruction(
 /// Parse a percentage string (e.g., "12.5" or "50.0") into a u16 value.
 /// The value is stored as basis points where 100% = 10,000.
 /// This gives us precision up to 0.01% (e.g., 12.34% = 1234).
-fn parse_fee_percentage(percentage_str: Option<String>) -> Result<u16> {
+fn parse_fee_percentage(percentage_str: String) -> Result<u16> {
     const MAX_PERCENTAGE: f64 = 100.0;
 
-    match percentage_str {
-        None => Ok(0),
-        Some(s) => {
-            // Check for excessive decimal precision.
-            if let Some(decimal_index) = s.find('.') {
-                let decimal_part = &s[decimal_index + 1..];
-                if decimal_part.len() > 2 {
-                    bail!(
-                        "Percentage value has too much precision (max 2 decimal places): {}",
-                        s
-                    );
-                }
-            }
-
-            let percentage = s
-                .parse::<f64>()
-                .map_err(|_| anyhow!("Invalid percentage value: {}", s))?;
-
-            // Values must be between 0.01% and 100%
-            if !(0.01..=MAX_PERCENTAGE).contains(&percentage) {
-                bail!(
-                    "Percentage must between 0.01% and 100%, got: {}",
-                    percentage
-                );
-            }
-
-            // This conversion is safe because we've already checked the value
-            // is between 0.01% and 100%.
-            Ok((percentage * MAX_PERCENTAGE).round() as u16)
+    // Check for excessive decimal precision.
+    if let Some(decimal_index) = percentage_str.find('.') {
+        let decimal_part = &percentage_str[decimal_index + 1..];
+        if decimal_part.len() > 2 {
+            bail!(
+                "Percentage value has too much precision (max 2 decimal places): {}",
+                percentage_str
+            );
         }
     }
+
+    let percentage = percentage_str
+        .parse::<f64>()
+        .map_err(|_| anyhow!("Invalid percentage value: {}", percentage_str))?;
+
+    // Values must be between 0.01% and 100%
+    if !(0.01..=MAX_PERCENTAGE).contains(&percentage) {
+        bail!(
+            "Percentage must between 0.01% and 100%, got: {}",
+            percentage
+        );
+    }
+
+    // This conversion is safe because we've already checked the value
+    // is between 0.01% and 100%.
+    Ok((percentage * MAX_PERCENTAGE).round() as u16)
 }
 
 /// Parse a burn rate percentage string (e.g., "12.5" or "50.0000001") into a u32 value.
