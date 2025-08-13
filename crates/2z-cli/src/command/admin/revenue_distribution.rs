@@ -1,4 +1,5 @@
 use anyhow::{anyhow, bail, Result};
+use clap::{Args, Subcommand};
 use doublezero_program_tools::{get_program_data_address, instruction::try_build_instruction};
 use doublezero_revenue_distribution::{
     instruction::{
@@ -17,7 +18,137 @@ use solana_sdk::{
 
 use crate::payer::{SolanaPayerOptions, Wallet};
 
-use super::ConfigureRevenueDistributionOptions;
+#[derive(Debug, Args)]
+pub struct RevenueDistributionAdminCliCommand {
+    #[command(subcommand)]
+    pub command: RevenueDistributionAdminSubCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum RevenueDistributionAdminSubCommand {
+    /// Initialize and set admin to upgrade authority.
+    Initialize {
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+
+    /// Set admin to a specified key.
+    SetAdmin {
+        admin_key: Pubkey,
+
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+
+    /// Configure the program.
+    Configure {
+        #[command(flatten)]
+        configure_options: Box<ConfigureRevenueDistributionOptions>,
+
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+
+    /// Migrate program accounts.
+    MigrateProgramAccounts {
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+}
+
+impl RevenueDistributionAdminSubCommand {
+    pub async fn try_into_execute(self) -> Result<()> {
+        match self {
+            RevenueDistributionAdminSubCommand::Initialize {
+                solana_payer_options,
+            } => execute_initialize_program(solana_payer_options).await,
+            RevenueDistributionAdminSubCommand::SetAdmin {
+                admin_key,
+                solana_payer_options,
+            } => execute_set_admin(admin_key, solana_payer_options).await,
+            RevenueDistributionAdminSubCommand::Configure {
+                configure_options,
+                solana_payer_options,
+            } => execute_configure_program(configure_options, solana_payer_options).await,
+            RevenueDistributionAdminSubCommand::MigrateProgramAccounts {
+                solana_payer_options,
+            } => execute_migrate_program_accounts(solana_payer_options).await,
+        }
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct ConfigureRevenueDistributionOptions {
+    // Flags.
+    //
+    /// Whether to pause the program. Cannot be used with --unpause.
+    #[arg(long)]
+    pub pause: bool,
+
+    /// Whether to unpause the program. Cannot be used with --pause.
+    #[arg(long)]
+    pub unpause: bool,
+
+    // Other configuration.
+    //
+    /// Set the payments accountant key.
+    #[arg(long)]
+    pub payments_accountant: Option<Pubkey>,
+
+    /// Set the rewards accountant key.
+    #[arg(long)]
+    pub rewards_accountant: Option<Pubkey>,
+
+    /// Set the SOL/2Z Swap program ID.
+    #[arg(long)]
+    pub sol_2z_swap_program: Option<Pubkey>,
+
+    /// Solana validator base block rewards fee percentage (max: 100%).
+    #[arg(long)]
+    pub solana_validator_base_block_rewards_fee: Option<String>,
+
+    /// Solana validator priority block rewards fee percentage (max: 100%).
+    #[arg(long)]
+    pub solana_validator_priority_block_rewards_fee: Option<String>,
+
+    /// Solana validator inflation rewards fee percentage (max: 100%).
+    #[arg(long)]
+    pub solana_validator_inflation_rewards_fee: Option<String>,
+
+    /// Solana validator Jito tips fee percentage (max: 100%).
+    #[arg(long)]
+    pub solana_validator_jito_tips_fee: Option<String>,
+
+    /// How long the accountant must wait to fetch telemetry data for reward calculations.
+    #[arg(long)]
+    pub calculation_grace_period_seconds: Option<u32>,
+
+    /// Amount to pay relayer to terminate a prepaid connection.
+    #[arg(long)]
+    pub prepaid_connection_termination_relay_lamports: Option<u32>,
+
+    /// Community burn rate limit percentage (max: 100%, precision: 7 decimals).
+    #[arg(long)]
+    pub community_burn_rate_limit: Option<String>,
+
+    #[arg(long)]
+    pub epochs_to_increasing_community_burn_rate: Option<u32>,
+
+    #[arg(long)]
+    pub epochs_to_community_burn_rate_limit: Option<u32>,
+
+    /// Initial community burn rate percentage (max: 100%, precision: 7 decimals).
+    #[arg(long)]
+    pub initial_community_burn_rate: Option<String>,
+
+    /// Activation cost for a prepaid connection.
+    #[arg(long)]
+    pub activation_cost: Option<u32>,
+
+    /// Cost per DoubleZero epoch for a prepaid connection.
+    #[arg(long)]
+    pub cost_per_epoch: Option<u32>,
+}
 
 //
 // AdminSubCommand::Initialize.
@@ -327,7 +458,9 @@ pub async fn execute_configure_program(
         (Some(limit_str), Some(epochs_to_increasing), Some(epochs_to_limit), initial_rate_str) => {
             // Parse burn rate percentages (limit and initial_rate are percentages).
             let limit = parse_burn_rate_percentage(limit_str)?;
-            let initial_rate = initial_rate_str.map(parse_burn_rate_percentage).transpose()?;
+            let initial_rate = initial_rate_str
+                .map(parse_burn_rate_percentage)
+                .transpose()?;
 
             let configure_program_ix = try_build_configure_program_instruction(
                 &wallet_key,
@@ -445,7 +578,7 @@ fn parse_burn_rate_percentage(percentage_str: String) -> Result<u32> {
         .map_err(|_| anyhow!("Invalid percentage value: {}", percentage_str))?;
 
     // Values must be between 0.0000001% and 100%
-    if percentage != 0.0 && (percentage < 0.0000001 || percentage > MAX_PERCENTAGE) {
+    if !(0.0000001..=MAX_PERCENTAGE).contains(&percentage) {
         bail!(
             "Percentage must be between 0.0000001% and 100%, got: {}",
             percentage

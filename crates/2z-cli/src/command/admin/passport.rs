@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use clap::{Args, Subcommand};
 use doublezero_passport::{
     instruction::{
         account::{ConfigureProgramAccounts, InitializeProgramAccounts, SetAdminAccounts},
@@ -13,6 +14,64 @@ use solana_sdk::{
 };
 
 use crate::payer::{SolanaPayerOptions, Wallet};
+
+#[derive(Debug, Args)]
+pub struct PassportAdminCliCommand {
+    #[command(subcommand)]
+    pub command: PassportAdminSubCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum PassportAdminSubCommand {
+    /// Initialize and set admin to upgrade authority.
+    Initialize {
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+
+    /// Set admin to a specified key.
+    SetAdmin {
+        admin_key: Pubkey,
+
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+
+    /// Configure the program.
+    Configure {
+        // Flags.
+        //
+        /// Whether to pause the program. Cannot be used with --unpause.
+        #[arg(long)]
+        pause: bool,
+
+        /// Whether to unpause the program. Cannot be used with --pause.
+        #[arg(long)]
+        unpause: bool,
+
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+}
+
+impl PassportAdminSubCommand {
+    pub async fn try_into_execute(self) -> Result<()> {
+        match self {
+            PassportAdminSubCommand::Initialize {
+                solana_payer_options,
+            } => execute_initialize_program(solana_payer_options).await,
+            PassportAdminSubCommand::SetAdmin {
+                admin_key,
+                solana_payer_options,
+            } => execute_set_admin(admin_key, solana_payer_options).await,
+            PassportAdminSubCommand::Configure {
+                pause,
+                unpause,
+                solana_payer_options,
+            } => execute_configure_program(pause, unpause, solana_payer_options).await,
+        }
+    }
+}
 
 //
 // AdminSubCommand::Initialize.
