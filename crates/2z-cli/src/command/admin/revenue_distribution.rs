@@ -196,6 +196,10 @@ pub async fn execute_configure_program(
         solana_validator_fee_jito_tips,
         calculation_grace_period_seconds,
         prepaid_connection_termination_relay_lamports,
+        community_burn_rate_limit,
+        epochs_to_increasing_community_burn_rate,
+        epochs_to_community_burn_rate_limit,
+        initial_community_burn_rate,
         activation_cost: _,
         cost_per_epoch: _,
     } = *configure_options;
@@ -306,6 +310,41 @@ pub async fn execute_configure_program(
         compute_unit_limit += 4_000;
     }
 
+    // All required community burn rate parameters must be specified together in order to
+    // construct the configure program instruction (initial_rate is optional).
+    match (
+        community_burn_rate_limit,
+        epochs_to_increasing_community_burn_rate,
+        epochs_to_community_burn_rate_limit,
+        initial_community_burn_rate,
+    ) {
+        (Some(limit_str), Some(epochs_to_increasing), Some(epochs_to_limit), initial_rate_str) => {
+            // Parse burn rate percentages (limit and initial_rate are percentages).
+            let limit = parse_burn_rate_percentage(limit_str)?;
+            let initial_rate = initial_rate_str.map(parse_burn_rate_percentage).transpose()?;
+
+            let configure_program_ix = try_build_configure_program_instruction(
+                &wallet_key,
+                ProgramConfiguration::CommunityBurnRateParameters {
+                    limit,
+                    dz_epochs_to_increasing: epochs_to_increasing,
+                    dz_epochs_to_limit: epochs_to_limit,
+                    initial_rate,
+                },
+            )?;
+            instructions.push(configure_program_ix);
+            compute_unit_limit += 5_000;
+        }
+        (None, None, None, None) => {}
+        _ => {
+            bail!("Must specify all required community burn rate parameters together (limit, epochs_to_increasing, epochs_to_limit)");
+        }
+    }
+
+    if instructions.is_empty() {
+        bail!("No configuration options provided");
+    }
+
     // NOTE: We may need to chunk these instructions if more configurations are
     // added.
 
@@ -380,4 +419,39 @@ fn parse_fee_percentage(percentage_str: Option<String>) -> Result<u16> {
             Ok((percentage * MAX_PERCENTAGE).round() as u16)
         }
     }
+}
+
+/// Parse a burn rate percentage string (e.g., "12.5" or "50.0000001") into a u32 value.
+/// The value is stored with 7 decimal places of precision where 100% = 1,000,000,000.
+/// This gives us precision up to 0.0000001% (e.g., 12.3456789% = 123456789).
+fn parse_burn_rate_percentage(percentage_str: String) -> Result<u32> {
+    const MAX_PERCENTAGE: f64 = 100.0;
+    const SCALE_FACTOR: f64 = 10_000_000.0; // 10^7 for 7 decimal places
+
+    // Check for excessive decimal precision (more than 7 decimal places).
+    if let Some(decimal_index) = percentage_str.find('.') {
+        let decimal_part = &percentage_str[decimal_index + 1..];
+        if decimal_part.len() > 7 {
+            bail!(
+                "Percentage value has too much precision (max 7 decimal places): {}",
+                percentage_str
+            );
+        }
+    }
+
+    let percentage = percentage_str
+        .parse::<f64>()
+        .map_err(|_| anyhow!("Invalid percentage value: {}", percentage_str))?;
+
+    // Values must be between 0.0000001% and 100%
+    if percentage != 0.0 && (percentage < 0.0000001 || percentage > MAX_PERCENTAGE) {
+        bail!(
+            "Percentage must be between 0.0000001% and 100%, got: {}",
+            percentage
+        );
+    }
+
+    // This conversion is safe because we've already checked the value
+    // is between 0.0000001% and 100%.
+    Ok((percentage * SCALE_FACTOR).round() as u32)
 }

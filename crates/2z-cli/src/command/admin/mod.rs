@@ -207,6 +207,20 @@ pub struct ConfigureRevenueDistributionOptions {
     #[arg(long)]
     pub prepaid_connection_termination_relay_lamports: Option<u32>,
 
+    /// Community burn rate limit percentage (max: 100%, precision: 7 decimals).
+    #[arg(long)]
+    pub community_burn_rate_limit: Option<String>,
+
+    #[arg(long)]
+    pub epochs_to_increasing_community_burn_rate: Option<u32>,
+
+    #[arg(long)]
+    pub epochs_to_community_burn_rate_limit: Option<u32>,
+
+    /// Initial community burn rate percentage (max: 100%, precision: 7 decimals).
+    #[arg(long)]
+    pub initial_community_burn_rate: Option<String>,
+
     /// Activation cost for a prepaid connection.
     #[arg(long)]
     pub activation_cost: Option<u32>,
