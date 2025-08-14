@@ -18,6 +18,8 @@ pub enum Error {
     InstructionInvalid(Signature),
     #[error("pubsub client error: {0}")]
     PubsubClient(#[from] PubsubClientError),
+    #[error("request channel error: {0}")]
+    ReqChannel(#[from] tokio::sync::mpsc::error::SendError<Signature>),
     #[error("rpc client error: {0}")]
     RpcClient(#[from] ClientError),
     #[error("signature not found for account: {0}")]

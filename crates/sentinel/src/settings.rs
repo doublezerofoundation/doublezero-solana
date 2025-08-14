@@ -6,6 +6,7 @@ use std::{
     fs,
     net::SocketAddr,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 use url::Url;
 
@@ -68,11 +69,11 @@ impl Settings {
             .and_then(|config| config.try_deserialize())
     }
 
-    pub fn keypair(&self) -> Keypair {
+    pub fn keypair(&self) -> Arc<Keypair> {
         let file_content = fs::read_to_string(&self.keypair).expect("invalid keypair file path");
         let secret_key_bytes: Vec<u8> =
             serde_json::from_str(&file_content).expect("invalid keypair file contents");
-        Keypair::try_from(secret_key_bytes.as_slice()).expect("invalid keypair")
+        Arc::new(Keypair::try_from(secret_key_bytes.as_slice()).expect("invalid keypair"))
     }
 
     pub fn sol_rpc(&self) -> Url {

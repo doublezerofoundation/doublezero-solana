@@ -8,6 +8,7 @@ use solana_sdk::{
     transaction::Transaction,
 };
 use solana_system_interface::instruction;
+use std::sync::Arc;
 use tracing::info;
 use url::Url;
 
@@ -16,23 +17,25 @@ const DZ_USER_SIZE_ESTIMATE: usize = 236;
 
 pub struct DzRpcClient {
     client: RpcClient,
-    payer: Keypair,
-    onboarding_lamports: u64,
+    payer: Arc<Keypair>,
 }
 
 impl DzRpcClient {
-    pub fn new(rpc_url: Url, payer: Keypair, onboarding_lamports: u64) -> Self {
+    pub fn new(rpc_url: Url, payer: Arc<Keypair>) -> Self {
         Self {
             client: RpcClient::new_with_commitment(
                 rpc_url.clone().into(),
                 CommitmentConfig::confirmed(),
             ),
-            onboarding_lamports,
             payer,
         }
     }
 
-    pub async fn fund_authorized_user(&self, recipient_pubkey: &Pubkey) -> Result<Signature> {
+    pub async fn fund_authorized_user(
+        &self,
+        recipient_pubkey: &Pubkey,
+        onboarding_lamports: u64,
+    ) -> Result<Signature> {
         let recent_blockhash = self.client.get_latest_blockhash().await?;
 
         // TODO: Read the ledger for records to indicate if this user already exists and
@@ -45,7 +48,7 @@ impl DzRpcClient {
         let xfr = instruction::transfer(
             &self.payer.pubkey(),
             recipient_pubkey,
-            self.onboarding_lamports + rent,
+            onboarding_lamports + rent,
         );
 
         let txn = Transaction::new_signed_with_payer(
@@ -56,7 +59,7 @@ impl DzRpcClient {
         );
 
         let signature = self.client.send_and_confirm_transaction(&txn).await?;
-        info!(rent, onboarding_lamports = self.onboarding_lamports, user = %recipient_pubkey, %signature, "successfully funded authorized user");
+        info!(rent, onboarding_lamports, user = %recipient_pubkey, %signature, "successfully funded authorized user");
 
         Ok(signature)
     }

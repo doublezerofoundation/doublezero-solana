@@ -36,15 +36,16 @@ use solana_sdk::{
 use solana_transaction_status_client_types::{
     EncodedTransaction, TransactionBinaryEncoding, UiTransactionEncoding,
 };
+use std::sync::Arc;
 use url::Url;
 
 pub struct SolRpcClient {
     client: RpcClient,
-    payer: Keypair,
+    payer: Arc<Keypair>,
 }
 
 impl SolRpcClient {
-    pub fn new(rpc_url: Url, payer: Keypair) -> Self {
+    pub fn new(rpc_url: Url, payer: Arc<Keypair>) -> Self {
         Self {
             client: RpcClient::new_with_commitment(rpc_url.into(), CommitmentConfig::confirmed()),
             payer,
@@ -171,7 +172,7 @@ impl SolPubsubClient {
         Ok(Self { client })
     }
 
-    pub async fn subscribe_access_requests(
+    pub async fn subscribe_to_access_requests(
         &self,
     ) -> Result<(
         BoxStream<'_, Response<RpcLogsResponse>>,
