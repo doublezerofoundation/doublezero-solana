@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use doublezero_solana_contributor_revenue::{
+use doublezero_solana_contributor_rewards::{
     calculator::orchestrator::Orchestrator, settings::Settings,
 };
 use solana_sdk::pubkey::Pubkey;

@@ -2,7 +2,7 @@ use anyhow::Result;
 use doublezero_serviceability::state::{
     device::Device as DZDevice, location::Location as DZLocation, user::User as DZUser,
 };
-use doublezero_solana_contributor_revenue::ingestor::{
+use doublezero_solana_contributor_rewards::ingestor::{
     demand,
     types::{DZServiceabilityData, FetchData},
 };

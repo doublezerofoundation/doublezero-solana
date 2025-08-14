@@ -1,6 +1,6 @@
 [package]
-name = "doublezero-solana-contributor-revenue"
-description = "Crate that processes revenue for contributors"
+name = "doublezero-solana-contributor-rewards"
+description = "Crate that processes rewards for contributors"
 
 edition.workspace = true
 homepage.workspace = true

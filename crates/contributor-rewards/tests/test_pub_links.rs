@@ -1,6 +1,6 @@
 use anyhow::Result;
-use doublezero_solana_contributor_revenue::calculator::shapley_handler::build_public_links;
-use doublezero_solana_contributor_revenue::processor::inet_telem::{
+use doublezero_solana_contributor_rewards::calculator::shapley_handler::build_public_links;
+use doublezero_solana_contributor_rewards::processor::inet_telem::{
     InternetTelemetryStatMap, InternetTelemetryStats,
 };
 use serde::{Deserialize, Serialize};

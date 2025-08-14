@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use anyhow::Result;
-    use doublezero_solana_contributor_revenue::calculator::keypair_loader::load_keypair;
+    use doublezero_solana_contributor_rewards::calculator::keypair_loader::load_keypair;
     use std::{fs, path::PathBuf};
     use tempfile::TempDir;
 
@@ -111,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_borsh_serialization_dzd_telemetry() {
-        use doublezero_solana_contributor_revenue::processor::device_telem::DZDTelemetryStatMap;
+        use doublezero_solana_contributor_rewards::processor::device_telem::DZDTelemetryStatMap;
         use std::collections::HashMap;
 
         // Create an empty test telemetry map
@@ -129,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_borsh_serialization_internet_telemetry() {
-        use doublezero_solana_contributor_revenue::processor::inet_telem::InternetTelemetryStatMap;
+        use doublezero_solana_contributor_rewards::processor::inet_telem::InternetTelemetryStatMap;
         use std::collections::HashMap;
 
         // Create an empty test telemetry map
