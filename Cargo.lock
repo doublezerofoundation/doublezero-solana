@@ -1516,7 +1516,6 @@ dependencies = [
  "reqwest",
  "serde",
  "solana-client",
- "solana-epoch-info",
  "solana-sdk",
  "solana-transaction-status-client-types",
  "svm-hash",

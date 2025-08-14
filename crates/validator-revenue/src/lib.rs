@@ -206,7 +206,6 @@ mod tests {
     use solana_client::rpc_response::{
         RpcInflationReward, RpcVoteAccountInfo, RpcVoteAccountStatus,
     };
-    use solana_epoch_info::EpochInfo;
     use solana_sdk::{commitment_config::CommitmentConfig, reward_type::RewardType::Fee};
     use solana_transaction_status_client_types::{
         TransactionDetails, UiConfirmedBlock, UiTransactionEncoding,

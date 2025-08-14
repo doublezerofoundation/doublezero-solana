@@ -182,14 +182,14 @@ fn spawn_worker_task(
         println!("[Worker] Task shutting down gracefully");
     })
 }
-
+#[allow(dead_code)]
 async fn post_rewards_for_epoch(
     _reward: HashMap<String, Reward>,
     _epoch: u64,
 ) -> anyhow::Result<bool> {
     // TODO get the rewards
     // TODO post reward
-    unimplemented!()
+    todo!()
 }
 
 #[cfg(test)]
@@ -201,8 +201,9 @@ mod tests {
     use solana_client::rpc_response::{
         RpcInflationReward, RpcVoteAccountInfo, RpcVoteAccountStatus,
     };
-    use solana_epoch_info::EpochInfo;
-    use solana_sdk::{commitment_config::CommitmentConfig, reward_type::RewardType::Fee};
+    use solana_sdk::{
+        commitment_config::CommitmentConfig, epoch_info::EpochInfo, reward_type::RewardType::Fee,
+    };
     use solana_transaction_status_client_types::{
         TransactionDetails, UiConfirmedBlock, UiTransactionEncoding,
     };
