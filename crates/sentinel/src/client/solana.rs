@@ -17,8 +17,8 @@ use solana_account_decoder_client_types::UiAccountEncoding;
 use solana_client::{
     nonblocking::{pubsub_client::PubsubClient, rpc_client::RpcClient},
     rpc_config::{
-        RpcAccountInfoConfig, RpcProgramAccountsConfig, RpcTransactionLogsConfig,
-        RpcTransactionLogsFilter,
+        RpcAccountInfoConfig, RpcBlockProductionConfig, RpcBlockProductionConfigRange,
+        RpcProgramAccountsConfig, RpcTransactionLogsConfig, RpcTransactionLogsFilter,
     },
     rpc_filter::{Memcmp, RpcFilterType},
     rpc_response::{Response, RpcLogsResponse},
@@ -148,6 +148,26 @@ impl SolRpcClient {
 
         Ok(access_ids)
     }
+
+    pub async fn check_leader_schedule(&self, validator_id: &Pubkey) -> Result<bool> {
+        let latest_slot = self.client.get_slot().await?;
+        let first_slot = latest_slot.saturating_sub(SLOT_CHUNK_SIZE * 7);
+
+        // SlotRange::new(first_slot, latest_slot);
+        // let config = RpcBlockProductionConfig {
+        //     range: Some(RpcBlockProductionConfigRange {
+        //         first_slot,
+        //         last_slot: Some(current_slot),
+        //     }),
+        //     identity: Some(validator_id.to_string()),
+        //     ..Default::default()
+        // };
+
+        // let production = self.client.get_block_production_with_config(config).await?;
+
+        // Ok(!production.value.by_identity.is_empty())
+        Ok(true)
+    }
 }
 
 pub struct SolPubsubClient {
@@ -214,5 +234,77 @@ fn deserialize_access_request_ids(txn: Transaction) -> Result<AccessIds> {
             mode,
         }),
         _ => Err(Error::InstructionInvalid(*signature)),
+    }
+}
+
+// Chunk the request by roughly 1 days worth of slots
+// Assumes average slot time of 0.4 seconds
+const SLOT_CHUNK_SIZE: u64 = 216_000;
+
+struct ReverseSlotRange {
+    current_start: u64,
+    last_slot: u64,
+    chunk_size: u64,
+}
+
+impl ReverseSlotRange {
+    fn new(starting_slot: u64, oldest_slot: u64) -> Self {
+        Self {
+            current_start: starting_slot,
+            last_slot: oldest_slot,
+            chunk_size: SLOT_CHUNK_SIZE,
+        }
+    }
+}
+
+impl Iterator for ReverseSlotRange {
+    type Item = (u64, u64);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_start <= self.last_slot {
+            None
+        } else {
+            let end = self.current_start;
+            let start = std::cmp::max(
+                self.current_start.saturating_sub(self.chunk_size),
+                self.last_slot,
+            );
+            self.current_start = start - 1;
+            Some((start, end))
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_reverse_iter() {
+        let start_slot = 2_000_000;
+        let oldest_slot = 1_000_000;
+        let slot_range = ReverseSlotRange::new(start_slot, oldest_slot);
+        let results = slot_range
+            .into_iter()
+            .map(|range| {
+                println!("{range:?}");
+                println!("{}", range.1 - range.0);
+                range
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(results.len(), 5);
+        assert_eq!(
+            results.first().map(|(start, end)| end - start).unwrap(),
+            SLOT_CHUNK_SIZE
+        );
+        assert_eq!(
+            results.last().map(|(start, end)| end - start).unwrap(),
+            (start_slot - oldest_slot) - (4 * SLOT_CHUNK_SIZE + 4),
+        );
+        assert_eq!(
+            results.first().map(|(_, start)| *start).unwrap(),
+            start_slot
+        );
+        assert_eq!(results.last().map(|(end, _)| *end).unwrap(), oldest_slot);
     }
 }
