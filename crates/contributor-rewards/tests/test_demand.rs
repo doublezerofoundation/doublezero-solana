@@ -108,6 +108,8 @@ fn convert_to_fetch_data(test_data: &TestData) -> Result<FetchData> {
             mgmt_vrf: String::new(),
             interfaces: vec![],
             reference_count: 0,
+            max_users: 0,
+            users_count: 0,
         };
 
         devices.insert(pk, device);

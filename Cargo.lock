@@ -3861,7 +3861,7 @@ dependencies = [
 [[package]]
 name = "network-shapley"
 version = "0.1.0"
-source = "git+https://github.com/doublezerofoundation/network-shapley-rs#e7280c350a9fcb740018d1c87e7376dc5e2c5a6f"
+source = "git+https://github.com/doublezerofoundation/network-shapley-rs?tag=v0.2.1#e7280c350a9fcb740018d1c87e7376dc5e2c5a6f"
 dependencies = [
  "borsh 1.5.7",
  "clarabel",
