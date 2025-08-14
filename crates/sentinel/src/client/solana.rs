@@ -124,7 +124,7 @@ impl SolRpcClient {
         }
     }
 
-    pub async fn gets_access_modes(&self) -> Result<Vec<AccessMode>> {
+    pub async fn gets_access_mode(&self) -> Result<Vec<AccessMode>> {
         let config = RpcProgramAccountsConfig {
             filters: Some(vec![RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
                 0,
@@ -142,7 +142,7 @@ impl SolRpcClient {
             .get_program_accounts_with_config(&passport_id(), config)
             .await?;
 
-        let access_requests_with_instructions = futures::stream::iter(accounts)
+        let access_modes = futures::stream::iter(accounts)
             .then(|(pubkey, _acct)| async move {
                 let signatures = self.client.get_signatures_for_address(&pubkey).await?;
 
@@ -157,7 +157,7 @@ impl SolRpcClient {
             .try_collect::<Vec<_>>()
             .await?;
 
-        Ok(access_requests_with_instructions)
+        Ok(access_modes)
     }
 }
 

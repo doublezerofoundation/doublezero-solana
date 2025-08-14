@@ -27,7 +27,7 @@ impl ReqListener {
     }
 
     pub async fn run(&self, shutdown_listener: CancellationToken) -> Result<()> {
-        info!("Access Request listener subscribing to logs");
+        info!("AccessRequest listener subscribing to logs");
 
         let (mut request_stream, subscription) =
             self.pubsub_client.subscribe_to_access_requests().await?;

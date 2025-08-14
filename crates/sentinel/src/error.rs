@@ -26,6 +26,8 @@ pub enum Error {
     SignatureNotFound(solana_sdk::pubkey::Pubkey),
     #[error("invalid transaction signature: {0}")]
     SignatureInvalid(#[from] ParseSignatureError),
+    #[error("access request signature did not verify")]
+    SignatureVerify,
     #[error("invalid transaction encoding: {0}")]
     TransactionEncoding(Signature),
 }

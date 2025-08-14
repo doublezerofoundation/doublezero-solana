@@ -1,7 +1,8 @@
 use crate::{
     client::{doublezero::DzRpcClient, solana::SolRpcClient},
-    Result,
+    verify_access_request, Result,
 };
+use doublezero_passport::instruction::AccessMode;
 use solana_sdk::signature::{Keypair, Signature};
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc::UnboundedReceiver, time::interval};
@@ -41,17 +42,45 @@ impl Sentinel {
             tokio::select! {
                 biased;
                 _ = shutdown_listener.cancelled() => break,
-                // run the backfill check on a ticker
                 _ = backfill_timer.tick() => {
-                    info!("fetching unhandled access requests");
+                    let access_modes = self.sol_rpc_client.gets_access_mode().await?;
+
+                    info!(count = access_modes.len(), "processing unhandled access requests");
+
+                    for access_mode in access_modes {
+                        if verify_access_request(&access_mode).is_ok() {
+                            let AccessMode::SolanaValidator {
+                                service_key,
+                                ..
+                            } = access_mode;
+                            self.dz_rpc_client.fund_authorized_user(&service_key, self.onboarding_lamports).await?;
+                        }
+
+                    }
                 }
-                // handle messages from the websocket handler
                 event = self.rx.recv() => {
                     if let Some(signature) = event {
                         info!(%signature, "received access request txn");
+                        self.handle_access_request(signature).await?;
                     }
                 }
             }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_access_request(&self, signature: Signature) -> Result<()> {
+        let access_mode = self
+            .sol_rpc_client
+            .get_access_mode_from_signature(signature)
+            .await?;
+
+        if verify_access_request(&access_mode).is_ok() {
+            let AccessMode::SolanaValidator { service_key, .. } = access_mode;
+            self.dz_rpc_client
+                .fund_authorized_user(&service_key, self.onboarding_lamports)
+                .await?;
         }
 
         Ok(())
