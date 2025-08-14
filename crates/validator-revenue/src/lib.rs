@@ -7,6 +7,7 @@
 //! - benchmark expected number of validators for mainnet beta launch and 6 months after
 //! - handle DZ epochs once they're defined
 pub mod rewards;
+pub mod worker;
 use anyhow::{anyhow, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::Deserialize;
@@ -205,6 +206,7 @@ mod tests {
     use solana_client::rpc_response::{
         RpcInflationReward, RpcVoteAccountInfo, RpcVoteAccountStatus,
     };
+    use solana_epoch_info::EpochInfo;
     use solana_sdk::{commitment_config::CommitmentConfig, reward_type::RewardType::Fee};
     use solana_transaction_status_client_types::{
         TransactionDetails, UiConfirmedBlock, UiTransactionEncoding,

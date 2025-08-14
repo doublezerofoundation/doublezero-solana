@@ -18,7 +18,10 @@ use solana_client::{
     rpc_config::{RpcBlockConfig, RpcGetVoteAccountsConfig},
     rpc_response::{RpcInflationReward, RpcVoteAccountStatus},
 };
-use solana_sdk::{clock::DEFAULT_SLOTS_PER_EPOCH, pubkey::Pubkey, reward_type::RewardType::Fee};
+use solana_sdk::{
+    clock::DEFAULT_SLOTS_PER_EPOCH, epoch_info::EpochInfo, pubkey::Pubkey,
+    reward_type::RewardType::Fee,
+};
 use solana_transaction_status_client_types::UiConfirmedBlock;
 
 const JITO_BASE_URL: &str = "https://kobe.mainnet.jito.network/api/v1/";
@@ -30,6 +33,7 @@ pub const fn get_first_slot_for_epoch(target_epoch: u64) -> u64 {
 }
 
 pub const LAMPORT_MULTIPLE: u64 = 5000;
+
 #[derive(Deserialize, Debug)]
 pub struct JitoRewards {
     // TODO: check total_count to see if it exceeds entries in a single response
@@ -47,6 +51,7 @@ pub struct JitoReward {
 #[automock]
 #[async_trait]
 pub trait ValidatorRewards {
+    async fn get_epoch_info(&self) -> Result<EpochInfo, solana_client::client_error::ClientError>;
     async fn get_leader_schedule(&self) -> Result<HashMap<String, Vec<usize>>>;
     async fn get_block_with_config(
         &self,
@@ -88,6 +93,9 @@ impl FeePaymentCalculator {
 
 #[async_trait]
 impl ValidatorRewards for FeePaymentCalculator {
+    async fn get_epoch_info(&self) -> Result<EpochInfo, solana_client::client_error::ClientError> {
+        self.0.get_epoch_info().await
+    }
     async fn get_leader_schedule(&self) -> Result<HashMap<String, Vec<usize>>> {
         let schedule = self.0.get_leader_schedule(None).await?;
         schedule.ok_or(anyhow!("No leader schedule found"))
