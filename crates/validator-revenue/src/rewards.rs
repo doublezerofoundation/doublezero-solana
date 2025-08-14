@@ -372,10 +372,7 @@ mod tests {
         assert_eq!(reward.block_base, base_fees);
         assert_eq!(reward.inflation, inflation_reward);
         assert_eq!(reward.jito, jito_reward);
-        assert_eq!(
-            reward.total,
-            block_reward + inflation_reward + jito_reward
-        );
+        assert_eq!(reward.total, block_reward + inflation_reward + jito_reward);
         assert_eq!(reward.block_priority, priority_base);
     }
 
