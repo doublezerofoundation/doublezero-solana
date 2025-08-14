@@ -7,6 +7,7 @@ on:
 
 env:
   SOLANA_CLI: v2.3.6
+  SERVICEABILITY_PROGRAM_ID: devnet
 
 jobs:
   fmt:
