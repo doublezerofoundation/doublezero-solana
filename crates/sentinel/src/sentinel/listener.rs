@@ -1,7 +1,6 @@
 use crate::{client::solana::SolPubsubClient, Result};
 
 use futures::StreamExt;
-use metrics::counter;
 use solana_sdk::signature::Signature;
 // TODO: should we make this a bounded channel?
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -44,7 +43,7 @@ impl ReqListener {
                         if log_event.value.logs.iter().any(|log| log.contains("Initialized user AccessRequest")) {
                             let signature: Signature = log_event.value.signature.parse()?;
                             self.tx.send(signature)?;
-                            counter!("access_request_received").increment(1);
+                            metrics::counter!("doublezero_sentinel_access_request_received").increment(1);
                         }
                     }
                 }

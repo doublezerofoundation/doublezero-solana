@@ -1,5 +1,5 @@
 use doublezero_passport::{instruction::AccessMode, state::AccessRequest};
-use solana_sdk::signature::Signature;
+use solana_sdk::{pubkey::Pubkey, signature::Signature};
 
 pub mod client;
 mod error;
@@ -7,6 +7,13 @@ pub mod sentinel;
 pub mod settings;
 
 pub use error::{Error, Result};
+
+#[derive(Debug)]
+pub struct AccessIds {
+    request_pda: Pubkey,
+    rent_beneficiary_key: Pubkey,
+    mode: AccessMode,
+}
 
 pub fn verify_access_request(
     &AccessMode::SolanaValidator {

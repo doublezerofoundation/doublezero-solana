@@ -1,13 +1,13 @@
 use crate::{
     client::{doublezero::DzRpcClient, solana::SolRpcClient},
-    verify_access_request, Result,
+    verify_access_request, AccessIds, Result,
 };
 use doublezero_passport::instruction::AccessMode;
 use solana_sdk::signature::{Keypair, Signature};
 use std::{sync::Arc, time::Duration};
 use tokio::{sync::mpsc::UnboundedReceiver, time::interval};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{error, info};
 use url::Url;
 
 const BACKFILL_TIMER: Duration = Duration::from_secs(60 * 60);
@@ -43,25 +43,23 @@ impl Sentinel {
                 biased;
                 _ = shutdown_listener.cancelled() => break,
                 _ = backfill_timer.tick() => {
-                    let access_modes = self.sol_rpc_client.gets_access_mode().await?;
+                    let access_ids = self.sol_rpc_client.gets_access_request().await?;
 
-                    info!(count = access_modes.len(), "processing unhandled access requests");
+                    info!(count = access_ids.len(), "processing unhandled access requests");
 
-                    for access_mode in access_modes {
-                        if verify_access_request(&access_mode).is_ok() {
-                            let AccessMode::SolanaValidator {
-                                service_key,
-                                ..
-                            } = access_mode;
-                            self.dz_rpc_client.fund_authorized_user(&service_key, self.onboarding_lamports).await?;
+                    for ids in access_ids {
+                        if let Err(err) = self.handle_access_request(ids).await {
+                            error!(?err, "error encountered validating network access request");
                         }
-
                     }
                 }
                 event = self.rx.recv() => {
                     if let Some(signature) = event {
                         info!(%signature, "received access request txn");
-                        self.handle_access_request(signature).await?;
+                        let access_ids = self.sol_rpc_client.get_access_request_from_signature(signature).await?;
+                        if let Err(err) = self.handle_access_request(access_ids).await {
+                            error!(?err, "error encountered validating network access request");
+                        }
                     }
                 }
             }
@@ -70,17 +68,25 @@ impl Sentinel {
         Ok(())
     }
 
-    async fn handle_access_request(&self, signature: Signature) -> Result<()> {
-        let access_mode = self
-            .sol_rpc_client
-            .get_access_mode_from_signature(signature)
-            .await?;
-
-        if verify_access_request(&access_mode).is_ok() {
-            let AccessMode::SolanaValidator { service_key, .. } = access_mode;
+    async fn handle_access_request(&self, access_ids: AccessIds) -> Result<()> {
+        let AccessMode::SolanaValidator { service_key, .. } = access_ids.mode;
+        if verify_access_request(&access_ids.mode).is_ok() {
             self.dz_rpc_client
                 .fund_authorized_user(&service_key, self.onboarding_lamports)
                 .await?;
+            let signature = self
+                .sol_rpc_client
+                .grant_access(&access_ids.request_pda, &access_ids.rent_beneficiary_key)
+                .await?;
+            info!(%signature, user = %service_key, "access request granted");
+            metrics::counter!("doublezero_sentinel_access_granted").increment(1);
+        } else {
+            let signature = self
+                .sol_rpc_client
+                .deny_access(&access_ids.request_pda)
+                .await?;
+            info!(%signature, user = %service_key, "access request denied");
+            metrics::counter!("doublezero_sentinel_access_denied").increment(1);
         }
 
         Ok(())

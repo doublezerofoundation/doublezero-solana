@@ -91,7 +91,7 @@ fn export_build_info() {
     let pkg_version = env!("CARGO_PKG_VERSION");
 
     metrics::gauge!(
-        "doublezero_ledger_sentinel_build_info",
+        "doublezero_sentinel_build_info",
         "version" => version,
         "commit" => build_commit,
         "date" => build_date,

@@ -16,18 +16,34 @@ pub enum Error {
     InstructionNotFound(Signature),
     #[error("invalid instruction data: {0}")]
     InstructionInvalid(Signature),
+    #[error("no account keys for transaction ix: {0}")]
+    MissingAccountKeys(Signature),
+    #[error("no program id at expected instruction index: {0}")]
+    MissingProgramId(Signature),
+    #[error("no transaction id signature")]
+    MissingTxnSignature,
     #[error("pubsub client error: {0}")]
-    PubsubClient(#[from] PubsubClientError),
+    PubsubClient(Box<PubsubClientError>),
     #[error("request channel error: {0}")]
     ReqChannel(#[from] tokio::sync::mpsc::error::SendError<Signature>),
     #[error("rpc client error: {0}")]
-    RpcClient(#[from] ClientError),
-    #[error("signature not found for account: {0}")]
-    SignatureNotFound(solana_sdk::pubkey::Pubkey),
+    RpcClient(Box<ClientError>),
     #[error("invalid transaction signature: {0}")]
     SignatureInvalid(#[from] ParseSignatureError),
     #[error("access request signature did not verify")]
     SignatureVerify,
     #[error("invalid transaction encoding: {0}")]
     TransactionEncoding(Signature),
+}
+
+impl From<ClientError> for Error {
+    fn from(err: ClientError) -> Self {
+        Error::RpcClient(Box::new(err))
+    }
+}
+
+impl From<PubsubClientError> for Error {
+    fn from(err: PubsubClientError) -> Self {
+        Error::PubsubClient(Box::new(err))
+    }
 }
