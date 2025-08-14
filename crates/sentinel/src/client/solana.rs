@@ -1,4 +1,4 @@
-use crate::{Error, Result};
+use crate::{AccessIds, Error, Result};
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STD, Engine};
 use bincode;
@@ -7,7 +7,7 @@ use doublezero_passport::{
     id as passport_id,
     instruction::{
         account::{DenyAccessAccounts, GrantAccessAccounts},
-        AccessMode, PassportInstructionData,
+        PassportInstructionData,
     },
     state::AccessRequest,
 };
@@ -92,7 +92,10 @@ impl SolRpcClient {
             .await?)
     }
 
-    pub async fn get_access_mode_from_signature(&self, signature: Signature) -> Result<AccessMode> {
+    pub async fn get_access_request_from_signature(
+        &self,
+        signature: Signature,
+    ) -> Result<AccessIds> {
         let txn = self
             .client
             .get_transaction(&signature, UiTransactionEncoding::Binary)
@@ -104,27 +107,13 @@ impl SolRpcClient {
             let data: &[u8] = &BASE64_STD.decode(data)?;
             let tx: Transaction = bincode::deserialize(data)?;
 
-            let ix_data = tx
-                .message
-                .instructions
-                .iter()
-                .find(|ix| ix.program_id(&tx.message.account_keys) == &passport_id())
-                .map(|ix| ix.data.clone())
-                .ok_or(Error::InstructionNotFound(signature))?;
-
-            if let PassportInstructionData::RequestAccess(access_mode) =
-                PassportInstructionData::try_from_slice(&ix_data)?
-            {
-                Ok(access_mode)
-            } else {
-                Err(Error::InstructionInvalid(signature))
-            }
+            deserialize_access_request_ids(tx)
         } else {
             Err(Error::TransactionEncoding(signature))
         }
     }
 
-    pub async fn gets_access_mode(&self) -> Result<Vec<AccessMode>> {
+    pub async fn gets_access_request(&self) -> Result<Vec<AccessIds>> {
         let config = RpcProgramAccountsConfig {
             filters: Some(vec![RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
                 0,
@@ -142,22 +131,22 @@ impl SolRpcClient {
             .get_program_accounts_with_config(&passport_id(), config)
             .await?;
 
-        let access_modes = futures::stream::iter(accounts)
+        let access_ids = futures::stream::iter(accounts)
             .then(|(pubkey, _acct)| async move {
                 let signatures = self.client.get_signatures_for_address(&pubkey).await?;
 
                 let creation_signature: Signature = signatures
                     .first()
-                    .ok_or(Error::SignatureNotFound(pubkey))
+                    .ok_or(Error::MissingTxnSignature)
                     .and_then(|sig| sig.signature.parse().map_err(Error::from))?;
 
-                self.get_access_mode_from_signature(creation_signature)
+                self.get_access_request_from_signature(creation_signature)
                     .await
             })
             .try_collect::<Vec<_>>()
             .await?;
 
-        Ok(access_modes)
+        Ok(access_ids)
     }
 }
 
@@ -197,4 +186,33 @@ fn new_transaction(
         Message::try_compile(&signers[0].pubkey(), instructions, &[], recent_blockhash).unwrap();
 
     VersionedTransaction::try_new(VersionedMessage::V0(message), signers).unwrap()
+}
+
+fn deserialize_access_request_ids(txn: Transaction) -> Result<AccessIds> {
+    let signature = txn.signatures.first().ok_or(Error::MissingTxnSignature)?;
+    let compiled_ix = txn
+        .message
+        .instructions
+        .iter()
+        .find(|ix| ix.program_id(&txn.message.account_keys) == &passport_id())
+        .ok_or(Error::InstructionNotFound(*signature))?;
+    let accounts = compiled_ix
+        .accounts
+        .iter()
+        .map(|&idx| txn.message.account_keys.get(idx as usize).copied())
+        .collect::<Option<Vec<_>>>()
+        .ok_or(Error::MissingAccountKeys(*signature))?;
+    let Ok(PassportInstructionData::RequestAccess(mode)) =
+        PassportInstructionData::try_from_slice(&compiled_ix.data)
+    else {
+        return Err(Error::InstructionInvalid(*signature));
+    };
+    match (accounts.get(2), accounts.get(1)) {
+        (Some(request_pda), Some(payer)) => Ok(AccessIds {
+            request_pda: *request_pda,
+            rent_beneficiary_key: *payer,
+            mode,
+        }),
+        _ => Err(Error::InstructionInvalid(*signature)),
+    }
 }
