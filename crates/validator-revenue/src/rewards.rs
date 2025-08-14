@@ -369,12 +369,12 @@ mod tests {
         let reward = epoch_rewards.get(validator_id).unwrap();
         let priority_base = block_reward - base_fees;
         assert_eq!(reward.epoch, epoch);
-        assert_eq!(reward.block_base, block_reward);
+        assert_eq!(reward.block_base, base_fees);
         assert_eq!(reward.inflation, inflation_reward);
         assert_eq!(reward.jito, jito_reward);
         assert_eq!(
             reward.total,
-            priority_base + block_reward + inflation_reward + jito_reward
+            block_reward + inflation_reward + jito_reward
         );
         assert_eq!(reward.block_priority, priority_base);
     }
