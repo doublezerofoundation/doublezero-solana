@@ -4,7 +4,11 @@ use doublezero_program_tools::{
     instruction::try_build_instruction, zero_copy::checked_from_bytes_with_discriminator,
 };
 use doublezero_revenue_distribution::{
+    DOUBLEZERO_MINT_KEY, ID,
     instruction::{
+        ContributorRewardsConfiguration, DistributionMerkleRootKind,
+        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
+        RevenueDistributionInstructionData,
         account::{
             ConfigureContributorRewardsAccounts, ConfigureDistributionPaymentsAccounts,
             ConfigureDistributionRewardsAccounts, ConfigureJournalAccounts,
@@ -16,16 +20,12 @@ use doublezero_revenue_distribution::{
             SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
             VerifyDistributionMerkleRootAccounts,
         },
-        ContributorRewardsConfiguration, DistributionMerkleRootKind,
-        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
-        RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
         ProgramConfig,
     },
     types::DoubleZeroEpoch,
-    DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_loader_v3_interface::{get_program_data_address, state::UpgradeableLoaderState};
 use solana_program_pack::Pack;
@@ -35,7 +35,7 @@ use solana_sdk::{
     account::Account,
     hash::Hash,
     instruction::Instruction,
-    message::{v0::Message, VersionedMessage},
+    message::{VersionedMessage, v0::Message},
     signature::{Keypair, Signer},
     transaction::{TransactionError, VersionedTransaction},
 };

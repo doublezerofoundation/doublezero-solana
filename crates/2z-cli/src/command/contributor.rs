@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{ArgAction, Args, Subcommand};
 use solana_sdk::pubkey::Pubkey;
 

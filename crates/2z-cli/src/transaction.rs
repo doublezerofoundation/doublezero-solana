@@ -1,7 +1,7 @@
 use solana_sdk::{
     hash::Hash,
     instruction::Instruction,
-    message::{v0::Message, VersionedMessage},
+    message::{VersionedMessage, v0::Message},
     signature::Keypair,
     signer::Signer,
     transaction::VersionedTransaction,

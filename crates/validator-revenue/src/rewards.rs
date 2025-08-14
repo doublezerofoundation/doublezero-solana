@@ -8,11 +8,11 @@
 
 use std::{collections::HashMap, error::Error, str::FromStr};
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
-use futures::{stream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream};
 use mockall::automock;
-use serde::{de::DeserializeOwned, Deserialize};
+use serde::{Deserialize, de::DeserializeOwned};
 use solana_client::{
     nonblocking::rpc_client::RpcClient,
     rpc_config::{RpcBlockConfig, RpcGetVoteAccountsConfig},

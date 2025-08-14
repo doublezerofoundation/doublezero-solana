@@ -5,7 +5,7 @@ pub mod account;
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
+use doublezero_program_tools::{DISCRIMINATOR_LEN, Discriminator};
 use solana_pubkey::Pubkey;
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]

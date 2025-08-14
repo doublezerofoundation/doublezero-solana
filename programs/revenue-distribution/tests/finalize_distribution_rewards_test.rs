@@ -4,14 +4,14 @@ mod common;
 
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
+    ID,
     instruction::{
-        account::{ConfigureDistributionRewardsAccounts, FinalizeDistributionRewardsAccounts},
         DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
+        account::{ConfigureDistributionRewardsAccounts, FinalizeDistributionRewardsAccounts},
     },
     state::{self, Distribution},
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
-    ID,
 };
 use solana_program_test::tokio;
 use solana_sdk::{

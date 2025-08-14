@@ -217,46 +217,49 @@ mod tests {
 
     #[test]
     fn test_cannot_new_zero_dz_epochs_to_increasing() {
-        assert!(CommunityBurnRateParameters::new(
-            BurnRate::default(),
-            BurnRate::new(1).unwrap(),
-            0,
-            1,
-        )
-        .is_none());
+        assert!(
+            CommunityBurnRateParameters::new(BurnRate::default(), BurnRate::new(1).unwrap(), 0, 1,)
+                .is_none()
+        );
     }
 
     #[test]
     fn test_cannot_new_dz_epochs_to_limit_lte_dz_epochs_to_increasing() {
-        assert!(CommunityBurnRateParameters::new(
-            BurnRate::new(1).unwrap(),
-            BurnRate::new(2).unwrap(),
-            2,
-            1,
-        )
-        .is_none());
+        assert!(
+            CommunityBurnRateParameters::new(
+                BurnRate::new(1).unwrap(),
+                BurnRate::new(2).unwrap(),
+                2,
+                1,
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn test_cannot_new_zero_initial_rate() {
-        assert!(CommunityBurnRateParameters::new(
-            BurnRate::new(0).unwrap(),
-            BurnRate::new(2).unwrap(),
-            1,
-            2,
-        )
-        .is_none());
+        assert!(
+            CommunityBurnRateParameters::new(
+                BurnRate::new(0).unwrap(),
+                BurnRate::new(2).unwrap(),
+                1,
+                2,
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn test_cannot_new_limit_lt_initial_rate() {
-        assert!(CommunityBurnRateParameters::new(
-            BurnRate::new(2).unwrap(),
-            BurnRate::new(1).unwrap(),
-            1,
-            2,
-        )
-        .is_none());
+        assert!(
+            CommunityBurnRateParameters::new(
+                BurnRate::new(2).unwrap(),
+                BurnRate::new(1).unwrap(),
+                1,
+                2,
+            )
+            .is_none()
+        );
     }
 
     //

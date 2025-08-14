@@ -7,13 +7,13 @@
 //! - benchmark expected number of validators for mainnet beta launch and 6 months after
 //! - handle DZ epochs once they're defined
 pub mod rewards;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::Deserialize;
 use solana_client::rpc_config::{RpcBlockConfig, RpcGetVoteAccountsConfig};
 use solana_sdk::{clock::DEFAULT_SLOTS_PER_EPOCH, pubkey::Pubkey};
 use std::collections::HashMap;
-use svm_hash::merkle::{merkle_root_from_byte_ref_leaves, MerkleProof};
+use svm_hash::merkle::{MerkleProof, merkle_root_from_byte_ref_leaves};
 
 use crate::rewards::ValidatorRewards;
 

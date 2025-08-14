@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::{Pod, Zeroable};
-use doublezero_program_tools::{types::StorageGap, Discriminator, PrecomputedDiscriminator};
+use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator, types::StorageGap};
 use solana_account_info::MAX_PERMITTED_DATA_INCREASE;
 use solana_pubkey::Pubkey;
 

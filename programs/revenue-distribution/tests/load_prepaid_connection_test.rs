@@ -4,14 +4,14 @@ mod common;
 
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
+    DOUBLEZERO_MINT_KEY, ID,
     instruction::{
-        account::{DenyPrepaidConnectionAccessAccounts, LoadPrepaidConnectionAccounts},
         JournalConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
+        account::{DenyPrepaidConnectionAccessAccounts, LoadPrepaidConnectionAccounts},
     },
     state::{JournalEntries, JournalEntry, PrepaidConnection},
     types::DoubleZeroEpoch,
-    DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;

@@ -8,7 +8,7 @@ pub use account_info::*;
 
 use bytemuck::Pod;
 
-use crate::{PrecomputedDiscriminator, DISCRIMINATOR_LEN};
+use crate::{DISCRIMINATOR_LEN, PrecomputedDiscriminator};
 
 pub const fn data_end<T: Pod + PrecomputedDiscriminator>() -> usize {
     DISCRIMINATOR_LEN + size_of::<T>()

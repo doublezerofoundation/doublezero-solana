@@ -1,12 +1,12 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{Args, Subcommand};
 use doublezero_passport::{
+    ID,
     instruction::{
-        account::{ConfigureProgramAccounts, InitializeProgramAccounts, SetAdminAccounts},
         PassportInstructionData, ProgramConfiguration, ProgramFlagConfiguration,
+        account::{ConfigureProgramAccounts, InitializeProgramAccounts, SetAdminAccounts},
     },
     state::ProgramConfig,
-    ID,
 };
 use doublezero_program_tools::{get_program_data_address, instruction::try_build_instruction};
 use solana_sdk::{

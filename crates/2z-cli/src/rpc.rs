@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use anyhow::{bail, Error, Result};
+use anyhow::{Error, Result, bail};
 use clap::Args;
 use solana_client::nonblocking::{pubsub_client::PubsubClient, rpc_client::RpcClient};
 use solana_commitment_config::CommitmentConfig;

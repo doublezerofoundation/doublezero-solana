@@ -10,8 +10,8 @@ pub use relay::*;
 
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{
-    types::{Flags, StorageGap},
     Discriminator, PrecomputedDiscriminator,
+    types::{Flags, StorageGap},
 };
 use solana_pubkey::Pubkey;
 

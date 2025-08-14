@@ -7,7 +7,7 @@ use solana_pubkey::Pubkey;
 use crate::get_program_data_address;
 
 use super::{
-    try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts,
+    EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts, try_next_enumerated_account,
 };
 
 pub struct UpgradeAuthority<'a, 'b> {
@@ -50,7 +50,9 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, &'a Pubkey> for UpgradeAuthority<'a, 'b> {
             }) => {
                 if owner_info.key != &authority {
                     msg!(
-                        "Owner (account {}) must match upgrade authority from program data (account {})", index, index - 1
+                        "Owner (account {}) must match upgrade authority from program data (account {})",
+                        index,
+                        index - 1
                     );
                     Err(ProgramError::InvalidAccountData)
                 } else {

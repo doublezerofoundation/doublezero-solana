@@ -3,10 +3,10 @@ mod common;
 //
 
 use doublezero_revenue_distribution::{
+    DOUBLEZERO_MINT_KEY,
     instruction::{JournalConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
     state::PrepaidConnection,
     types::DoubleZeroEpoch,
-    DOUBLEZERO_MINT_KEY,
 };
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;

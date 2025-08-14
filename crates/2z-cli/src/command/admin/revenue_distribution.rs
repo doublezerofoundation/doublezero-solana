@@ -1,16 +1,16 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use clap::{Args, Subcommand};
 use doublezero_program_tools::{get_program_data_address, instruction::try_build_instruction};
 use doublezero_revenue_distribution::{
+    ID,
     instruction::{
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
         account::{
             ConfigureProgramAccounts, InitializeJournalAccounts, InitializeProgramAccounts,
             MigrateProgramAccounts, SetAdminAccounts,
         },
-        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
-    state::{find_2z_token_pda_address, Journal, ProgramConfig},
-    ID,
+    state::{Journal, ProgramConfig, find_2z_token_pda_address},
 };
 use solana_sdk::{
     compute_budget::ComputeBudgetInstruction, instruction::Instruction, pubkey::Pubkey,
@@ -443,7 +443,9 @@ pub async fn execute_configure_program(
         }
         (None, None, None, None) => {}
         _ => {
-            bail!("Must specify all Solana validator fee parameters together (--solana-validator-base-block-rewards-fee, --solana-validator-priority-block-rewards-fee, --solana-validator-inflation-rewards-fee, --solana-validator-jito-tips-fee)");
+            bail!(
+                "Must specify all Solana validator fee parameters together (--solana-validator-base-block-rewards-fee, --solana-validator-priority-block-rewards-fee, --solana-validator-inflation-rewards-fee, --solana-validator-jito-tips-fee)"
+            );
         }
     }
 
@@ -476,7 +478,9 @@ pub async fn execute_configure_program(
         }
         (None, None, None, None) => {}
         _ => {
-            bail!("Must specify all required community burn rate parameters together (--community-burn-rate-limit, --epochs-to-increasing-community-burn-rate, --epochs-to-community-burn-rate-limit)");
+            bail!(
+                "Must specify all required community burn rate parameters together (--community-burn-rate-limit, --epochs-to-increasing-community-burn-rate, --epochs-to-community-burn-rate-limit)"
+            );
         }
     }
 

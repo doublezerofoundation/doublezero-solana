@@ -3,7 +3,7 @@ use solana_cpi::invoke_signed_unchecked;
 use solana_program_error::ProgramResult;
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction as system_instruction;
-use solana_sysvar::{rent::Rent, Sysvar};
+use solana_sysvar::{Sysvar, rent::Rent};
 
 use super::Invoker;
 

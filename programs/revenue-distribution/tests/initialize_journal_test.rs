@@ -4,8 +4,8 @@ mod common;
 
 use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
 use doublezero_revenue_distribution::{
-    state::{self, Journal},
     DOUBLEZERO_MINT_KEY,
+    state::{self, Journal},
 };
 use solana_program_pack::Pack;
 use solana_program_test::tokio;

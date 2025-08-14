@@ -12,7 +12,7 @@ use doublezero_revenue_distribution::{
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
-use svm_hash::merkle::{merkle_root_from_byte_ref_leaves, MerkleProof};
+use svm_hash::merkle::{MerkleProof, merkle_root_from_byte_ref_leaves};
 
 //
 // Verify distribution merkle root.

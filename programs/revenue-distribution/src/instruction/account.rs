@@ -5,8 +5,8 @@ use solana_system_interface::program as system_program;
 
 use crate::{
     state::{
-        find_2z_token_pda_address, ContributorRewards, Distribution, Journal, PrepaidConnection,
-        ProgramConfig,
+        ContributorRewards, Distribution, Journal, PrepaidConnection, ProgramConfig,
+        find_2z_token_pda_address,
     },
     types::DoubleZeroEpoch,
 };

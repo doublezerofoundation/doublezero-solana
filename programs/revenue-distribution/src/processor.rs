@@ -1,13 +1,13 @@
 use borsh::BorshDeserialize;
 use doublezero_program_tools::{
     account_info::{
-        try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions,
-        TryNextAccounts, UpgradeAuthority,
+        EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts, UpgradeAuthority,
+        try_next_enumerated_account,
     },
     recipe::{
-        create_account::{try_create_account, CreateAccountOptions},
-        create_token_account::try_create_token_account,
         Invoker,
+        create_account::{CreateAccountOptions, try_create_account},
+        create_token_account::try_create_token_account,
     },
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
 };
@@ -17,11 +17,12 @@ use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction as system_instruction;
-use solana_sysvar::{rent::Rent, Sysvar};
+use solana_sysvar::{Sysvar, rent::Rent};
 use spl_token::instruction as token_instruction;
 use svm_hash::{merkle::MerkleProof, sha2::Hash};
 
 use crate::{
+    DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
     instruction::{
         ContributorRewardsConfiguration, DistributionMerkleRootKind,
         DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
@@ -33,7 +34,6 @@ use crate::{
         TOKEN_2Z_PDA_SEED_PREFIX,
     },
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
-    DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
 };
 
 solana_program_entrypoint::entrypoint!(try_process_instruction);
