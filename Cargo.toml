@@ -11,11 +11,11 @@ members = [
 resolver = "2"
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 homepage = "https://doublezero.xyz"
 license = "Apache-2.0"
 repository = ""
-rust-version = "1.83"
+rust-version = "1.88"
 version = "0.1.0"
 
 [workspace.dependencies]
