@@ -4,12 +4,13 @@ use doublezero_program_tools::{get_program_data_address, instruction::try_build_
 use doublezero_revenue_distribution::{
     instruction::{
         account::{
-            ConfigureProgramAccounts, InitializeJournalAccounts, InitializeProgramAccounts,
-            MigrateProgramAccounts, SetAdminAccounts,
+            ConfigureProgramAccounts, InitializeContributorRewardsAccounts,
+            InitializeJournalAccounts, InitializeProgramAccounts, MigrateProgramAccounts,
+            SetAdminAccounts,
         },
         ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
-    state::{find_2z_token_pda_address, Journal, ProgramConfig},
+    state::{find_2z_token_pda_address, ContributorRewards, Journal, ProgramConfig},
     ID,
 };
 use solana_sdk::{
@@ -49,6 +50,14 @@ pub enum RevenueDistributionAdminSubCommand {
         solana_payer_options: SolanaPayerOptions,
     },
 
+    /// Initialize contributor rewards account for a contributor's service key.
+    InitializeContributorRewards {
+        service_key: Pubkey,
+
+        #[command(flatten)]
+        solana_payer_options: SolanaPayerOptions,
+    },
+
     /// Migrate program accounts.
     MigrateProgramAccounts {
         #[command(flatten)]
@@ -70,6 +79,10 @@ impl RevenueDistributionAdminSubCommand {
                 configure_options,
                 solana_payer_options,
             } => execute_configure_program(configure_options, solana_payer_options).await,
+            RevenueDistributionAdminSubCommand::InitializeContributorRewards {
+                service_key,
+                solana_payer_options,
+            } => execute_initialize_contributor_rewards(service_key, solana_payer_options).await,
             RevenueDistributionAdminSubCommand::MigrateProgramAccounts {
                 solana_payer_options,
             } => execute_migrate_program_accounts(solana_payer_options).await,
@@ -536,6 +549,47 @@ pub async fn execute_configure_program(
 }
 
 //
+// RevenueDistributionAdminSubCommand::InitializeContributorRewards.
+//
+
+pub async fn execute_initialize_contributor_rewards(
+    service_key: Pubkey,
+    solana_payer_options: SolanaPayerOptions,
+) -> Result<()> {
+    let wallet = Wallet::try_from(solana_payer_options)?;
+    let wallet_key = wallet.pubkey();
+
+    let initialize_contributor_rewards_ix = try_build_instruction(
+        &ID,
+        InitializeContributorRewardsAccounts::new(&wallet_key, &service_key),
+        &RevenueDistributionInstructionData::InitializeContributorRewards(service_key),
+    )?;
+
+    let mut compute_unit_limit = 10_000;
+
+    let (_, bump) = ContributorRewards::find_address(&service_key);
+    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+
+    let mut instructions = vec![
+        initialize_contributor_rewards_ix,
+        ComputeBudgetInstruction::set_compute_unit_limit(compute_unit_limit),
+    ];
+
+    if let Some(ref compute_unit_price_ix) = wallet.compute_unit_price_ix {
+        instructions.push(compute_unit_price_ix.clone());
+    }
+
+    let transaction = wallet.new_transaction(&instructions).await?;
+    let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
+
+    if let Some(tx_sig) = tx_sig {
+        println!("Initialized contributor rewards: {tx_sig}");
+
+        wallet.print_verbose_output(&[tx_sig]).await?;
+    }
+
+    Ok(())
+}
 
 fn try_build_configure_program_instruction(
     admin_key: &Pubkey,

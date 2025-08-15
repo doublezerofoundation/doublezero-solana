@@ -130,6 +130,14 @@ $CLI_BIN admin revenue-distribution configure \
     --initial-community-burn-rate 10.0
 echo
 
+echo "2z admin revenue-distribution initialize-contributor-rewards -h"
+$CLI_BIN admin revenue-distribution initialize-contributor-rewards -h
+echo
+
+echo "2z admin revenue-distribution initialize-contributor-rewards -u l -v $DUMMY_KEY"
+$CLI_BIN admin revenue-distribution initialize-contributor-rewards -u l -v $DUMMY_KEY
+echo
+
 echo "2z admin revenue-distribution configure -u l -v --unpause"
 $CLI_BIN admin revenue-distribution configure -u l -v --unpause
 echo
