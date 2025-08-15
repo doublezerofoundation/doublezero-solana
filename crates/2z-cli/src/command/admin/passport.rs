@@ -49,6 +49,10 @@ pub enum PassportAdminSubCommand {
         #[arg(long)]
         unpause: bool,
 
+        /// Set the DoubleZero Ledger sentinel key.
+        #[arg(long, value_name = "PUBKEY")]
+        sentinel: Option<Pubkey>,
+
         #[command(flatten)]
         solana_payer_options: SolanaPayerOptions,
     },
@@ -67,8 +71,9 @@ impl PassportAdminSubCommand {
             PassportAdminSubCommand::Configure {
                 pause,
                 unpause,
+                sentinel,
                 solana_payer_options,
-            } => execute_configure_program(pause, unpause, solana_payer_options).await,
+            } => execute_configure_program(pause, unpause, sentinel, solana_payer_options).await,
         }
     }
 }
@@ -176,6 +181,7 @@ pub async fn execute_set_admin(
 pub async fn execute_configure_program(
     pause: bool,
     unpause: bool,
+    sentinel: Option<Pubkey>,
     solana_payer_options: SolanaPayerOptions,
 ) -> Result<()> {
     let wallet = Wallet::try_from(solana_payer_options)?;
@@ -205,6 +211,15 @@ pub async fn execute_configure_program(
             compute_unit_limit += 2_000;
         }
         (false, false) => {}
+    }
+
+    if let Some(sentinel_key) = sentinel {
+        let configure_program_ix = try_build_configure_program_instruction(
+            &wallet_key,
+            ProgramConfiguration::DoubleZeroLedgerSentinel(sentinel_key),
+        )?;
+        instructions.push(configure_program_ix);
+        compute_unit_limit += 2_500;
     }
 
     instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(

@@ -52,8 +52,12 @@ echo "2z admin passport configure -h"
 $CLI_BIN admin passport configure -h
 echo
 
-echo "2z admin passport configure -u l -v --pause"
-$CLI_BIN admin passport configure -u l -v --pause
+echo "2z admin passport configure -u l -v --pause" \
+     "--sentinel $DUMMY_KEY"
+$CLI_BIN admin passport configure -u l \
+    -v \
+    --pause \
+    --sentinel $DUMMY_KEY
 echo
 
 echo "2z admin passport configure -u l -v --unpause"
