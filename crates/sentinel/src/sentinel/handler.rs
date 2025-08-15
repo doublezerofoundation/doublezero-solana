@@ -1,5 +1,5 @@
 use crate::{
-    client::{doublezero::DzRpcClient, solana::SolRpcClient},
+    client::{doublezero_ledger::DzRpcClient, solana::SolRpcClient},
     verify_access_request, AccessIds, Result,
 };
 use doublezero_passport::instruction::AccessMode;
@@ -43,7 +43,7 @@ impl Sentinel {
                 biased;
                 _ = shutdown_listener.cancelled() => break,
                 _ = backfill_timer.tick() => {
-                    let access_ids = self.sol_rpc_client.gets_access_request().await?;
+                    let access_ids = self.sol_rpc_client.get_access_requests().await?;
 
                     info!(count = access_ids.len(), "processing unhandled access requests");
 

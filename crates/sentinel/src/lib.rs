@@ -1,5 +1,13 @@
 use doublezero_passport::{instruction::AccessMode, state::AccessRequest};
-use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use solana_sdk::{
+    hash::Hash,
+    instruction::Instruction,
+    message::{v0::Message, VersionedMessage},
+    pubkey::Pubkey,
+    signature::{Keypair, Signature},
+    signer::Signer,
+    transaction::VersionedTransaction,
+};
 
 pub mod client;
 mod error;
@@ -30,6 +38,17 @@ pub fn verify_access_request(
     }
 
     Ok(())
+}
+
+pub fn new_transaction(
+    instructions: &[Instruction],
+    signers: &[&Keypair],
+    recent_blockhash: Hash,
+) -> VersionedTransaction {
+    let message =
+        Message::try_compile(&signers[0].pubkey(), instructions, &[], recent_blockhash).unwrap();
+
+    VersionedTransaction::try_new(VersionedMessage::V0(message), signers).unwrap()
 }
 
 #[cfg(test)]

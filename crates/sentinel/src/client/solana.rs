@@ -1,4 +1,4 @@
-use crate::{AccessIds, Error, Result};
+use crate::{new_transaction, AccessIds, Error, Result};
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STD, Engine};
 use bincode;
@@ -25,13 +25,10 @@ use solana_client::{
 };
 use solana_commitment_config::CommitmentConfig;
 use solana_sdk::{
-    hash::Hash,
-    instruction::Instruction,
-    message::{v0::Message, VersionedMessage},
     pubkey::Pubkey,
     signature::{Keypair, Signature},
     signer::Signer,
-    transaction::{Transaction, VersionedTransaction},
+    transaction::Transaction,
 };
 use solana_transaction_status_client_types::{
     EncodedTransaction, TransactionBinaryEncoding, UiTransactionEncoding,
@@ -113,7 +110,7 @@ impl SolRpcClient {
         }
     }
 
-    pub async fn gets_access_request(&self) -> Result<Vec<AccessIds>> {
+    pub async fn get_access_requests(&self) -> Result<Vec<AccessIds>> {
         let config = RpcProgramAccountsConfig {
             filters: Some(vec![RpcFilterType::Memcmp(Memcmp::new_raw_bytes(
                 0,
@@ -204,17 +201,6 @@ impl SolPubsubClient {
 
         Ok(self.client.logs_subscribe(filter, config).await?)
     }
-}
-
-fn new_transaction(
-    instructions: &[Instruction],
-    signers: &[&Keypair],
-    recent_blockhash: Hash,
-) -> VersionedTransaction {
-    let message =
-        Message::try_compile(&signers[0].pubkey(), instructions, &[], recent_blockhash).unwrap();
-
-    VersionedTransaction::try_new(VersionedMessage::V0(message), signers).unwrap()
 }
 
 fn deserialize_access_request_ids(txn: Transaction) -> Result<AccessIds> {

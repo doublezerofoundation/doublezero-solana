@@ -1,11 +1,10 @@
-use crate::Result;
+use crate::{new_transaction, Result};
 
 use solana_client::nonblocking::rpc_client::RpcClient;
 use solana_commitment_config::CommitmentConfig;
 use solana_sdk::{
     pubkey::Pubkey,
     signature::{Keypair, Signature, Signer},
-    transaction::Transaction,
 };
 use solana_system_interface::instruction;
 use std::sync::Arc;
@@ -51,12 +50,7 @@ impl DzRpcClient {
             onboarding_lamports + rent,
         );
 
-        let txn = Transaction::new_signed_with_payer(
-            &[xfr],
-            Some(&self.payer.pubkey()),
-            &[&self.payer],
-            recent_blockhash,
-        );
+        let txn = new_transaction(&[xfr], &[&self.payer], recent_blockhash);
 
         let signature = self.client.send_and_confirm_transaction(&txn).await?;
         info!(rent, onboarding_lamports, user = %recipient_pubkey, %signature, "successfully funded authorized user");
