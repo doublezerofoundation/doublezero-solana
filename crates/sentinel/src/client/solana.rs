@@ -151,22 +151,31 @@ impl SolRpcClient {
 
     pub async fn check_leader_schedule(&self, validator_id: &Pubkey) -> Result<bool> {
         let latest_slot = self.client.get_slot().await?;
-        let first_slot = latest_slot.saturating_sub(SLOT_CHUNK_SIZE * 7);
+        let oldest_slot = latest_slot.saturating_sub(DAY_OF_SLOTS * 7);
 
-        // SlotRange::new(first_slot, latest_slot);
-        // let config = RpcBlockProductionConfig {
-        //     range: Some(RpcBlockProductionConfigRange {
-        //         first_slot,
-        //         last_slot: Some(current_slot),
-        //     }),
-        //     identity: Some(validator_id.to_string()),
-        //     ..Default::default()
-        // };
+        for (start, end) in ReverseSlotRange::new(oldest_slot, latest_slot) {
+            let config = RpcBlockProductionConfig {
+                range: Some(RpcBlockProductionConfigRange {
+                    first_slot: start,
+                    last_slot: Some(end),
+                }),
+                identity: Some(validator_id.to_string()),
+                ..Default::default()
+            };
 
-        // let production = self.client.get_block_production_with_config(config).await?;
+            if !self
+                .client
+                .get_block_production_with_config(config)
+                .await?
+                .value
+                .by_identity
+                .is_empty()
+            {
+                return Ok(true);
+            }
+        }
 
-        // Ok(!production.value.by_identity.is_empty())
-        Ok(true)
+        Ok(false)
     }
 }
 
@@ -239,7 +248,7 @@ fn deserialize_access_request_ids(txn: Transaction) -> Result<AccessIds> {
 
 // Chunk the request by roughly 1 days worth of slots
 // Assumes average slot time of 0.4 seconds
-const SLOT_CHUNK_SIZE: u64 = 216_000;
+const DAY_OF_SLOTS: u64 = 216_000;
 
 struct ReverseSlotRange {
     current_start: u64,
@@ -252,7 +261,7 @@ impl ReverseSlotRange {
         Self {
             current_start: starting_slot,
             last_slot: oldest_slot,
-            chunk_size: SLOT_CHUNK_SIZE,
+            chunk_size: DAY_OF_SLOTS,
         }
     }
 }
@@ -284,22 +293,15 @@ mod test {
         let start_slot = 2_000_000;
         let oldest_slot = 1_000_000;
         let slot_range = ReverseSlotRange::new(start_slot, oldest_slot);
-        let results = slot_range
-            .into_iter()
-            .map(|range| {
-                println!("{range:?}");
-                println!("{}", range.1 - range.0);
-                range
-            })
-            .collect::<Vec<_>>();
+        let results = slot_range.into_iter().collect::<Vec<_>>();
         assert_eq!(results.len(), 5);
         assert_eq!(
             results.first().map(|(start, end)| end - start).unwrap(),
-            SLOT_CHUNK_SIZE
+            DAY_OF_SLOTS
         );
         assert_eq!(
             results.last().map(|(start, end)| end - start).unwrap(),
-            (start_slot - oldest_slot) - (4 * SLOT_CHUNK_SIZE + 4),
+            (start_slot - oldest_slot) - (4 * DAY_OF_SLOTS + 4),
         );
         assert_eq!(
             results.first().map(|(_, start)| *start).unwrap(),
