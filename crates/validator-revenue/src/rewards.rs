@@ -54,18 +54,11 @@ pub async fn get_total_rewards(
     fee_payment_calculator: &impl ValidatorRewards,
     validator_ids: &[String],
     epoch: u64,
-    // rpc_get_vote_accounts_config: RpcGetVoteAccountsConfig,
-    // rpc_block_config: RpcBlockConfig,
 ) -> Result<HashMap<String, Reward>> {
     let mut validator_rewards: Vec<Reward> = Vec::with_capacity(validator_ids.len());
 
     let (inflation_rewards, jito_rewards, block_rewards) = tokio::join!(
-        inflation::get_inflation_rewards(
-            fee_payment_calculator,
-            validator_ids,
-            epoch,
-            // rpc_get_vote_accounts_config,
-        ),
+        inflation::get_inflation_rewards(fee_payment_calculator, validator_ids, epoch,),
         jito::get_jito_rewards(fee_payment_calculator, validator_ids, epoch),
         block::get_block_rewards(fee_payment_calculator, validator_ids, epoch,)
     );

@@ -1,6 +1,5 @@
 use crate::fee_payment_calculator::ValidatorRewards;
 use anyhow::{anyhow, Result};
-// use solana_client::rpc_config::RpcGetVoteAccountsConfig;
 use solana_sdk::pubkey::Pubkey;
 use std::{collections::HashMap, str::FromStr};
 
@@ -8,7 +7,6 @@ pub async fn get_inflation_rewards<T: ValidatorRewards + ?Sized>(
     fee_payment_calculator: &T,
     validator_ids: &[String],
     epoch: u64,
-    // rpc_get_vote_accounts_config: RpcGetVoteAccountsConfig,
 ) -> Result<HashMap<String, u64>> {
     let mut vote_keys: Vec<Pubkey> = Vec::with_capacity(validator_ids.len());
 
@@ -58,11 +56,9 @@ pub async fn get_inflation_rewards<T: ValidatorRewards + ?Sized>(
 mod tests {
     use super::*;
     use crate::fee_payment_calculator::MockValidatorRewards;
-    use solana_client::{
-        // rpc_config::RpcGetVoteAccountsConfig,
-        rpc_response::{RpcInflationReward, RpcVoteAccountInfo, RpcVoteAccountStatus},
+    use solana_client::rpc_response::{
+        RpcInflationReward, RpcVoteAccountInfo, RpcVoteAccountStatus,
     };
-    // use solana_sdk::commitment_config::CommitmentConfig;
 
     #[tokio::test]
     async fn test_get_inflation_rewards() {

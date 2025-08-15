@@ -42,9 +42,9 @@ pub trait ValidatorRewards {
 }
 
 pub struct FeePaymentCalculator {
-    rpc_client: RpcClient,
-    vote_accounts_config: RpcGetVoteAccountsConfig,
-    rpc_block_config: RpcBlockConfig,
+    pub rpc_client: RpcClient,
+    pub vote_accounts_config: RpcGetVoteAccountsConfig,
+    pub rpc_block_config: RpcBlockConfig,
 }
 
 impl FeePaymentCalculator {
@@ -58,18 +58,6 @@ impl FeePaymentCalculator {
             rpc_client,
             vote_accounts_config,
         }
-    }
-
-    pub fn client(&self) -> &RpcClient {
-        &self.rpc_client
-    }
-
-    pub fn rpc_block_config(&self) -> &RpcBlockConfig {
-        &self.rpc_block_config
-    }
-
-    pub fn vote_accounts_config(&self) -> &RpcGetVoteAccountsConfig {
-        &self.vote_accounts_config
     }
 }
 
@@ -104,7 +92,6 @@ impl ValidatorRewards for FeePaymentCalculator {
 
     async fn get_vote_accounts_with_config(
         &self,
-        // config: RpcGetVoteAccountsConfig,
     ) -> Result<RpcVoteAccountStatus, solana_client::client_error::ClientError> {
         self.rpc_client
             .get_vote_accounts_with_config(self.vote_accounts_config.clone())
