@@ -69,8 +69,17 @@ impl Sentinel {
     }
 
     async fn handle_access_request(&self, access_ids: AccessIds) -> Result<()> {
-        let AccessMode::SolanaValidator { service_key, .. } = access_ids.mode;
-        if verify_access_request(&access_ids.mode).is_ok() {
+        let AccessMode::SolanaValidator {
+            service_key,
+            validator_id,
+            ..
+        } = access_ids.mode;
+        if verify_access_request(&access_ids.mode).is_ok()
+            && self
+                .sol_rpc_client
+                .check_leader_schedule(&validator_id)
+                .await?
+        {
             self.dz_rpc_client
                 .fund_authorized_user(&service_key, self.onboarding_lamports)
                 .await?;
