@@ -53,11 +53,15 @@ $CLI_BIN admin passport configure -h
 echo
 
 echo "2z admin passport configure -u l -v --pause" \
-     "--sentinel $DUMMY_KEY"
+     "--sentinel $DUMMY_KEY" \
+     "--access-request-deposit 1000000000" \
+     "--access-fee 100000"
 $CLI_BIN admin passport configure -u l \
     -v \
     --pause \
-    --sentinel $DUMMY_KEY
+    --sentinel $DUMMY_KEY \
+    --access-request-deposit 1000000000 \
+    --access-fee 100000
 echo
 
 echo "2z admin passport configure -u l -v --unpause"

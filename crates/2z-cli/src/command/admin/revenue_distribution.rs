@@ -159,7 +159,7 @@ pub struct ConfigureRevenueDistributionOptions {
 }
 
 //
-// AdminSubCommand::Initialize.
+// RevenueDistributionAdminSubCommand::Initialize.
 //
 
 pub async fn execute_initialize_program(solana_payer_options: SolanaPayerOptions) -> Result<()> {
@@ -235,7 +235,7 @@ pub async fn execute_initialize_program(solana_payer_options: SolanaPayerOptions
 }
 
 //
-// AdminSubCommand::MigrateProgramAccounts.
+// RevenueDistributionAdminSubCommand::MigrateProgramAccounts.
 //
 
 pub async fn execute_migrate_program_accounts(
@@ -274,7 +274,7 @@ pub async fn execute_migrate_program_accounts(
 }
 
 //
-// AdminSubCommand::SetAdmin.
+// RevenueDistributionAdminSubCommand::SetAdmin.
 //
 
 pub async fn execute_set_admin(
@@ -316,7 +316,7 @@ pub async fn execute_set_admin(
 }
 
 //
-// AdminConfigureSubCommand::RevenueDistribution.
+// RevenueDistributionAdminSubCommand::Configure.
 //
 
 pub async fn execute_configure_program(
