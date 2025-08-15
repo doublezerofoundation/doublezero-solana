@@ -11,7 +11,6 @@ use crate::jito;
 
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
-use solana_client::rpc_config::{RpcBlockConfig, RpcGetVoteAccountsConfig};
 use solana_sdk::clock::DEFAULT_SLOTS_PER_EPOCH;
 use std::collections::HashMap;
 
@@ -32,8 +31,6 @@ pub struct Reward {
 
 pub async fn get_rewards_between_timestamps(
     fee_payment_calculator: &impl ValidatorRewards,
-    rpc_get_vote_accounts_config: RpcGetVoteAccountsConfig,
-    rpc_block_config: RpcBlockConfig,
     start_timestamp: u64,
     end_timestamp: u64,
     validator_ids: &[String],
@@ -46,14 +43,7 @@ pub async fn get_rewards_between_timestamps(
     let start_epoch = epoch_from_timestamp(block_time, current_slot, start_timestamp)?;
     let end_epoch = epoch_from_timestamp(block_time, current_slot, end_timestamp)?;
     for epoch in start_epoch..=end_epoch {
-        let reward = get_total_rewards(
-            fee_payment_calculator,
-            validator_ids,
-            epoch,
-            rpc_get_vote_accounts_config.clone(),
-            rpc_block_config,
-        )
-        .await?;
+        let reward = get_total_rewards(fee_payment_calculator, validator_ids, epoch).await?;
         rewards.insert(epoch, reward);
     }
     Ok(rewards)
@@ -64,8 +54,8 @@ pub async fn get_total_rewards(
     fee_payment_calculator: &impl ValidatorRewards,
     validator_ids: &[String],
     epoch: u64,
-    rpc_get_vote_accounts_config: RpcGetVoteAccountsConfig,
-    rpc_block_config: RpcBlockConfig,
+    // rpc_get_vote_accounts_config: RpcGetVoteAccountsConfig,
+    // rpc_block_config: RpcBlockConfig,
 ) -> Result<HashMap<String, Reward>> {
     let mut validator_rewards: Vec<Reward> = Vec::with_capacity(validator_ids.len());
 
@@ -74,15 +64,10 @@ pub async fn get_total_rewards(
             fee_payment_calculator,
             validator_ids,
             epoch,
-            rpc_get_vote_accounts_config,
+            // rpc_get_vote_accounts_config,
         ),
         jito::get_jito_rewards(fee_payment_calculator, validator_ids, epoch),
-        block::get_block_rewards(
-            fee_payment_calculator,
-            validator_ids,
-            epoch,
-            rpc_block_config
-        )
+        block::get_block_rewards(fee_payment_calculator, validator_ids, epoch,)
     );
 
     let inflation_rewards = inflation_rewards?;
@@ -145,10 +130,8 @@ mod tests {
     use solana_client::rpc_response::{
         RpcInflationReward, RpcVoteAccountInfo, RpcVoteAccountStatus,
     };
-    use solana_sdk::{commitment_config::CommitmentConfig, reward_type::RewardType::Fee};
-    use solana_transaction_status_client_types::{
-        TransactionDetails, UiConfirmedBlock, UiTransactionEncoding,
-    };
+    use solana_sdk::reward_type::RewardType::Fee;
+    use solana_transaction_status_client_types::UiConfirmedBlock;
 
     #[tokio::test]
     async fn test_get_rewards_between_timestamps() {
@@ -164,22 +147,6 @@ mod tests {
         let end_timestamp = 1752727280;
 
         let mut mock_fee_payment_calculator = MockValidatorRewards::new();
-
-        // Define RPC configurations that will be passed to the function under test.
-        let rpc_get_vote_accounts_config = RpcGetVoteAccountsConfig {
-            vote_pubkey: None,
-            commitment: CommitmentConfig::finalized().into(),
-            keep_unstaked_delinquents: None,
-            delinquent_slot_distance: None,
-        };
-
-        let rpc_block_config = solana_client::rpc_config::RpcBlockConfig {
-            encoding: UiTransactionEncoding::Base58.into(),
-            transaction_details: TransactionDetails::None.into(),
-            rewards: Some(true),
-            commitment: CommitmentConfig::finalized().into(),
-            max_supported_transaction_version: Some(0),
-        };
 
         // Set up mock expectations for the ValidatorRewards trait.
         // These mocks simulate the behavior of external dependencies.
@@ -232,9 +199,9 @@ mod tests {
 
         mock_fee_payment_calculator
             .expect_get_block_with_config()
-            .withf(move |s, _| *s == slot)
+            .withf(move |s| *s == slot)
             .times(1)
-            .returning(move |_, _| Ok(mock_block.clone()));
+            .returning(move |_| Ok(mock_block.clone()));
 
         let mock_rpc_vote_account_status = RpcVoteAccountStatus {
             current: vec![RpcVoteAccountInfo {
@@ -252,9 +219,9 @@ mod tests {
 
         mock_fee_payment_calculator
             .expect_get_vote_accounts_with_config()
-            .withf(move |_| true)
+            .withf(move || true)
             .times(1)
-            .returning(move |_| Ok(mock_rpc_vote_account_status.clone()));
+            .returning(move || Ok(mock_rpc_vote_account_status.clone()));
 
         let mock_rpc_inflation_reward = vec![Some(RpcInflationReward {
             epoch,
@@ -294,8 +261,6 @@ mod tests {
         // Call the function under test with the prepared data and mocks.
         let rewards = get_rewards_between_timestamps(
             &mock_fee_payment_calculator,
-            rpc_get_vote_accounts_config,
-            rpc_block_config,
             start_timestamp,
             end_timestamp,
             validator_ids,
@@ -327,14 +292,6 @@ mod tests {
 
         let mut mock_fee_payment_calculator = MockValidatorRewards::new();
 
-        // Define RPC configurations that will be passed to the function under test.
-        let rpc_get_vote_accounts_config = RpcGetVoteAccountsConfig {
-            vote_pubkey: None,
-            commitment: CommitmentConfig::finalized().into(),
-            keep_unstaked_delinquents: None,
-            delinquent_slot_distance: None,
-        };
-
         // Set up mock expectations for the ValidatorRewards trait.
         // These mocks simulate the behavior of external dependencies.
         let mock_rpc_vote_account_status = RpcVoteAccountStatus {
@@ -353,9 +310,9 @@ mod tests {
 
         mock_fee_payment_calculator
             .expect_get_vote_accounts_with_config()
-            .withf(move |_| true)
+            .withf(move || true)
             .times(1)
-            .returning(move |_| Ok(mock_rpc_vote_account_status.clone()));
+            .returning(move || Ok(mock_rpc_vote_account_status.clone()));
 
         let mock_rpc_inflation_reward = vec![Some(RpcInflationReward {
             epoch,
@@ -402,9 +359,9 @@ mod tests {
 
         mock_fee_payment_calculator
             .expect_get_block_with_config()
-            .withf(move |s, _| *s == slot)
+            .withf(move |s| *s == slot)
             .times(1)
-            .returning(move |_, _| Ok(mock_block.clone()));
+            .returning(move |_| Ok(mock_block.clone()));
 
         mock_fee_payment_calculator
             .expect_get::<JitoRewards>()
@@ -420,24 +377,10 @@ mod tests {
                 })
             });
 
-        let rpc_block_config = solana_client::rpc_config::RpcBlockConfig {
-            encoding: UiTransactionEncoding::Base58.into(),
-            transaction_details: TransactionDetails::None.into(),
-            rewards: Some(true),
-            commitment: CommitmentConfig::finalized().into(),
-            max_supported_transaction_version: Some(0),
-        };
-
         // Call the function under test with the prepared data and mocks.
-        let rewards = get_total_rewards(
-            &mock_fee_payment_calculator,
-            validator_ids,
-            epoch,
-            rpc_get_vote_accounts_config.clone(),
-            rpc_block_config,
-        )
-        .await
-        .unwrap();
+        let rewards = get_total_rewards(&mock_fee_payment_calculator, validator_ids, epoch)
+            .await
+            .unwrap();
 
         // Verify that the function produced the correct results.
         let reward = rewards.get(validator_id).unwrap();
