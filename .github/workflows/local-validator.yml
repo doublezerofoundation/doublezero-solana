@@ -13,8 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Solana toolchain
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/$SOLANA_CLI/install)"
@@ -36,8 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Solana toolchain
         run: |
           sh -c "$(curl -sSfL https://release.anza.xyz/$SOLANA_CLI/install)"
