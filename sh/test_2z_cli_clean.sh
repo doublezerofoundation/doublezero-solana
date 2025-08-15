@@ -93,6 +93,7 @@ echo
 
 echo "2z admin revenue-distribution configure -u l -v --pause" \
      "--payments-accountant $DUMMY_KEY --rewards-accountant $DUMMY_KEY" \
+     "--contributor-manager $DUMMY_KEY --sentinel $DUMMY_KEY" \
      "--sol-2z-swap-program $DUMMY_KEY --calculation-grace-period-seconds 3600" \
      "--prepaid-connection-termination-relay-lamports 100000" \
      "--solana-validator-base-block-rewards-fee 1.23" \
@@ -106,6 +107,8 @@ $CLI_BIN admin revenue-distribution configure \
     --pause \
     --payments-accountant $DUMMY_KEY \
     --rewards-accountant $DUMMY_KEY \
+    --contributor-manager $DUMMY_KEY \
+    --sentinel $DUMMY_KEY \
     --sol-2z-swap-program $DUMMY_KEY \
     --calculation-grace-period-seconds 3600 \
     --prepaid-connection-termination-relay-lamports 100000 \
