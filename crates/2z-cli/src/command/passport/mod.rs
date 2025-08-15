@@ -54,7 +54,7 @@ async fn execute_fetch(
             .ok_or(anyhow!("Failed to deserialize program config"))?;
 
         // TODO: Pretty print.
-        println!("Program config: {:?}", program_config);
+        println!("Program config: {program_config:?}");
     }
 
     Ok(())
