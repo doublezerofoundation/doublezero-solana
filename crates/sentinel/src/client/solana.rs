@@ -274,7 +274,7 @@ mod test {
         assert_eq!(epoch_slots.first().unwrap(), &start_slot);
         assert_eq!(
             epoch_slots.last().unwrap(),
-            &(start_slot - 4 * PreviousEpochSlots::SLOTS_PER_EPOCH),
+            &(start_slot - 3 * PreviousEpochSlots::SLOTS_PER_EPOCH),
         );
     }
 }
