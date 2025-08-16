@@ -40,8 +40,15 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let (request_listener, rx) = ReqListener::new(sol_ws).await?;
-    let mut sentinel =
-        Sentinel::new(dz_rpc, sol_rpc, keypair, rx, settings.onboarding_lamports()).await?;
+    let mut sentinel = Sentinel::new(
+        dz_rpc,
+        sol_rpc,
+        keypair,
+        rx,
+        settings.onboarding_lamports(),
+        settings.previous_leader_epochs(),
+    )
+    .await?;
 
     let shutdown_listener = shutdown_listener();
 

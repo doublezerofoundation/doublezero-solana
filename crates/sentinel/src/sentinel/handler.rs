@@ -17,6 +17,7 @@ pub struct Sentinel {
     sol_rpc_client: SolRpcClient,
     rx: UnboundedReceiver<Signature>,
     onboarding_lamports: u64,
+    previous_leader_epochs: u8,
 }
 
 impl Sentinel {
@@ -26,12 +27,14 @@ impl Sentinel {
         keypair: Arc<Keypair>,
         rx: UnboundedReceiver<Signature>,
         onboarding_lamports: u64,
+        previous_leader_epochs: u8,
     ) -> Result<Self> {
         Ok(Self {
             dz_rpc_client: DzRpcClient::new(dz_rpc, keypair.clone()),
             sol_rpc_client: SolRpcClient::new(sol_rpc, keypair),
             rx,
             onboarding_lamports,
+            previous_leader_epochs,
         })
     }
 
@@ -77,7 +80,7 @@ impl Sentinel {
         if verify_access_request(&access_ids.mode).is_ok()
             && self
                 .sol_rpc_client
-                .check_leader_schedule(&validator_id)
+                .check_leader_schedule(&validator_id, self.previous_leader_epochs)
                 .await?
         {
             self.dz_rpc_client

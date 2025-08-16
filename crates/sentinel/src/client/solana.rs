@@ -17,8 +17,8 @@ use solana_account_decoder_client_types::UiAccountEncoding;
 use solana_client::{
     nonblocking::{pubsub_client::PubsubClient, rpc_client::RpcClient},
     rpc_config::{
-        RpcAccountInfoConfig, RpcBlockProductionConfig, RpcBlockProductionConfigRange,
-        RpcProgramAccountsConfig, RpcTransactionLogsConfig, RpcTransactionLogsFilter,
+        RpcAccountInfoConfig, RpcLeaderScheduleConfig, RpcProgramAccountsConfig,
+        RpcTransactionLogsConfig, RpcTransactionLogsFilter,
     },
     rpc_filter::{Memcmp, RpcFilterType},
     rpc_response::{Response, RpcLogsResponse},
@@ -146,27 +146,24 @@ impl SolRpcClient {
         Ok(access_ids)
     }
 
-    pub async fn check_leader_schedule(&self, validator_id: &Pubkey) -> Result<bool> {
+    pub async fn check_leader_schedule(
+        &self,
+        validator_id: &Pubkey,
+        previous_leader_epochs: u8,
+    ) -> Result<bool> {
         let latest_slot = self.client.get_slot().await?;
-        let oldest_slot = latest_slot.saturating_sub(DAY_OF_SLOTS * 7);
 
-        for (start, end) in ReverseSlotRange::new(oldest_slot, latest_slot) {
-            let config = RpcBlockProductionConfig {
-                range: Some(RpcBlockProductionConfigRange {
-                    first_slot: start,
-                    last_slot: Some(end),
-                }),
+        for slot in PreviousEpochSlots::new(latest_slot).take(previous_leader_epochs as usize) {
+            let config = RpcLeaderScheduleConfig {
                 identity: Some(validator_id.to_string()),
                 ..Default::default()
             };
 
             if !self
                 .client
-                .get_block_production_with_config(config)
+                .get_leader_schedule_with_config(Some(slot), config)
                 .await?
-                .value
-                .by_identity
-                .is_empty()
+                .is_some_and(|schedule| schedule.is_empty())
             {
                 return Ok(true);
             }
@@ -232,41 +229,33 @@ fn deserialize_access_request_ids(txn: Transaction) -> Result<AccessIds> {
     }
 }
 
-// Chunk the request by roughly 1 days worth of slots
-// Assumes average slot time of 0.4 seconds
-const DAY_OF_SLOTS: u64 = 216_000;
-
-struct ReverseSlotRange {
-    current_start: u64,
-    last_slot: u64,
-    chunk_size: u64,
+pub struct PreviousEpochSlots {
+    current: u64,
+    step: u64,
 }
 
-impl ReverseSlotRange {
-    fn new(starting_slot: u64, oldest_slot: u64) -> Self {
+impl PreviousEpochSlots {
+    // Number of slots per epoch
+    const SLOTS_PER_EPOCH: u64 = 432_000;
+
+    pub fn new(start: u64) -> Self {
         Self {
-            current_start: starting_slot,
-            last_slot: oldest_slot,
-            chunk_size: DAY_OF_SLOTS,
+            current: start,
+            step: Self::SLOTS_PER_EPOCH,
         }
     }
 }
 
-impl Iterator for ReverseSlotRange {
-    type Item = (u64, u64);
+impl Iterator for PreviousEpochSlots {
+    type Item = u64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current_start <= self.last_slot {
-            None
-        } else {
-            let end = self.current_start;
-            let start = std::cmp::max(
-                self.current_start.saturating_sub(self.chunk_size),
-                self.last_slot,
-            );
-            self.current_start = start - 1;
-            Some((start, end))
+        let result = self.current;
+        if self.current < self.step {
+            return None;
         }
+        self.current -= self.step;
+        Some(result)
     }
 }
 
@@ -277,22 +266,15 @@ mod test {
     #[test]
     fn test_reverse_iter() {
         let start_slot = 2_000_000;
-        let oldest_slot = 1_000_000;
-        let slot_range = ReverseSlotRange::new(start_slot, oldest_slot);
-        let results = slot_range.into_iter().collect::<Vec<_>>();
-        assert_eq!(results.len(), 5);
+        let num_epochs = 4;
+        let epoch_slots = PreviousEpochSlots::new(start_slot)
+            .take(num_epochs)
+            .collect::<Vec<_>>();
+        assert_eq!(epoch_slots.len(), 4);
+        assert_eq!(epoch_slots.first().unwrap(), &start_slot);
         assert_eq!(
-            results.first().map(|(start, end)| end - start).unwrap(),
-            DAY_OF_SLOTS
+            epoch_slots.last().unwrap(),
+            &(start_slot - 4 * PreviousEpochSlots::SLOTS_PER_EPOCH),
         );
-        assert_eq!(
-            results.last().map(|(start, end)| end - start).unwrap(),
-            (start_slot - oldest_slot) - (4 * DAY_OF_SLOTS + 4),
-        );
-        assert_eq!(
-            results.first().map(|(_, start)| *start).unwrap(),
-            start_slot
-        );
-        assert_eq!(results.last().map(|(end, _)| *end).unwrap(), oldest_slot);
     }
 }

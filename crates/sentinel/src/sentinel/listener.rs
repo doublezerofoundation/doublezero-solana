@@ -2,7 +2,6 @@ use crate::{client::solana::SolPubsubClient, Result};
 
 use futures::StreamExt;
 use solana_sdk::signature::Signature;
-// TODO: should we make this a bounded channel?
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tokio_util::sync::CancellationToken;
 use tracing::info;

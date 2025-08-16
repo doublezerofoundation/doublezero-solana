@@ -29,11 +29,9 @@ pub struct Settings {
     pub log: String,
 
     /// Connection URIs for the DZ ledger RPC endpoint
-    #[serde(default = "default_dz_rpc_url")]
     dz_rpc: String,
 
     /// Connection URIs for the Solana RPC and Websocket endpoints
-    #[serde(default = "default_sol_rpc_url")]
     sol_rpc: String,
     sol_ws: Option<String>,
 
@@ -41,8 +39,10 @@ pub struct Settings {
     /// and holding the oboarding DZ ledger funds to credit authorized validators
     keypair: PathBuf,
 
+    /// The number of previous epochs to search for appearance in the leader schedule
+    previous_leader_epochs: u8,
+
     /// The amount of lamports to fund a new account authorized on the DZ network
-    #[serde(default = "default_onboarding_lamports")]
     onboarding_lamports: u64,
 
     /// metrics listening endpoint
@@ -110,6 +110,10 @@ impl Settings {
         self.onboarding_lamports
     }
 
+    pub fn previous_leader_epochs(&self) -> u8 {
+        self.previous_leader_epochs
+    }
+
     pub fn metrics_addr(&self) -> SocketAddr {
         self.metrics_addr
             .parse()
@@ -123,16 +127,4 @@ fn default_log() -> String {
 
 fn default_metrics_addr() -> String {
     "127.0.0.1:2112".to_string()
-}
-
-fn default_dz_rpc_url() -> String {
-    "https://doublezerolocalnet.rpcpool.com/8a4fd3f4-0977-449f-88c7-63d4b0f10f16".to_string()
-}
-
-fn default_sol_rpc_url() -> String {
-    "testnet".to_string()
-}
-
-fn default_onboarding_lamports() -> u64 {
-    10_000
 }
