@@ -6,7 +6,7 @@ use doublezero_revenue_distribution::{
         account::{
             ConfigureProgramAccounts, InitializeContributorRewardsAccounts,
             InitializeJournalAccounts, InitializeProgramAccounts, MigrateProgramAccounts,
-            SetAdminAccounts,
+            SetAdminAccounts, SetRewardsManagerAccounts,
         },
         ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
@@ -51,8 +51,14 @@ pub enum RevenueDistributionAdminSubCommand {
     },
 
     /// Initialize contributor rewards account for a contributor's service key.
-    InitializeContributorRewards {
+    SetRewardsManager {
         service_key: Pubkey,
+
+        rewards_manager_key: Pubkey,
+
+        /// Initialize contributor rewards account if it does not exist.
+        #[arg(long)]
+        initialize_contributor_rewards: bool,
 
         #[command(flatten)]
         solana_payer_options: SolanaPayerOptions,
@@ -79,10 +85,20 @@ impl RevenueDistributionAdminSubCommand {
                 configure_options,
                 solana_payer_options,
             } => execute_configure_program(configure_options, solana_payer_options).await,
-            RevenueDistributionAdminSubCommand::InitializeContributorRewards {
+            RevenueDistributionAdminSubCommand::SetRewardsManager {
                 service_key,
+                rewards_manager_key,
+                initialize_contributor_rewards,
                 solana_payer_options,
-            } => execute_initialize_contributor_rewards(service_key, solana_payer_options).await,
+            } => {
+                execute_set_rewards_manager(
+                    service_key,
+                    rewards_manager_key,
+                    initialize_contributor_rewards,
+                    solana_payer_options,
+                )
+                .await
+            }
             RevenueDistributionAdminSubCommand::MigrateProgramAccounts {
                 solana_payer_options,
             } => execute_migrate_program_accounts(solana_payer_options).await,
@@ -549,31 +565,44 @@ pub async fn execute_configure_program(
 }
 
 //
-// RevenueDistributionAdminSubCommand::InitializeContributorRewards.
+// RevenueDistributionAdminSubCommand::SetRewardsManager.
 //
 
-pub async fn execute_initialize_contributor_rewards(
+pub async fn execute_set_rewards_manager(
     service_key: Pubkey,
+    rewards_manager_key: Pubkey,
+    initialize_contributor_rewards: bool,
     solana_payer_options: SolanaPayerOptions,
 ) -> Result<()> {
     let wallet = Wallet::try_from(solana_payer_options)?;
     let wallet_key = wallet.pubkey();
 
-    let initialize_contributor_rewards_ix = try_build_instruction(
-        &ID,
-        InitializeContributorRewardsAccounts::new(&wallet_key, &service_key),
-        &RevenueDistributionInstructionData::InitializeContributorRewards(service_key),
-    )?;
-
+    let mut instructions = Vec::new();
     let mut compute_unit_limit = 10_000;
 
-    let (_, bump) = ContributorRewards::find_address(&service_key);
-    compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+    if initialize_contributor_rewards {
+        let initialize_contributor_rewards_ix = try_build_instruction(
+            &ID,
+            InitializeContributorRewardsAccounts::new(&wallet_key, &service_key),
+            &RevenueDistributionInstructionData::InitializeContributorRewards(service_key),
+        )?;
+        instructions.push(initialize_contributor_rewards_ix);
+        compute_unit_limit += 10_000;
 
-    let mut instructions = vec![
-        initialize_contributor_rewards_ix,
-        ComputeBudgetInstruction::set_compute_unit_limit(compute_unit_limit),
-    ];
+        let (_, bump) = ContributorRewards::find_address(&service_key);
+        compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
+    }
+
+    let set_rewards_manager_ix = try_build_instruction(
+        &ID,
+        SetRewardsManagerAccounts::new(&wallet_key, &service_key),
+        &RevenueDistributionInstructionData::SetRewardsManager(rewards_manager_key),
+    )?;
+    instructions.push(set_rewards_manager_ix);
+
+    instructions.push(ComputeBudgetInstruction::set_compute_unit_limit(
+        compute_unit_limit,
+    ));
 
     if let Some(ref compute_unit_price_ix) = wallet.compute_unit_price_ix {
         instructions.push(compute_unit_price_ix.clone());
@@ -583,7 +612,7 @@ pub async fn execute_initialize_contributor_rewards(
     let tx_sig = wallet.send_or_simulate_transaction(&transaction).await?;
 
     if let Some(tx_sig) = tx_sig {
-        println!("Initialized contributor rewards: {tx_sig}");
+        println!("Set rewards manager: {tx_sig}");
 
         wallet.print_verbose_output(&[tx_sig]).await?;
     }
