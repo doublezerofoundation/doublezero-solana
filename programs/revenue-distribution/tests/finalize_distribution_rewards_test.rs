@@ -6,8 +6,7 @@ use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
         account::{ConfigureDistributionRewardsAccounts, FinalizeDistributionRewardsAccounts},
-        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{self, Distribution},
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
@@ -116,11 +115,7 @@ async fn test_finalize_distribution_rewards() {
     );
 
     test_setup
-        .configure_distribution_payments(
-            dz_epoch,
-            &payments_accountant_signer,
-            [DistributionPaymentsConfiguration::FinalizePayments],
-        )
+        .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap();
 
@@ -183,7 +178,7 @@ async fn test_finalize_distribution_rewards() {
 
     //
 
-    let (_, _, distribution_lamports_balance_before, _) =
+    let (_, _, _, distribution_lamports_balance_before, _) =
         test_setup.fetch_distribution(dz_epoch).await;
 
     test_setup
@@ -191,8 +186,13 @@ async fn test_finalize_distribution_rewards() {
         .await
         .unwrap();
 
-    let (distribution_key, distribution, distribution_lamports_balance_after, _) =
-        test_setup.fetch_distribution(dz_epoch).await;
+    let (
+        distribution_key,
+        distribution,
+        distribution_remaining_data,
+        distribution_lamports_balance_after,
+        _,
+    ) = test_setup.fetch_distribution(dz_epoch).await;
 
     assert_eq!(
         distribution_lamports_balance_after,
@@ -213,6 +213,12 @@ async fn test_finalize_distribution_rewards() {
     expected_distribution.total_contributors = total_contributors;
     expected_distribution.rewards_merkle_root = rewards_merkle_root;
     assert_eq!(distribution, expected_distribution);
+
+    let expected_distribution_remaining_data_len = 1;
+    assert_eq!(
+        distribution_remaining_data,
+        vec![0; expected_distribution_remaining_data_len]
+    );
 
     // Cannot configure distribution rewards after finalization.
 
