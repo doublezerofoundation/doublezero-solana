@@ -178,8 +178,9 @@ async fn test_finalize_distribution_rewards() {
 
     //
 
-    let (_, _, _, distribution_lamports_balance_before, _) =
+    let (_, _, remaining_distribution_data_before, distribution_lamports_balance_before, _) =
         test_setup.fetch_distribution(dz_epoch).await;
+    let remaining_distribution_data_len_before = remaining_distribution_data_before.len();
 
     test_setup
         .finalize_distribution_rewards(dz_epoch)
@@ -194,9 +195,13 @@ async fn test_finalize_distribution_rewards() {
         _,
     ) = test_setup.fetch_distribution(dz_epoch).await;
 
+    let expected_additional_data_len = 9;
+    assert_eq!(total_contributors / 8 + 1, expected_additional_data_len);
     assert_eq!(
         distribution_lamports_balance_after,
-        distribution_lamports_balance_before + 690_000
+        distribution_lamports_balance_before
+            + 690_000
+            + 6_960 * expected_additional_data_len as u64
     );
 
     let mut expected_distribution = Distribution::default();
@@ -214,7 +219,8 @@ async fn test_finalize_distribution_rewards() {
     expected_distribution.rewards_merkle_root = rewards_merkle_root;
     assert_eq!(distribution, expected_distribution);
 
-    let expected_distribution_remaining_data_len = 1;
+    let expected_distribution_remaining_data_len =
+        remaining_distribution_data_len_before + expected_additional_data_len as usize;
     assert_eq!(
         distribution_remaining_data,
         vec![0; expected_distribution_remaining_data_len]

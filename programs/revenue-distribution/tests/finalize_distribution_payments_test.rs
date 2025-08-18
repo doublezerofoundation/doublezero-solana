@@ -48,6 +48,7 @@ async fn test_finalize_distribution_payments() {
 
     let dz_epoch = DoubleZeroEpoch::new(1);
 
+    let total_validators = 2;
     let total_solana_validator_payments_owed = 100 * u64::pow(10, 9);
     let solana_validator_payments_merkle_root = Hash::new_unique();
     let uncollectible_sol_amount = 10 * u64::pow(10, 9);
@@ -99,7 +100,7 @@ async fn test_finalize_distribution_payments() {
             &payments_accountant_signer,
             [
                 DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: 2,
+                    total_validators,
                     total_lamports_owed: total_solana_validator_payments_owed,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
@@ -109,14 +110,15 @@ async fn test_finalize_distribution_payments() {
         .await
         .unwrap();
 
-    // Test inputs.
+    //
 
     test_setup
         .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap();
 
-    let (distribution_key, distribution, _, _, _) = test_setup.fetch_distribution(dz_epoch).await;
+    let (distribution_key, distribution, remaining_distribution_data, _, _) =
+        test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
     expected_distribution.set_are_payments_finalized(true);
@@ -128,13 +130,23 @@ async fn test_finalize_distribution_payments() {
     expected_distribution
         .solana_validator_fee_parameters
         .base_block_rewards = ValidatorFee::new(solana_validator_base_block_rewards_fee).unwrap();
-    expected_distribution.total_validators = 2;
+    expected_distribution.total_validators = total_validators;
     expected_distribution.total_solana_validator_payments_owed =
         total_solana_validator_payments_owed;
     expected_distribution.solana_validator_payments_merkle_root =
         solana_validator_payments_merkle_root;
     expected_distribution.uncollectible_sol_amount = uncollectible_sol_amount;
     assert_eq!(distribution, expected_distribution);
+
+    let expected_remaining_distribution_data_len = 1;
+    assert_eq!(
+        expected_remaining_distribution_data_len,
+        total_validators as usize / 8 + 1
+    );
+    assert_eq!(
+        remaining_distribution_data,
+        vec![0; expected_remaining_distribution_data_len]
+    );
 
     // Clone payer signer to avoid borrowing issue.
     let payer_signer = test_setup.payer_signer.insecure_clone();

@@ -929,36 +929,31 @@ fn try_finalize_distribution_payments(accounts: &[AccountInfo]) -> ProgramResult
 
     distribution.set_are_payments_finalized(true);
 
-    // TODO: Realloc and transfer lamports to distribution.
+    // We need to realloc the distribution account to add the number of bits
+    // needed to store whether a Solana validator has paid.
     let additional_data_len = distribution.total_validators / 8 + 1;
 
     // Avoid borrowing while in mutable borrow state.
     let distribution_info = distribution.info;
     drop(distribution);
 
-    // We need to realloc the distribution account to add the number of bits
-    // needed to store whether a Solana validator has paid.
     let new_data_len = distribution_info
         .data_len()
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports = Rent::get()
+    let additional_lamports_for_resize = Rent::get()
         .unwrap()
         .minimum_balance(new_data_len)
         .saturating_sub(distribution_info.lamports());
 
-    let (_, payer_info) = try_next_enumerated_account(
-        &mut accounts_iter,
-        NextAccountOptions {
-            must_be_signer: true,
-            must_be_writable: true,
-            ..Default::default()
-        },
-    )?;
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    let transfer_ix =
-        system_instruction::transfer(payer_info.key, distribution_info.key, additional_lamports);
+    let transfer_ix = system_instruction::transfer(
+        payer_info.key,
+        distribution_info.key,
+        additional_lamports_for_resize,
+    );
 
     invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
 
@@ -1073,24 +1068,51 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
         return Err(ProgramError::InvalidAccountData);
     }
 
+    // We need to realloc the distribution account to add the number of bits
+    // needed to store whether a contributor has claimed rewards.
+    let total_contributors = distribution.total_contributors;
+    let additional_data_len = total_contributors / 8 + 1;
+
+    // Avoid borrowing while in mutable borrow state.
+    let distribution_info = distribution.info;
+    drop(distribution);
+
+    let new_data_len = distribution_info
+        .data_len()
+        .saturating_add(additional_data_len as usize);
+    distribution_info.resize(new_data_len)?;
+
+    let additional_lamports_for_resize = Rent::get()
+        .unwrap()
+        .minimum_balance(new_data_len)
+        .saturating_sub(distribution_info.lamports());
+
+    msg!(
+        "Increase distribution account size by {} byte{}",
+        additional_data_len,
+        if additional_data_len == 1 { "" } else { "s" }
+    );
+
     // The rewards accountant can pay with another account. But most likely this account
     // will be the same as the payments accountant. This account will need to be writable
     // in order to transfer lamports to the payer (but we do not need to check this because
     // the transfer CPI call will fail if this account is not writable).
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    let total_contributors = distribution.total_contributors;
-    let transfer_amount =
+    let additional_lamports_for_claims =
         contributor_reward_claim_lamports.saturating_mul(total_contributors.into());
 
-    let transfer_ix =
-        system_instruction::transfer(payer_info.key, distribution.info.key, transfer_amount);
+    let transfer_ix = system_instruction::transfer(
+        payer_info.key,
+        distribution_info.key,
+        additional_lamports_for_claims.saturating_add(additional_lamports_for_resize),
+    );
 
     invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
 
     msg!(
         "Transferred {} lamports to distribution for {} contributor claims",
-        transfer_amount,
+        additional_lamports_for_claims,
         total_contributors
     );
 
