@@ -93,10 +93,12 @@ async fn test_configure_distribution_payments() {
             &payments_accountant_signer,
             [
                 DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                    total_validators: 3,
                     total_lamports_owed: total_solana_validator_payments_owed + 1,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
                 DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                    total_validators: 2,
                     total_lamports_owed: total_solana_validator_payments_owed,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
@@ -120,6 +122,7 @@ async fn test_configure_distribution_payments() {
     expected_distribution
         .solana_validator_fee_parameters
         .base_block_rewards = ValidatorFee::new(solana_validator_base_block_rewards_fee).unwrap();
+    expected_distribution.total_validators = 2;
     expected_distribution.total_solana_validator_payments_owed =
         total_solana_validator_payments_owed;
     expected_distribution.solana_validator_payments_merkle_root =

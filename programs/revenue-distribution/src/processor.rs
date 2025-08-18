@@ -862,6 +862,7 @@ fn try_configure_distribution_payments(
 
     match setting {
         DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+            total_validators,
             total_lamports_owed,
             merkle_root,
         } => {
@@ -869,6 +870,9 @@ fn try_configure_distribution_payments(
                 msg!("Payments have already been finalized");
                 return Err(ProgramError::InvalidAccountData);
             }
+
+            msg!("Set total_validators: {}", total_validators);
+            distribution.total_validators = total_validators;
 
             msg!(
                 "Set total_solana_validator_payments_owed: {}",

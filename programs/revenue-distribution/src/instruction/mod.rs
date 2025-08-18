@@ -56,6 +56,7 @@ pub enum ProgramFlagConfiguration {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum DistributionPaymentsConfiguration {
     UpdateSolanaValidatorPayments {
+        total_validators: u32,
         total_lamports_owed: u64,
         merkle_root: Hash,
     },
