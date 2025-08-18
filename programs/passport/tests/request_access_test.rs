@@ -2,11 +2,16 @@ mod common;
 
 //
 
+use common::process_instructions_for_test;
 use doublezero_passport::{
-    instruction::{ProgramConfiguration, ProgramFlagConfiguration},
+    instruction::{
+        account::RequestAccessAccounts, AccessMode, PassportInstructionData, ProgramConfiguration,
+        ProgramFlagConfiguration,
+    },
     state::AccessRequest,
+    ID,
 };
-use doublezero_program_tools::zero_copy;
+use doublezero_program_tools::{instruction::try_build_instruction, zero_copy};
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
@@ -74,4 +79,35 @@ async fn test_request_access() {
         .unwrap();
     assert_eq!(access_request_balance_after, access_deposit + request_rent);
     assert_eq!(access_request, expected_access_request);
+
+    //
+    // Fail on duplicate access request
+    //
+
+    let duplicate_ix = try_build_instruction(
+        &ID,
+        RequestAccessAccounts::new(&test_setup.payer_signer.pubkey(), &service_key),
+        &PassportInstructionData::RequestAccess(AccessMode::SolanaValidator {
+            validator_id,
+            service_key,
+            ed25519_signature: [1u8; 64],
+        }),
+    )
+    .unwrap();
+
+    let blockhash = test_setup
+        .banks_client
+        .get_latest_blockhash()
+        .await
+        .unwrap();
+    let result = process_instructions_for_test(
+        &test_setup.banks_client,
+        blockhash,
+        &[duplicate_ix],
+        &[&test_setup.payer_signer],
+    )
+    .await;
+    println!("WTF IS HAPPENING");
+
+    assert!(result.is_err());
 }

@@ -168,7 +168,7 @@ async fn test_grant_access() {
         .get_balance(sentinel_signer.pubkey())
         .await
         .unwrap();
-    assert_eq!(sentinel_after_balance, 128 * 6_960 + access_fee); // Sentinel still has 10_000 from prior grant
+    assert_eq!(sentinel_after_balance, 128 * 6_960 + access_fee); // Sentinel still has 10_000 from prior grant test
 
     let access_request_info = test_setup
         .banks_client
