@@ -14,7 +14,11 @@ use doublezero_passport::{
 use doublezero_program_tools::{instruction::try_build_instruction, zero_copy};
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::{
+    instruction::InstructionError,
+    signature::{Keypair, Signer},
+    transaction::TransactionError,
+};
 
 //
 // Initialize the access request
@@ -103,6 +107,60 @@ async fn test_request_access() {
         &[&test_setup.payer_signer],
     )
     .await;
+
+    assert!(result.is_err());
+
+    //
+    // Fail on mismatched service key account and service key argument
+    //
+
+    let wrong_service_key = Pubkey::new_unique();
+
+    let payer_signer = Keypair::new();
+    let invalid_service_key_ix = try_build_instruction(
+        &ID,
+        RequestAccessAccounts::new(&payer_signer.pubkey(), &wrong_service_key),
+        &PassportInstructionData::RequestAccess(AccessMode::SolanaValidator {
+            validator_id,
+            service_key,
+            ed25519_signature: [1u8; 64],
+        }),
+    )
+    .unwrap();
+
+    let (error, _) = test_setup
+        .unwrap_simulation_error(&[invalid_service_key_ix], &[&payer_signer])
+        .await;
+
+    assert_eq!(
+        error,
+        TransactionError::InstructionError(0, InstructionError::InvalidSeeds)
+    );
+
+    //
+    // Pause the program now
+    //
+
+    test_setup
+        .configure_program(
+            [ProgramConfiguration::Flag(
+                ProgramFlagConfiguration::IsPaused(true),
+            )],
+            &admin_signer,
+        )
+        .await
+        .unwrap();
+
+    let (_, program_config) = test_setup.fetch_program_config().await;
+    assert!(program_config.is_paused());
+
+    //
+    // Request creation should error now
+    //
+
+    let result = test_setup
+        .request_access(&service_key, &validator_id, [1u8; 64])
+        .await;
 
     assert!(result.is_err());
 }

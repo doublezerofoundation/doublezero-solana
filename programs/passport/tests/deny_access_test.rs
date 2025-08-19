@@ -116,42 +116,42 @@ async fn test_deny_access() {
     // Reject the deny access request with an unauthorized sentinel
     //
 
-    // test_setup
-    //     .request_access(&service_key, &validator_id, [1u8; 64])
-    //     .await
-    //     .unwrap();
+    test_setup
+        .request_access(&service_key, &validator_id, [1u8; 64])
+        .await
+        .unwrap();
 
-    // let (access_request_key, _) = test_setup.fetch_access_request(&service_key).await;
-    // let unauthorized_signer = Keypair::new();
+    let (access_request_key, _) = test_setup.fetch_access_request(&service_key).await;
+    let unauthorized_signer = Keypair::new();
 
     // Cannot grant access with unauthorized sentinel
-    // let deny_access_ix = try_build_instruction(
-    //     &ID,
-    //     DenyAccessAccounts::new(&unauthorized_signer.pubkey(), &access_request_key),
-    //     &PassportInstructionData::GrantAccess,
-    // )
-    // .unwrap();
+    let deny_access_ix = try_build_instruction(
+        &ID,
+        DenyAccessAccounts::new(&unauthorized_signer.pubkey(), &access_request_key),
+        &PassportInstructionData::GrantAccess,
+    )
+    .unwrap();
 
-    // let (tx_err, _program_logs) = test_setup
-    //     .unwrap_simulation_error(&[deny_access_ix], &[&unauthorized_signer])
-    //     .await;
+    let (tx_err, _program_logs) = test_setup
+        .unwrap_simulation_error(&[deny_access_ix], &[&unauthorized_signer])
+        .await;
 
-    // assert_eq!(
-    //     tx_err,
-    //     TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
-    // );
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
 
-    // let sentinel_after_deny_balance = test_setup
-    //     .banks_client
-    //     .get_balance(sentinel_signer.pubkey())
-    //     .await
-    //     .unwrap();
-    // assert_eq!(sentinel_after_balance, sentinel_after_deny_balance);
+    let sentinel_after_deny_balance = test_setup
+        .banks_client
+        .get_balance(sentinel_signer.pubkey())
+        .await
+        .unwrap();
+    assert_eq!(sentinel_after_balance, sentinel_after_deny_balance);
 
-    // let access_request_info = test_setup
-    //     .banks_client
-    //     .get_account(access_request_key)
-    //     .await
-    //     .unwrap();
-    // assert!(access_request_info.is_some());
+    let access_request_info = test_setup
+        .banks_client
+        .get_account(access_request_key)
+        .await
+        .unwrap();
+    assert!(access_request_info.is_some());
 }
