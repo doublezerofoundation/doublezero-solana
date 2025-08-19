@@ -95,19 +95,14 @@ async fn test_request_access() {
     )
     .unwrap();
 
-    let blockhash = test_setup
-        .banks_client
-        .get_latest_blockhash()
-        .await
-        .unwrap();
+    let recent_blockhash = test_setup.get_latest_blockhash().await.unwrap();
     let result = process_instructions_for_test(
-        &test_setup.banks_client,
-        blockhash,
+        &mut test_setup.banks_client,
+        &recent_blockhash,
         &[duplicate_ix],
         &[&test_setup.payer_signer],
     )
     .await;
-    println!("WTF IS HAPPENING");
 
     assert!(result.is_err());
 }
