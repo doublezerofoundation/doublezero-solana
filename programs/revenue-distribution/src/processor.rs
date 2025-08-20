@@ -30,7 +30,7 @@ use crate::{
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
         JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares, RelayParameters,
-        TOKEN_2Z_PDA_SEED_PREFIX,
+        SolanaValidatorDeposit, TOKEN_2Z_PDA_SEED_PREFIX,
     },
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
     DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
@@ -110,6 +110,9 @@ fn try_process_instruction(
         }
         RevenueDistributionInstructionData::VerifyDistributionMerkleRoot { kind, proof } => {
             try_verify_distribution_merkle_root(accounts, kind, proof)
+        }
+        RevenueDistributionInstructionData::InitializeSolanaValidatorDeposit(node_id) => {
+            try_initialize_solana_validator_deposit(accounts, node_id)
         }
     }
 }
@@ -1875,6 +1878,64 @@ fn try_verify_distribution_merkle_root(
             todo!()
         }
     }
+    Ok(())
+}
+
+fn try_initialize_solana_validator_deposit(
+    accounts: &[AccountInfo],
+    node_id: Pubkey,
+) -> ProgramResult {
+    msg!("Initialize Solana validator deposit");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Solana validator deposit.
+    // - 1: Payer (funder for new account).
+    // - 2: System program.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the new Solana validator deposit.
+    let (account_index, new_solana_validator_deposit_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    let (expected_solana_validator_deposit_key, solana_validator_deposit_bump) =
+        SolanaValidatorDeposit::find_address(&node_id);
+
+    // Enforce this account location.
+    if new_solana_validator_deposit_info.key != &expected_solana_validator_deposit_key {
+        msg!(
+            "Invalid address for Solana validator deposit (account {})",
+            account_index
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Account 1 must be the payer.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    try_create_account(
+        Invoker::Signer(payer_info.key),
+        Invoker::Pda {
+            key: &expected_solana_validator_deposit_key,
+            signer_seeds: &[
+                SolanaValidatorDeposit::SEED_PREFIX,
+                node_id.as_ref(),
+                &[solana_validator_deposit_bump],
+            ],
+        },
+        new_solana_validator_deposit_info.lamports(),
+        zero_copy::data_end::<SolanaValidatorDeposit>(),
+        &ID,
+        accounts,
+        Default::default(),
+    )?;
+
+    // Finally, initialize the solana validator deposit with the node id.
+    let (mut solana_validator_deposit, _) = zero_copy::try_initialize::<SolanaValidatorDeposit>(
+        new_solana_validator_deposit_info,
+        None,
+    )?;
+    solana_validator_deposit.node_id = node_id;
+
     Ok(())
 }
 

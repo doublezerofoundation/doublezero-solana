@@ -110,6 +110,7 @@ pub enum RevenueDistributionInstructionData {
         kind: DistributionMerkleRootKind,
         proof: MerkleProof,
     },
+    InitializeSolanaValidatorDeposit(Pubkey),
 }
 
 impl RevenueDistributionInstructionData {
@@ -153,6 +154,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::configure_contributor_rewards");
     pub const VERIFY_DISTRIBUTION_MERKLE_ROOT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::verify_distribution_merkle_root");
+    pub const INITIALIZE_SOLANA_VALIDATOR_DEPOSIT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::initialize_solana_validator_deposit");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -217,6 +220,10 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 let proof = BorshDeserialize::deserialize_reader(reader)?;
 
                 Ok(Self::VerifyDistributionMerkleRoot { kind, proof })
+            }
+            Self::INITIALIZE_SOLANA_VALIDATOR_DEPOSIT => {
+                BorshDeserialize::deserialize_reader(reader)
+                    .map(Self::InitializeSolanaValidatorDeposit)
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -301,6 +308,10 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::VERIFY_DISTRIBUTION_MERKLE_ROOT.serialize(writer)?;
                 kind.serialize(writer)?;
                 proof.serialize(writer)
+            }
+            Self::InitializeSolanaValidatorDeposit(solana_validator_deposit_key) => {
+                Self::INITIALIZE_SOLANA_VALIDATOR_DEPOSIT.serialize(writer)?;
+                solana_validator_deposit_key.serialize(writer)
             }
         }
     }
