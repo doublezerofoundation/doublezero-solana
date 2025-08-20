@@ -12,7 +12,7 @@ use doublezero_revenue_distribution::{
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
-use svm_hash::merkle::{merkle_root_from_byte_ref_leaves, MerkleProof};
+use svm_hash::merkle::{merkle_root_from_indexed_pod_leaves, MerkleProof};
 
 //
 // Verify distribution merkle root.
@@ -48,14 +48,11 @@ async fn test_verify_distribution_merkle_root() {
         })
         .collect::<Vec<_>>();
 
-    let leaves = payments_data
-        .iter()
-        .map(|payment| borsh::to_vec(&payment).unwrap())
-        .collect::<Vec<_>>();
-
-    let merkle_root =
-        merkle_root_from_byte_ref_leaves(&leaves, Some(SolanaValidatorPayment::LEAF_PREFIX))
-            .unwrap();
+    let merkle_root = merkle_root_from_indexed_pod_leaves(
+        &payments_data,
+        Some(SolanaValidatorPayment::LEAF_PREFIX),
+    )
+    .unwrap();
 
     let total_lamports_owed = payments_data.iter().map(|payment| payment.amount).sum();
 
@@ -120,9 +117,9 @@ async fn test_verify_distribution_merkle_root() {
         .copied()
         .enumerate()
         .map(|(i, payment_owed)| {
-            let proof = MerkleProof::from_byte_ref_leaves(
-                &leaves,
-                i,
+            let proof = MerkleProof::from_indexed_pod_leaves(
+                &payments_data,
+                i.try_into().unwrap(),
                 Some(SolanaValidatorPayment::LEAF_PREFIX),
             )
             .unwrap();

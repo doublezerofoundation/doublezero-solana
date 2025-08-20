@@ -1846,6 +1846,12 @@ fn try_verify_distribution_merkle_root(
 ) -> ProgramResult {
     msg!("Verify distribution payment");
 
+    // Enforce that the merkle proof uses an indexed tree.
+    if !proof.is_indexed() {
+        msg!("Merkle proof must use an indexed tree");
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
     // We expect only the distribution account for this instruction.
     let mut accounts_iter = accounts.iter().enumerate();
     let distribution =
@@ -1853,6 +1859,7 @@ fn try_verify_distribution_merkle_root(
 
     match kind {
         DistributionMerkleRootKind::SolanaValidatorPayment(payment_owed) => {
+            let leaf_index = proof.leaf_index.unwrap();
             let merkle_root = payment_owed.merkle_root(proof);
 
             if merkle_root != distribution.solana_validator_payments_merkle_root {
@@ -1860,7 +1867,7 @@ fn try_verify_distribution_merkle_root(
                 return Err(ProgramError::InvalidInstructionData);
             }
 
-            msg!("Solana validator");
+            msg!("Solana validator {}", leaf_index);
             msg!("  node_id: {}", payment_owed.node_id);
             msg!("  amount: {}", payment_owed.amount);
         }
