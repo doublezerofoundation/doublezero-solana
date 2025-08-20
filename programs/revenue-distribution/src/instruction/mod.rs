@@ -57,7 +57,7 @@ pub enum ProgramFlagConfiguration {
 pub enum DistributionPaymentsConfiguration {
     UpdateSolanaValidatorPayments {
         total_validators: u32,
-        total_lamports_owed: u64,
+        total_debt: u64,
         merkle_root: Hash,
     },
     UpdateUncollectibleSol(u64),

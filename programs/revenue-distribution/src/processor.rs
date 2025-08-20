@@ -869,7 +869,7 @@ fn try_configure_distribution_payments(
     match setting {
         DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
             total_validators,
-            total_lamports_owed,
+            total_debt,
             merkle_root,
         } => {
             try_require_unfinalized_distribution_payments(&distribution)?;
@@ -877,11 +877,8 @@ fn try_configure_distribution_payments(
             msg!("Set total_validators: {}", total_validators);
             distribution.total_validators = total_validators;
 
-            msg!(
-                "Set total_solana_validator_payments_owed: {}",
-                total_lamports_owed
-            );
-            distribution.total_solana_validator_payments_owed = total_lamports_owed;
+            msg!("Set total_solana_validator_debt: {}", total_debt);
+            distribution.total_solana_validator_debt = total_debt;
 
             msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
             distribution.solana_validator_payments_merkle_root = merkle_root;
@@ -894,7 +891,7 @@ fn try_configure_distribution_payments(
             // setting will require that the flag has not been set yet.
 
             msg!("Set uncollectible_sol_amount: {}", amount);
-            distribution.uncollectible_sol_amount = amount;
+            distribution.uncollectible_sol_debt = amount;
         }
     }
 
@@ -1861,9 +1858,9 @@ fn try_verify_distribution_merkle_root(
         ZeroCopyAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     match kind {
-        DistributionMerkleRootKind::SolanaValidatorPayment(payment_owed) => {
+        DistributionMerkleRootKind::SolanaValidatorPayment(payment) => {
             let leaf_index = proof.leaf_index.unwrap();
-            let merkle_root = payment_owed.merkle_root(proof);
+            let merkle_root = payment.merkle_root(proof);
 
             if merkle_root != distribution.solana_validator_payments_merkle_root {
                 msg!("Invalid merkle root: {}", merkle_root);
@@ -1871,8 +1868,8 @@ fn try_verify_distribution_merkle_root(
             }
 
             msg!("Solana validator {}", leaf_index);
-            msg!("  node_id: {}", payment_owed.node_id);
-            msg!("  amount: {}", payment_owed.amount);
+            msg!("  node_id: {}", payment.node_id);
+            msg!("  amount: {}", payment.amount);
         }
         DistributionMerkleRootKind::RewardShare() => {
             todo!()

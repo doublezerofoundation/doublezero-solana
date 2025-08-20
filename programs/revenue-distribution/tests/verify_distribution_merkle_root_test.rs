@@ -54,7 +54,7 @@ async fn test_verify_distribution_merkle_root() {
     )
     .unwrap();
 
-    let total_lamports_owed = payments_data.iter().map(|payment| payment.amount).sum();
+    let total_debt = payments_data.iter().map(|payment| payment.amount).sum();
 
     test_setup
         .initialize_program()
@@ -104,7 +104,7 @@ async fn test_verify_distribution_merkle_root() {
             [
                 DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: payments_data.len() as u32,
-                    total_lamports_owed,
+                    total_debt,
                     merkle_root,
                 },
             ],
@@ -116,7 +116,7 @@ async fn test_verify_distribution_merkle_root() {
         .iter()
         .copied()
         .enumerate()
-        .map(|(i, payment_owed)| {
+        .map(|(i, payment)| {
             let proof = MerkleProof::from_indexed_pod_leaves(
                 &payments_data,
                 i.try_into().unwrap(),
@@ -125,7 +125,7 @@ async fn test_verify_distribution_merkle_root() {
             .unwrap();
 
             (
-                DistributionMerkleRootKind::SolanaValidatorPayment(payment_owed),
+                DistributionMerkleRootKind::SolanaValidatorPayment(payment),
                 proof,
             )
         })
