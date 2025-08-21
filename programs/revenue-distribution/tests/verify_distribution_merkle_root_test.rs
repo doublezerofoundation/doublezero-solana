@@ -147,8 +147,8 @@ async fn test_verify_distribution_merkle_root() {
 
     // Attempt to spoof a replay attack with the last leaf of the odd-leaf
     // Merkle tree by duplicating the last leaf.
-    let last_leaf = payments_data.last().unwrap().clone();
-    payments_data.push(last_leaf.clone());
+    let last_leaf = *payments_data.last().unwrap();
+    payments_data.push(last_leaf);
 
     let invalid_merkle_root = merkle_root_from_indexed_pod_leaves(
         &payments_data,
