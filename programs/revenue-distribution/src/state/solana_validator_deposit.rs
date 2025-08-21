@@ -2,14 +2,10 @@ use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{types::StorageGap, Discriminator, PrecomputedDiscriminator};
 use solana_pubkey::Pubkey;
 
-use crate::types::DoubleZeroEpoch;
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct SolanaValidatorDeposit {
     pub node_id: Pubkey,
-
-    pub last_paid_dz_epoch: DoubleZeroEpoch,
 
     _storage_gap: StorageGap<2>,
 }
@@ -26,3 +22,10 @@ impl SolanaValidatorDeposit {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, node_id.as_ref()], &crate::ID)
     }
 }
+
+//
+
+const _: () = assert!(
+    size_of::<SolanaValidatorDeposit>() == 96,
+    "`SolanaValidatorDeposit` size changed"
+);
