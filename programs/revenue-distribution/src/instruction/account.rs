@@ -821,3 +821,40 @@ impl From<InitializeSolanaValidatorDepositAccounts> for Vec<AccountMeta> {
         ]
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PaySolanaValidatorDebtAccounts {
+    pub program_config_key: Pubkey,
+    pub distribution_key: Pubkey,
+    pub solana_validator_deposit_key: Pubkey,
+    pub journal_key: Pubkey,
+}
+
+impl PaySolanaValidatorDebtAccounts {
+    pub fn new(dz_epoch: DoubleZeroEpoch, node_id: &Pubkey) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            distribution_key: Distribution::find_address(dz_epoch).0,
+            solana_validator_deposit_key: SolanaValidatorDeposit::find_address(node_id).0,
+            journal_key: Journal::find_address().0,
+        }
+    }
+}
+
+impl From<PaySolanaValidatorDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: PaySolanaValidatorDebtAccounts) -> Self {
+        let PaySolanaValidatorDebtAccounts {
+            program_config_key,
+            distribution_key,
+            solana_validator_deposit_key,
+            journal_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new(distribution_key, false),
+            AccountMeta::new(solana_validator_deposit_key, false),
+            AccountMeta::new(journal_key, false),
+        ]
+    }
+}

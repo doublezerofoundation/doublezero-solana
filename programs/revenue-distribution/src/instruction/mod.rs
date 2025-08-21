@@ -111,6 +111,10 @@ pub enum RevenueDistributionInstructionData {
         proof: MerkleProof,
     },
     InitializeSolanaValidatorDeposit(Pubkey),
+    PaySolanaValidatorDebt {
+        amount: u64,
+        proof: MerkleProof,
+    },
 }
 
 impl RevenueDistributionInstructionData {
@@ -156,6 +160,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::verify_distribution_merkle_root");
     pub const INITIALIZE_SOLANA_VALIDATOR_DEPOSIT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_solana_validator_deposit");
+    pub const PAY_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::pay_solana_validator_debt");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -224,6 +230,12 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             Self::INITIALIZE_SOLANA_VALIDATOR_DEPOSIT => {
                 BorshDeserialize::deserialize_reader(reader)
                     .map(Self::InitializeSolanaValidatorDeposit)
+            }
+            Self::PAY_SOLANA_VALIDATOR_DEBT => {
+                let amount = BorshDeserialize::deserialize_reader(reader)?;
+                let proof = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::PaySolanaValidatorDebt { amount, proof })
             }
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -312,6 +324,11 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             Self::InitializeSolanaValidatorDeposit(solana_validator_deposit_key) => {
                 Self::INITIALIZE_SOLANA_VALIDATOR_DEPOSIT.serialize(writer)?;
                 solana_validator_deposit_key.serialize(writer)
+            }
+            Self::PaySolanaValidatorDebt { amount, proof } => {
+                Self::PAY_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
+                amount.serialize(writer)?;
+                proof.serialize(writer)
             }
         }
     }

@@ -14,8 +14,8 @@ use doublezero_revenue_distribution::{
             InitializeDistributionAccounts, InitializeJournalAccounts,
             InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
             InitializeSolanaValidatorDepositAccounts, LoadPrepaidConnectionAccounts,
-            SetAdminAccounts, SetRewardsManagerAccounts, TerminatePrepaidConnectionAccounts,
-            VerifyDistributionMerkleRootAccounts,
+            PaySolanaValidatorDebtAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
+            TerminatePrepaidConnectionAccounts, VerifyDistributionMerkleRootAccounts,
         },
         ContributorRewardsConfiguration, DistributionMerkleRootKind,
         DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
@@ -838,6 +838,33 @@ impl ProgramTestWithOwner {
             &mut self.banks_client,
             &self.cached_blockhash,
             &[initialize_solana_validator_deposit_ix],
+            &[payer_signer],
+        )
+        .await?;
+
+        Ok(self)
+    }
+
+    pub async fn pay_solana_validator_debt(
+        &mut self,
+        dz_epoch: DoubleZeroEpoch,
+        node_id: &Pubkey,
+        amount: u64,
+        proof: MerkleProof,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let pay_solana_validator_debt_ix = try_build_instruction(
+            &ID,
+            PaySolanaValidatorDebtAccounts::new(dz_epoch, node_id),
+            &RevenueDistributionInstructionData::PaySolanaValidatorDebt { amount, proof },
+        )
+        .unwrap();
+
+        self.cached_blockhash = process_instructions_for_test(
+            &mut self.banks_client,
+            &self.cached_blockhash,
+            &[pay_solana_validator_debt_ix],
             &[payer_signer],
         )
         .await?;
