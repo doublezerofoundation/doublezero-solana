@@ -1,7 +1,6 @@
 [workspace]
 exclude = []
 members = [
-    "crates/2z-cli",
     "crates/program-tools",
     "programs/passport",
     "programs/revenue-distribution",
