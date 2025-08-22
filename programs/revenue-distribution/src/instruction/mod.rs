@@ -9,7 +9,7 @@ use doublezero_program_tools::{Discriminator, DISCRIMINATOR_LEN};
 use solana_pubkey::Pubkey;
 use svm_hash::{merkle::MerkleProof, sha2::Hash};
 
-use crate::types::{DoubleZeroEpoch, EpochDuration, SolanaValidatorPayment};
+use crate::types::{DoubleZeroEpoch, EpochDuration, RewardShare, SolanaValidatorPayment};
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ProgramConfiguration {
@@ -71,9 +71,7 @@ pub enum ContributorRewardsConfiguration {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum DistributionMerkleRootKind {
     SolanaValidatorPayment(SolanaValidatorPayment),
-    RewardShare(
-        // TODO: Add rewards share struct when created
-    ),
+    RewardShare(RewardShare),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

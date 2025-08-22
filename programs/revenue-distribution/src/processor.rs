@@ -32,9 +32,7 @@ use crate::{
         JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares, RelayParameters,
         SolanaValidatorDeposit, TOKEN_2Z_PDA_SEED_PREFIX,
     },
-    types::{
-        BurnRate, DoubleZeroEpoch, ReplayProtectionByte, SolanaValidatorPayment, ValidatorFee,
-    },
+    types::{BurnRate, ByteFlags, DoubleZeroEpoch, SolanaValidatorPayment, ValidatorFee},
     DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
 };
 
@@ -1895,7 +1893,7 @@ fn try_verify_distribution_merkle_root(
             msg!("  node_id: {}", payment.node_id);
             msg!("  amount: {}", payment.amount);
         }
-        DistributionMerkleRootKind::RewardShare() => {
+        DistributionMerkleRootKind::RewardShare(_) => {
             todo!()
         }
     }
@@ -2012,19 +2010,21 @@ fn try_pay_solana_validator_debt(
     // Bits indicating whether debt has been paid for specific leaf indices are
     // stored in the distribution's remaining data.
     let processed_index = distribution.processed_solana_validator_payments_index as usize;
-    let remaining_data = &mut distribution.remaining_data[processed_index..];
+    let processed_payments_data = &mut distribution.remaining_data[processed_index..];
 
     let leaf_byte_index = leaf_index as usize / 8;
 
-    // First, we have to grab the relevant byte from the remaining data.
-    let mut leaf_byte = remaining_data
-        .get(leaf_byte_index)
-        .copied()
-        .map(ReplayProtectionByte::from)
+    // First, we have to grab the relevant byte from the processed payments
+    //data.
+    let leaf_byte_ref = processed_payments_data
+        .get_mut(leaf_byte_index)
         .ok_or_else(|| {
             msg!("Invalid leaf index");
             ProgramError::InvalidInstructionData
         })?;
+
+    // Create a ByteFlag from the byte value to check the bit.
+    let mut leaf_byte = ByteFlags(*leaf_byte_ref);
 
     // Then, we have to grab the relevant bit from the byte and check whether
     // it is set already.
@@ -2040,7 +2040,7 @@ fn try_pay_solana_validator_debt(
 
     // Set the bit to true to indicate that the debt has been paid.
     leaf_byte.set_bit(leaf_bit, true);
-    remaining_data[leaf_byte_index] = leaf_byte.to_le_bytes::<1>()[0];
+    *leaf_byte_ref = leaf_byte.0;
 
     // Account 2 must be the Solana validator deposit.
     let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
