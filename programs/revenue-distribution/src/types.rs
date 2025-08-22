@@ -187,6 +187,14 @@ impl RewardShare {
 
     pub const FLAG_IS_BLOCKED_BIT: u8 = 0;
 
+    pub fn new(contributor_key: Pubkey, unit_share: u32) -> Self {
+        Self {
+            contributor_key,
+            unit_share,
+            ..Default::default()
+        }
+    }
+
     pub fn is_blocked(&self) -> bool {
         self.flags.bit(Self::FLAG_IS_BLOCKED_BIT as usize)
     }

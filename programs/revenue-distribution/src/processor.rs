@@ -32,7 +32,10 @@ use crate::{
         JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares, RelayParameters,
         SolanaValidatorDeposit, TOKEN_2Z_PDA_SEED_PREFIX,
     },
-    types::{BurnRate, ByteFlags, DoubleZeroEpoch, SolanaValidatorPayment, ValidatorFee},
+    types::{
+        BurnRate, ByteFlags, DoubleZeroEpoch, RewardShare, SolanaValidatorPayment, UnitShare32,
+        ValidatorFee,
+    },
     DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
 };
 
@@ -1010,7 +1013,7 @@ fn try_configure_distribution_rewards(
     // If the distribution rewards have already been finalized, we have nothing to do.
     try_require_unfinalized_distribution_rewards(&distribution)?;
 
-    msg!("set total_contributors: {}", total_contributors);
+    msg!("Set total_contributors: {}", total_contributors);
     distribution.total_contributors = total_contributors;
 
     msg!("Set rewards_merkle_root: {}", merkle_root);
@@ -1868,10 +1871,10 @@ fn try_verify_distribution_merkle_root(
     msg!("Verify distribution payment");
 
     // Enforce that the merkle proof uses an indexed tree.
-    if !proof.is_indexed() {
+    let leaf_index = proof.leaf_index.ok_or_else(|| {
         msg!("Merkle proof must use an indexed tree");
-        return Err(ProgramError::InvalidInstructionData);
-    }
+        ProgramError::InvalidInstructionData
+    })?;
 
     // We expect only the distribution account for this instruction.
     let mut accounts_iter = accounts.iter().enumerate();
@@ -1880,7 +1883,8 @@ fn try_verify_distribution_merkle_root(
 
     match kind {
         DistributionMerkleRootKind::SolanaValidatorPayment(payment) => {
-            let leaf_index = proof.leaf_index.unwrap();
+            msg!("Solana validator payment {}", leaf_index);
+
             let computed_merkle_root =
                 proof.root_from_pod_leaf(&payment, Some(SolanaValidatorPayment::LEAF_PREFIX));
 
@@ -1889,12 +1893,28 @@ fn try_verify_distribution_merkle_root(
                 return Err(ProgramError::InvalidInstructionData);
             }
 
-            msg!("Solana validator {}", leaf_index);
             msg!("  node_id: {}", payment.node_id);
             msg!("  amount: {}", payment.amount);
         }
-        DistributionMerkleRootKind::RewardShare(_) => {
-            todo!()
+        DistributionMerkleRootKind::RewardShare(reward) => {
+            msg!("Reward share {}", leaf_index);
+
+            UnitShare32::new(reward.unit_share).ok_or_else(|| {
+                msg!("Invalid unit share {}", reward.unit_share);
+                ProgramError::InvalidInstructionData
+            })?;
+
+            let computed_merkle_root =
+                proof.root_from_pod_leaf(&reward, Some(RewardShare::LEAF_PREFIX));
+
+            if computed_merkle_root != distribution.rewards_merkle_root {
+                msg!("Invalid computed merkle root: {}", computed_merkle_root);
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            msg!("  contributor_key: {}", reward.contributor_key);
+            msg!("  unit_share: {}", reward.unit_share);
+            msg!("  is_blocked: {}", reward.is_blocked());
         }
     }
     Ok(())
