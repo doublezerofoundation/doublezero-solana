@@ -879,8 +879,8 @@ fn try_configure_distribution_payments(
         } => {
             try_require_unfinalized_distribution_payments(&distribution)?;
 
-            msg!("Set total_validators: {}", total_validators);
-            distribution.total_validators = total_validators;
+            msg!("Set total_solana_validators: {}", total_validators);
+            distribution.total_solana_validators = total_validators;
 
             msg!("Set total_solana_validator_debt: {}", total_debt);
             distribution.total_solana_validator_debt = total_debt;
@@ -936,11 +936,16 @@ fn try_finalize_distribution_payments(accounts: &[AccountInfo]) -> ProgramResult
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a Solana validator has paid.
-    let additional_data_len = if distribution.total_validators % 8 == 0 {
-        distribution.total_validators / 8
+    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
+        distribution.total_solana_validators / 8
     } else {
-        distribution.total_validators / 8 + 1
+        distribution.total_solana_validators / 8 + 1
     };
+
+    // Set the index of where to find the bits start to indicate which Solana
+    // validator payments have been processed.
+    distribution.processed_solana_validator_payments_index =
+        distribution.remaining_data.len() as u32;
 
     // Avoid borrowing while in mutable borrow state.
     let distribution_info = distribution.info;
@@ -1082,6 +1087,14 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     } else {
         total_contributors / 8 + 1
     };
+
+    // Set the index of where to find the bits start to indicate which rewards
+    // have been distributed.
+    distribution.processed_rewards_index = distribution.remaining_data.len() as u32;
+    msg!(
+        "Set processed_rewards_index: {}",
+        distribution.processed_rewards_index
+    );
 
     // Avoid borrowing while in mutable borrow state.
     let distribution_info = distribution.info;
@@ -1998,7 +2011,8 @@ fn try_pay_solana_validator_debt(
 
     // Bits indicating whether debt has been paid for specific leaf indices are
     // stored in the distribution's remaining data.
-    let mut remaining_data = distribution.remaining_data;
+    let processed_index = distribution.processed_solana_validator_payments_index as usize;
+    let remaining_data = &mut distribution.remaining_data[processed_index..];
 
     let leaf_byte_index = leaf_index as usize / 8;
 

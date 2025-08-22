@@ -41,7 +41,7 @@ pub struct Distribution {
 
     pub solana_validator_payments_merkle_root: Hash,
 
-    pub total_validators: u32,
+    pub total_solana_validators: u32,
     pub num_validators_paid: u32,
 
     pub total_solana_validator_debt: u64,
@@ -71,6 +71,9 @@ pub struct Distribution {
     /// carrying bad debt perpetually. This amount is subtracted from the
     /// total amount owed to the system.
     pub uncollectible_sol_debt: u64,
+
+    pub processed_solana_validator_payments_index: u32,
+    pub processed_rewards_index: u32,
 
     _storage_gap: StorageGap<8>,
 }
@@ -122,6 +125,6 @@ impl Distribution {
 //
 
 const _: () = assert!(
-    size_of::<Distribution>() == 440,
+    size_of::<Distribution>() == 448,
     "`Distribution` size changed"
 );
