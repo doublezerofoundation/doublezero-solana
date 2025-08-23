@@ -113,6 +113,8 @@ pub enum RevenueDistributionInstructionData {
         amount: u64,
         proof: MerkleProof,
     },
+    InitializeSwapDestination,
+    SweepDistributionTokens,
 }
 
 impl RevenueDistributionInstructionData {
@@ -160,6 +162,10 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_solana_validator_deposit");
     pub const PAY_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::pay_solana_validator_debt");
+    pub const INITIALIZE_SWAP_DESTINATION: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::initialize_swap_destination");
+    pub const SWEEP_DISTRIBUTION_TOKENS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::sweep_distribution_tokens");
 }
 
 impl BorshDeserialize for RevenueDistributionInstructionData {
@@ -235,6 +241,8 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
 
                 Ok(Self::PaySolanaValidatorDebt { amount, proof })
             }
+            Self::INITIALIZE_SWAP_DESTINATION => Ok(Self::InitializeSwapDestination),
+            Self::SWEEP_DISTRIBUTION_TOKENS => Ok(Self::SweepDistributionTokens),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid discriminator",
@@ -328,6 +336,8 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 amount.serialize(writer)?;
                 proof.serialize(writer)
             }
+            Self::InitializeSwapDestination => Self::INITIALIZE_SWAP_DESTINATION.serialize(writer),
+            Self::SweepDistributionTokens => Self::SWEEP_DISTRIBUTION_TOKENS.serialize(writer),
         }
     }
 }

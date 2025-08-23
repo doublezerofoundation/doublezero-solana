@@ -28,9 +28,9 @@ use crate::{
         ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
-        JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares, RelayParameters,
-        SolanaValidatorDeposit, TOKEN_2Z_PDA_SEED_PREFIX,
+        self, find_swap_authority_address, CommunityBurnRateParameters, ContributorRewards,
+        Distribution, Journal, JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares,
+        RelayParameters, SolanaValidatorDeposit, TOKEN_2Z_PDA_SEED_PREFIX,
     },
     types::{
         BurnRate, ByteFlags, DoubleZeroEpoch, RewardShare, SolanaValidatorPayment, UnitShare32,
@@ -119,6 +119,12 @@ fn try_process_instruction(
         }
         RevenueDistributionInstructionData::PaySolanaValidatorDebt { amount, proof } => {
             try_pay_solana_validator_debt(accounts, amount, proof)
+        }
+        RevenueDistributionInstructionData::InitializeSwapDestination => {
+            try_initialize_swap_destination(accounts)
+        }
+        RevenueDistributionInstructionData::SweepDistributionTokens => {
+            try_sweep_distribution_tokens(accounts)
         }
     }
 }
@@ -890,11 +896,10 @@ fn try_configure_distribution_payments(
             distribution.solana_validator_payments_merkle_root = merkle_root;
         }
         DistributionPaymentsConfiguration::UpdateUncollectibleSol(amount) => {
-            // TODO: We will not want to allow this to be updated after we sweep the 2Z swapped from
-            // SOL into this distribution because that will cause chaos.
-            //
-            // We will need to add a flag to indicate that the distribution has been swept. This
-            // setting will require that the flag has not been set yet.
+            // Make sure the distribution has not already swept 2Z tokens. If
+            // 2Z was already swept into the distribution, the distribution has
+            // accounted for all of its SOL debt.
+            try_require_has_not_swept_2z_tokens(&distribution)?;
 
             msg!("Set uncollectible_sol_amount: {}", amount);
             distribution.uncollectible_sol_debt = amount;
@@ -2112,6 +2117,193 @@ fn try_pay_solana_validator_debt(
     Ok(())
 }
 
+fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Initialize swap destination");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Payer (funder for new accounts).
+    // - 1: Swap authority.
+    // - 2: New swap destination 2Z token account.
+    // - 3: 2Z mint.
+    // - 4: SPL Token program.
+    // - 5: System program.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be a signer and writable (i.e., payer) because it will be
+    // sending lamports to the new journal account when the system program
+    // allocates data to it. But because the create-program instruction requires
+    // that this account is a signer and is writable, we do not need to
+    // explicitly check these fields in its account info.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // Account 1 must be the swap authority. We do not store any data in this
+    // account. It is purely used as a signer for token transfers.
+    let (account_index, swap_authority_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    let (expected_swap_authority_key, _) = find_swap_authority_address();
+
+    // Enforce this account location.
+    if swap_authority_info.key != &expected_swap_authority_key {
+        msg!(
+            "Invalid seeds for swap authority (account {})",
+            account_index
+        );
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    // Account 2 must be the new swap destination 2Z token account. This account
+    // should not exist yet.
+    let (_, new_swap_dst_2z_token_pda_info, swap_dst_2z_token_pda_bump) =
+        try_next_2z_token_pda_info(
+            &mut accounts_iter,
+            &expected_swap_authority_key,
+            "swap destination",
+            None, // bump_seed
+        )?;
+
+    // Account 3 must be the 2Z mint.
+    //
+    // NOTE: Enforcing this account to be the 2Z mint can be removed if this
+    // program supports swap destination accounts for other mints.
+    try_next_2z_mint_info(&mut accounts_iter)?;
+
+    // Account 4 must be the SPL Token program.
+    try_next_token_program_info(&mut accounts_iter)?;
+
+    try_create_token_account(
+        Invoker::Signer(payer_info.key),
+        Invoker::Pda {
+            key: new_swap_dst_2z_token_pda_info.key,
+            signer_seeds: &[
+                TOKEN_2Z_PDA_SEED_PREFIX,
+                expected_swap_authority_key.as_ref(),
+                &[swap_dst_2z_token_pda_bump],
+            ],
+        },
+        &DOUBLEZERO_MINT_KEY,
+        &expected_swap_authority_key,
+        new_swap_dst_2z_token_pda_info.lamports(),
+        accounts,
+        None, // rent_sysvar
+    )?;
+
+    Ok(())
+}
+
+fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Sweep distribution tokens");
+
+    #[cfg(not(feature = "development"))]
+    {
+        let _ = accounts;
+        todo!()
+    }
+
+    #[cfg(feature = "development")]
+    {
+        use crate::{state::SWAP_AUTHORITY_SEED_PREFIX, FIXED_SOL_2Z_SWAP_RATE_FOR_DEVELOPMENT};
+
+        // We expect the following accounts for this instruction:
+        // - 0: Program config.
+        // - 1: Distribution.
+        // - 2: Distribution 2Z token account.
+        // - 3: Swap authority.
+        // - 4: Swap 2Z destination account.
+        let mut accounts_iter = accounts.iter().enumerate();
+
+        // Account 0 must be the program config.
+        let program_config =
+            ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+        // Make sure the program is not paused.
+        try_require_unpaused(&program_config)?;
+
+        // Account 1 must be the distribution.
+        let mut distribution =
+            ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+        // Make sure the distribution has not already swept 2Z tokens.
+        try_require_has_not_swept_2z_tokens(&distribution)?;
+
+        distribution.set_has_swept_2z_tokens(true);
+
+        // Make sure the distribution is finalized.
+        try_require_finalized_distribution_payments(&distribution)?;
+
+        let outstanding_debt = distribution.checked_outstanding_sol_debt().ok_or_else(|| {
+            msg!("Uncollectible SOL debt is misconfigured");
+            ProgramError::ArithmeticOverflow
+        })?;
+
+        // Make sure the distribution has collected solana validator payments.
+        if outstanding_debt != 0 {
+            msg!("Distribution has not collected all SOL debt");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        // Record the swept amount to the distribution. This amount will also be
+        // used to token transfer the 2Z tokens to the distribution.
+        let token_2z_amount = distribution
+            .collected_solana_validator_payments
+            .saturating_mul(FIXED_SOL_2Z_SWAP_RATE_FOR_DEVELOPMENT);
+        distribution.collected_sol_converted_to_2z += token_2z_amount;
+
+        // Account 2 must be the distribution's 2Z token account.
+        let (_, distribution_2z_token_pda_info, _) = try_next_2z_token_pda_info(
+            &mut accounts_iter,
+            distribution.info.key,
+            "distribution's",
+            Some(distribution.token_2z_pda_bump_seed),
+        )?;
+
+        // Account 3 must be the swap authority. It is assumed to be a signer
+        // because it is the authority that will be used to transfer 2Z from its
+        // token account to the distribution's token account.
+        let (account_index, swap_authority_info) =
+            try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+        let (expected_swap_authority_key, swap_authority_bump) = find_swap_authority_address();
+
+        // Enforce this account location.
+        if swap_authority_info.key != &expected_swap_authority_key {
+            msg!(
+                "Invalid address for swap authority (account {})",
+                account_index
+            );
+            return Err(ProgramError::InvalidSeeds);
+        }
+
+        // Account 4 must be the swap destination 2Z token account.
+        let (_, swap_dst_2z_info, _) = try_next_2z_token_pda_info(
+            &mut accounts_iter,
+            &expected_swap_authority_key,
+            "swap destination",
+            None, // bump_seed
+        )?;
+
+        let token_transfer_ix = spl_token::instruction::transfer(
+            &spl_token::ID,
+            swap_dst_2z_info.key,
+            distribution_2z_token_pda_info.key,
+            swap_authority_info.key,
+            &[], // signer_pubkeys
+            token_2z_amount,
+        )
+        .unwrap();
+
+        invoke_signed_unchecked(
+            &token_transfer_ix,
+            accounts,
+            &[&[SWAP_AUTHORITY_SEED_PREFIX, &[swap_authority_bump]]],
+        )?;
+
+        msg!("Transferred {} 2Z tokens to distribution", token_2z_amount);
+
+        Ok(())
+    }
+}
+
 //
 // Account info handling.
 //
@@ -2125,6 +2317,7 @@ enum Authority {
 }
 
 impl Authority {
+    #[inline(always)]
     fn try_next_as_authorized_account<'b, 'c>(
         &self,
         accounts_iter: &mut EnumeratedAccountInfoIter<'b, 'c>,
@@ -2346,6 +2539,15 @@ fn try_require_finalized_distribution_payments(distribution: &Distribution) -> P
 fn try_require_unfinalized_distribution_rewards(distribution: &Distribution) -> ProgramResult {
     if distribution.are_rewards_finalized() {
         msg!("Distribution rewards have already been finalized");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    Ok(())
+}
+
+fn try_require_has_not_swept_2z_tokens(distribution: &Distribution) -> ProgramResult {
+    if distribution.has_swept_2z_tokens() {
+        msg!("Distribution has already swept 2Z tokens");
         return Err(ProgramError::InvalidAccountData);
     }
 

@@ -88,6 +88,7 @@ impl Distribution {
     pub const FLAG_RESERVED_BIT: usize = 0;
     pub const FLAG_ARE_PAYMENTS_FINALIZED_BIT: usize = 1;
     pub const FLAG_ARE_REWARDS_FINALIZED_BIT: usize = 2;
+    pub const FLAG_HAS_SWEPT_2Z_TOKENS_BIT: usize = 3;
 
     pub fn find_address(dz_epoch: DoubleZeroEpoch) -> (Pubkey, u8) {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, &dz_epoch.as_seed()], &crate::ID)
@@ -111,12 +112,21 @@ impl Distribution {
             .set_bit(Self::FLAG_ARE_REWARDS_FINALIZED_BIT, should_finalize);
     }
 
+    pub fn has_swept_2z_tokens(&self) -> bool {
+        self.flags.bit(Self::FLAG_HAS_SWEPT_2Z_TOKENS_BIT)
+    }
+
+    pub fn set_has_swept_2z_tokens(&mut self, has_swept: bool) {
+        self.flags
+            .set_bit(Self::FLAG_HAS_SWEPT_2Z_TOKENS_BIT, has_swept);
+    }
+
     pub fn checked_total_sol_debt(&self) -> Option<u64> {
         self.total_solana_validator_debt
             .checked_sub(self.uncollectible_sol_debt)
     }
 
-    pub fn checked_remaining_sol_debt(&self) -> Option<u64> {
+    pub fn checked_outstanding_sol_debt(&self) -> Option<u64> {
         self.checked_total_sol_debt()?
             .checked_sub(self.collected_solana_validator_payments)
     }
