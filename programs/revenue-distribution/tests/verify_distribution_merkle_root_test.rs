@@ -183,7 +183,7 @@ async fn test_verify_distribution_merkle_root() {
     );
     assert_eq!(
         program_logs.get(2).unwrap(),
-        &format!("Program log: Solana validator payment 511")
+        "Program log: Solana validator payment 511"
     );
     assert_eq!(
         program_logs.get(3).unwrap(),

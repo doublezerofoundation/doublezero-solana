@@ -150,31 +150,17 @@ async fn test_sweep_distribution_tokens_development() {
         .await
         .unwrap();
 
-    // Show that verification passes.
-    let kinds_and_proofs = payments_data
-        .iter()
-        .enumerate()
-        .map(|(i, payment)| {
-            let kind = DistributionMerkleRootKind::SolanaValidatorPayment(*payment);
-            let proof = MerkleProof::from_indexed_pod_leaves(
-                &payments_data,
-                i.try_into().unwrap(),
-                Some(SolanaValidatorPayment::LEAF_PREFIX),
-            )
-            .unwrap();
-            (kind, proof)
-        })
-        .collect::<Vec<_>>();
+    // 1. Initialize Solana validator deposit accounts.
+    // 2. Transfer amount each validator owes so each can pay its debt.
+    // 3. Pay each validator's debt.
+    for (i, payment) in payments_data.iter().enumerate() {
+        let proof = MerkleProof::from_indexed_pod_leaves(
+            &payments_data,
+            i.try_into().unwrap(),
+            Some(SolanaValidatorPayment::LEAF_PREFIX),
+        )
+        .unwrap();
 
-    // Clone proofs to pay after verification.
-    let proofs = kinds_and_proofs
-        .iter()
-        .map(|(_, proof)| proof.clone())
-        .collect::<Vec<_>>();
-
-    // Initialize Solana validator deposit accounts and transfer amount each
-    // validator owes so each can pay its debt.
-    for (payment, proof) in payments_data.iter().zip(proofs) {
         let node_id = &payment.node_id;
         let amount = payment.amount;
 

@@ -238,7 +238,7 @@ async fn test_finalize_distribution_rewards() {
         solana_validator_payments_merkle_root;
     expected_distribution.total_contributors = total_contributors;
     expected_distribution.rewards_merkle_root = rewards_merkle_root;
-    expected_distribution.processed_rewards_index = total_solana_validators as u32 / 8;
+    expected_distribution.processed_rewards_index = total_solana_validators / 8;
     assert_eq!(distribution, expected_distribution);
 
     let expected_distribution_remaining_data_len =
