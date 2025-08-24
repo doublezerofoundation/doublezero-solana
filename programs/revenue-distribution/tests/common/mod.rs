@@ -6,10 +6,10 @@ use doublezero_program_tools::{
 use doublezero_revenue_distribution::{
     instruction::{
         account::{
-            ConfigureContributorRewardsAccounts, ConfigureDistributionPaymentsAccounts,
+            ConfigureContributorRewardsAccounts, ConfigureDistributionDebtAccounts,
             ConfigureDistributionRewardsAccounts, ConfigureJournalAccounts,
             ConfigureProgramAccounts, DenyPrepaidConnectionAccessAccounts,
-            FinalizeDistributionPaymentsAccounts, FinalizeDistributionRewardsAccounts,
+            FinalizeDistributionDebtAccounts, FinalizeDistributionRewardsAccounts,
             GrantPrepaidConnectionAccessAccounts, InitializeContributorRewardsAccounts,
             InitializeDistributionAccounts, InitializeJournalAccounts,
             InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
@@ -18,9 +18,8 @@ use doublezero_revenue_distribution::{
             SetRewardsManagerAccounts, SweepDistributionTokensAccounts,
             TerminatePrepaidConnectionAccounts, VerifyDistributionMerkleRootAccounts,
         },
-        ContributorRewardsConfiguration, DistributionMerkleRootKind,
-        DistributionPaymentsConfiguration, JournalConfiguration, ProgramConfiguration,
-        RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionDebtConfiguration, DistributionMerkleRootKind,
+        JournalConfiguration, ProgramConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
@@ -427,24 +426,24 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn configure_distribution_payments<const N: usize>(
+    pub async fn configure_distribution_debt<const N: usize>(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
         payments_accountant_signer: &Keypair,
-        setting: [DistributionPaymentsConfiguration; N],
+        setting: [DistributionDebtConfiguration; N],
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let configure_distribution_payments_ixs = setting
+        let configure_distribution_debt_ixs = setting
             .into_iter()
             .map(|setting| {
                 try_build_instruction(
                     &ID,
-                    ConfigureDistributionPaymentsAccounts::new(
+                    ConfigureDistributionDebtAccounts::new(
                         &payments_accountant_signer.pubkey(),
                         dz_epoch,
                     ),
-                    &RevenueDistributionInstructionData::ConfigureDistributionPayments(setting),
+                    &RevenueDistributionInstructionData::ConfigureDistributionDebt(setting),
                 )
                 .unwrap()
             })
@@ -453,7 +452,7 @@ impl ProgramTestWithOwner {
         self.cached_blockhash = process_instructions_for_test(
             &mut self.banks_client,
             &self.cached_blockhash,
-            &configure_distribution_payments_ixs,
+            &configure_distribution_debt_ixs,
             &[payer_signer, payments_accountant_signer],
         )
         .await?;
@@ -461,28 +460,28 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn finalize_distribution_payments(
+    pub async fn finalize_distribution_debt(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
         payments_accountant_signer: &Keypair,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let finalize_distribution_payments_ix = try_build_instruction(
+        let finalize_distribution_debt_ix = try_build_instruction(
             &ID,
-            FinalizeDistributionPaymentsAccounts::new(
+            FinalizeDistributionDebtAccounts::new(
                 &payments_accountant_signer.pubkey(),
                 dz_epoch,
                 &payer_signer.pubkey(),
             ),
-            &RevenueDistributionInstructionData::FinalizeDistributionPayments,
+            &RevenueDistributionInstructionData::FinalizeDistributionDebt,
         )
         .unwrap();
 
         self.cached_blockhash = process_instructions_for_test(
             &mut self.banks_client,
             &self.cached_blockhash,
-            &[finalize_distribution_payments_ix],
+            &[finalize_distribution_debt_ix],
             &[payer_signer, payments_accountant_signer],
         )
         .await?;

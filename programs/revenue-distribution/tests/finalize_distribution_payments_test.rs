@@ -5,8 +5,8 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::{ConfigureDistributionPaymentsAccounts, FinalizeDistributionPaymentsAccounts},
-        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        account::{ConfigureDistributionDebtAccounts, FinalizeDistributionDebtAccounts},
+        DistributionDebtConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
     state::{self, Distribution},
@@ -26,7 +26,7 @@ use svm_hash::sha2::Hash;
 //
 
 #[tokio::test]
-async fn test_finalize_distribution_payments() {
+async fn test_finalize_distribution_debt() {
     let mut test_setup = common::start_test().await;
 
     let admin_signer = Keypair::new();
@@ -96,16 +96,16 @@ async fn test_finalize_distribution_payments() {
         .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .configure_distribution_payments(
+        .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
             [
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: total_solana_validators,
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
-                DistributionPaymentsConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
+                DistributionDebtConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
             ],
         )
         .await
@@ -114,7 +114,7 @@ async fn test_finalize_distribution_payments() {
     //
 
     test_setup
-        .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
+        .finalize_distribution_debt(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap();
 
@@ -122,7 +122,7 @@ async fn test_finalize_distribution_payments() {
         test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
-    expected_distribution.set_are_payments_finalized(true);
+    expected_distribution.set_is_debt_calculation_finalized(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;
@@ -156,9 +156,9 @@ async fn test_finalize_distribution_payments() {
 
     let configure_distribution_rewards_ix = try_build_instruction(
         &ID,
-        ConfigureDistributionPaymentsAccounts::new(&payments_accountant_signer.pubkey(), dz_epoch),
-        &RevenueDistributionInstructionData::ConfigureDistributionPayments(
-            DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+        ConfigureDistributionDebtAccounts::new(&payments_accountant_signer.pubkey(), dz_epoch),
+        &RevenueDistributionInstructionData::ConfigureDistributionDebt(
+            DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                 total_validators: 3,
                 total_debt: 1,
                 merkle_root: Hash::new_unique(),
@@ -179,7 +179,7 @@ async fn test_finalize_distribution_payments() {
     );
     assert_eq!(
         program_logs.get(2).unwrap(),
-        "Program log: Distribution payments have already been finalized"
+        "Program log: Distribution debt calculation has already been finalized"
     );
 
     // Cannot finalize again.
@@ -188,12 +188,12 @@ async fn test_finalize_distribution_payments() {
 
     let finalize_distribution_rewards_ix = try_build_instruction(
         &ID,
-        FinalizeDistributionPaymentsAccounts::new(
+        FinalizeDistributionDebtAccounts::new(
             &payments_accountant_signer.pubkey(),
             dz_epoch,
             &payer_key,
         ),
-        &RevenueDistributionInstructionData::FinalizeDistributionPayments,
+        &RevenueDistributionInstructionData::FinalizeDistributionDebt,
     )
     .unwrap();
 
@@ -209,6 +209,6 @@ async fn test_finalize_distribution_payments() {
     );
     assert_eq!(
         program_logs.get(2).unwrap(),
-        "Program log: Distribution payments have already been finalized"
+        "Program log: Distribution debt calculation has already been finalized"
     );
 }

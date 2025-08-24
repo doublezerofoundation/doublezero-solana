@@ -6,7 +6,7 @@ use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
         account::{ConfigureDistributionRewardsAccounts, FinalizeDistributionRewardsAccounts},
-        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        DistributionDebtConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
     state::{self, Distribution},
@@ -105,11 +105,11 @@ async fn test_finalize_distribution_rewards() {
         )
         .await
         .unwrap()
-        .configure_distribution_payments(
+        .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
             [
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: total_solana_validators,
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
@@ -129,11 +129,11 @@ async fn test_finalize_distribution_rewards() {
     );
     assert_eq!(
         program_logs.get(2).unwrap(),
-        "Program log: Distribution payments are not finalized yet"
+        "Program log: Distribution debt calculation is not finalized yet"
     );
 
     test_setup
-        .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
+        .finalize_distribution_debt(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap();
 
@@ -223,8 +223,8 @@ async fn test_finalize_distribution_rewards() {
     );
 
     let mut expected_distribution = Distribution::default();
-    expected_distribution.set_are_payments_finalized(true);
-    expected_distribution.set_are_rewards_finalized(true);
+    expected_distribution.set_is_debt_calculation_finalized(true);
+    expected_distribution.set_is_rewards_calculation_finalized(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;

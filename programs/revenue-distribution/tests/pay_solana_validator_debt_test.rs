@@ -5,8 +5,8 @@ mod common;
 use doublezero_program_tools::{instruction::try_build_instruction, zero_copy};
 use doublezero_revenue_distribution::{
     instruction::{
-        account::PaySolanaValidatorDebtAccounts, DistributionMerkleRootKind,
-        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        account::PaySolanaValidatorDebtAccounts, DistributionDebtConfiguration,
+        DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
@@ -107,11 +107,11 @@ async fn test_pay_solana_validator_debt() {
         .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .configure_distribution_payments(
+        .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
             [
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: total_solana_validators,
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
@@ -120,7 +120,7 @@ async fn test_pay_solana_validator_debt() {
         )
         .await
         .unwrap()
-        .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
+        .finalize_distribution_debt(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap();
 
@@ -277,7 +277,7 @@ async fn test_pay_solana_validator_debt() {
         test_setup.fetch_distribution(dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
-    expected_distribution.set_are_payments_finalized(true);
+    expected_distribution.set_is_debt_calculation_finalized(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;
@@ -323,7 +323,11 @@ async fn test_pay_solana_validator_debt() {
         );
         assert_eq!(
             program_logs.get(2).unwrap(),
-            &format!("Program log: Debt already paid for Solana validator index {leaf_index}")
+            &format!("Program log: Merkle leaf index {leaf_index} has already been processed")
         );
+        assert_eq!(
+            program_logs.get(3).unwrap(),
+            "Program log: Solana validator debt already paid"
+        )
     }
 }

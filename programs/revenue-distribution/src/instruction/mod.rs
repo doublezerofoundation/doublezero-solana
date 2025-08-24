@@ -55,7 +55,7 @@ pub enum ProgramFlagConfiguration {
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
-pub enum DistributionPaymentsConfiguration {
+pub enum DistributionDebtConfiguration {
     UpdateSolanaValidatorPayments {
         total_validators: u32,
         total_debt: u64,
@@ -84,8 +84,8 @@ pub enum RevenueDistributionInstructionData {
     InitializeJournal,
     ConfigureJournal(JournalConfiguration),
     InitializeDistribution,
-    ConfigureDistributionPayments(DistributionPaymentsConfiguration),
-    FinalizeDistributionPayments,
+    ConfigureDistributionDebt(DistributionDebtConfiguration),
+    FinalizeDistributionDebt,
     ConfigureDistributionRewards {
         total_contributors: u32,
         merkle_root: Hash,
@@ -133,10 +133,10 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::configure_journal");
     pub const INITIALIZE_DISTRIBUTION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_distribution");
-    pub const CONFIGURE_DISTRIBUTION_PAYMENTS: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::configure_distribution_payments");
-    pub const FINALIZE_DISTRIBUTION_PAYMENTS: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::finalize_distribution_payments");
+    pub const CONFIGURE_DISTRIBUTION_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::configure_distribution_debt");
+    pub const FINALIZE_DISTRIBUTION_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::finalize_distribution_debt");
     pub const CONFIGURE_DISTRIBUTION_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::configure_distribution_rewards");
     pub const FINALIZE_DISTRIBUTION_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
@@ -183,11 +183,11 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             }
             Self::INITIALIZE_JOURNAL => Ok(Self::InitializeJournal),
             Self::INITIALIZE_DISTRIBUTION => Ok(Self::InitializeDistribution),
-            Self::CONFIGURE_DISTRIBUTION_PAYMENTS => {
-                DistributionPaymentsConfiguration::deserialize_reader(reader)
-                    .map(Self::ConfigureDistributionPayments)
+            Self::CONFIGURE_DISTRIBUTION_DEBT => {
+                DistributionDebtConfiguration::deserialize_reader(reader)
+                    .map(Self::ConfigureDistributionDebt)
             }
-            Self::FINALIZE_DISTRIBUTION_PAYMENTS => Ok(Self::FinalizeDistributionPayments),
+            Self::FINALIZE_DISTRIBUTION_DEBT => Ok(Self::FinalizeDistributionDebt),
             Self::CONFIGURE_DISTRIBUTION_REWARDS => {
                 let total_contributors = BorshDeserialize::deserialize_reader(reader)?;
                 let merkle_root = BorshDeserialize::deserialize_reader(reader)?;
@@ -271,13 +271,11 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::InitializeJournal => Self::INITIALIZE_JOURNAL.serialize(writer),
             Self::InitializeDistribution => Self::INITIALIZE_DISTRIBUTION.serialize(writer),
-            Self::ConfigureDistributionPayments(setting) => {
-                Self::CONFIGURE_DISTRIBUTION_PAYMENTS.serialize(writer)?;
+            Self::ConfigureDistributionDebt(setting) => {
+                Self::CONFIGURE_DISTRIBUTION_DEBT.serialize(writer)?;
                 setting.serialize(writer)
             }
-            Self::FinalizeDistributionPayments => {
-                Self::FINALIZE_DISTRIBUTION_PAYMENTS.serialize(writer)
-            }
+            Self::FinalizeDistributionDebt => Self::FINALIZE_DISTRIBUTION_DEBT.serialize(writer),
             Self::ConfigureDistributionRewards {
                 total_contributors,
                 merkle_root,

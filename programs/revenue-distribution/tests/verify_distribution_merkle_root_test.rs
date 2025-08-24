@@ -5,8 +5,8 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::VerifyDistributionMerkleRootAccounts, DistributionMerkleRootKind,
-        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        account::VerifyDistributionMerkleRootAccounts, DistributionDebtConfiguration,
+        DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
     types::{DoubleZeroEpoch, RewardShare, SolanaValidatorPayment},
@@ -108,11 +108,11 @@ async fn test_verify_distribution_merkle_root() {
         .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .configure_distribution_payments(
+        .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
             [
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: payments_data.len() as u32,
                     total_debt,
                     merkle_root: solana_validator_payments_merkle_root,
@@ -217,7 +217,7 @@ async fn test_verify_distribution_merkle_root() {
 
     // Finalize distribution payments so we can post the rewards merkle root.
     test_setup
-        .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
+        .finalize_distribution_debt(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap()
         .configure_distribution_rewards(

@@ -4,7 +4,7 @@ mod common;
 
 use doublezero_revenue_distribution::{
     instruction::{
-        DistributionPaymentsConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
+        DistributionDebtConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
     },
     state::{self, Distribution},
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
@@ -18,7 +18,7 @@ use svm_hash::sha2::Hash;
 //
 
 #[tokio::test]
-async fn test_configure_distribution_payments() {
+async fn test_configure_distribution_debt() {
     let mut test_setup = common::start_test().await;
 
     let admin_signer = Keypair::new();
@@ -89,22 +89,22 @@ async fn test_configure_distribution_payments() {
     let uncollectible_sol_amount = 10 * u64::pow(10, 9);
 
     test_setup
-        .configure_distribution_payments(
+        .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
             [
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: 3,
                     total_debt: total_solana_validator_debt + 1,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: 2,
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
-                DistributionPaymentsConfiguration::UpdateUncollectibleSol(69),
-                DistributionPaymentsConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
+                DistributionDebtConfiguration::UpdateUncollectibleSol(69),
+                DistributionDebtConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
             ],
         )
         .await

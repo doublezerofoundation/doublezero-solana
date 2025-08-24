@@ -5,7 +5,7 @@ mod common;
 
 use doublezero_revenue_distribution::{
     instruction::{
-        DistributionMerkleRootKind, DistributionPaymentsConfiguration, ProgramConfiguration,
+        DistributionDebtConfiguration, DistributionMerkleRootKind, ProgramConfiguration,
         ProgramFlagConfiguration,
     },
     state::{
@@ -128,11 +128,11 @@ async fn test_sweep_distribution_tokens_development() {
         .initialize_distribution(&payments_accountant_signer)
         .await
         .unwrap()
-        .configure_distribution_payments(
+        .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
             [
-                DistributionPaymentsConfiguration::UpdateSolanaValidatorPayments {
+                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: total_solana_validators,
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
@@ -141,7 +141,7 @@ async fn test_sweep_distribution_tokens_development() {
         )
         .await
         .unwrap()
-        .finalize_distribution_payments(dz_epoch, &payments_accountant_signer)
+        .finalize_distribution_debt(dz_epoch, &payments_accountant_signer)
         .await
         .unwrap()
         .initialize_swap_destination(&DOUBLEZERO_MINT_KEY)
@@ -207,7 +207,7 @@ async fn test_sweep_distribution_tokens_development() {
     assert_eq!(distribution_2z_token_pda.amount, expected_swept_2z_amount);
 
     let mut expected_distribution = Distribution::default();
-    expected_distribution.set_are_payments_finalized(true);
+    expected_distribution.set_is_debt_calculation_finalized(true);
     expected_distribution.set_has_swept_2z_tokens(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =

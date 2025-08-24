@@ -285,13 +285,13 @@ impl From<InitializeDistributionAccounts> for Vec<AccountMeta> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ConfigureDistributionPaymentsAccounts {
+pub struct ConfigureDistributionDebtAccounts {
     pub program_config_key: Pubkey,
     pub payments_accountant_key: Pubkey,
     pub distribution_key: Pubkey,
 }
 
-impl ConfigureDistributionPaymentsAccounts {
+impl ConfigureDistributionDebtAccounts {
     pub fn new(payments_accountant_key: &Pubkey, dz_epoch: DoubleZeroEpoch) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
@@ -301,9 +301,9 @@ impl ConfigureDistributionPaymentsAccounts {
     }
 }
 
-impl From<ConfigureDistributionPaymentsAccounts> for Vec<AccountMeta> {
-    fn from(accounts: ConfigureDistributionPaymentsAccounts) -> Self {
-        let ConfigureDistributionPaymentsAccounts {
+impl From<ConfigureDistributionDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: ConfigureDistributionDebtAccounts) -> Self {
+        let ConfigureDistributionDebtAccounts {
             program_config_key,
             payments_accountant_key,
             distribution_key,
@@ -318,14 +318,14 @@ impl From<ConfigureDistributionPaymentsAccounts> for Vec<AccountMeta> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FinalizeDistributionPaymentsAccounts {
+pub struct FinalizeDistributionDebtAccounts {
     pub program_config_key: Pubkey,
     pub payments_accountant_key: Pubkey,
     pub distribution_key: Pubkey,
     pub payer_key: Pubkey,
 }
 
-impl FinalizeDistributionPaymentsAccounts {
+impl FinalizeDistributionDebtAccounts {
     pub fn new(
         payments_accountant_key: &Pubkey,
         dz_epoch: DoubleZeroEpoch,
@@ -340,9 +340,9 @@ impl FinalizeDistributionPaymentsAccounts {
     }
 }
 
-impl From<FinalizeDistributionPaymentsAccounts> for Vec<AccountMeta> {
-    fn from(accounts: FinalizeDistributionPaymentsAccounts) -> Self {
-        let FinalizeDistributionPaymentsAccounts {
+impl From<FinalizeDistributionDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: FinalizeDistributionDebtAccounts) -> Self {
+        let FinalizeDistributionDebtAccounts {
             program_config_key,
             payments_accountant_key,
             distribution_key,
