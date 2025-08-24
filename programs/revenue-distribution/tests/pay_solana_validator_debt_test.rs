@@ -10,7 +10,7 @@ use doublezero_revenue_distribution::{
         RevenueDistributionInstructionData,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
-    types::{BurnRate, DoubleZeroEpoch, SolanaValidatorPayment, ValidatorFee},
+    types::{BurnRate, DoubleZeroEpoch, SolanaValidatorDebt, ValidatorFee},
     ID,
 };
 use solana_program_test::tokio;
@@ -50,7 +50,7 @@ async fn test_pay_solana_validator_debt() {
     let dz_epoch = DoubleZeroEpoch::new(1);
 
     let payments_data = (0..16)
-        .map(|i| SolanaValidatorPayment {
+        .map(|i| SolanaValidatorDebt {
             node_id: Pubkey::new_unique(),
             amount: 10_000_000_000 * (i + 1),
         })
@@ -58,11 +58,9 @@ async fn test_pay_solana_validator_debt() {
 
     let total_solana_validators = payments_data.len() as u32;
     let total_solana_validator_debt = payments_data.iter().map(|payment| payment.amount).sum();
-    let solana_validator_payments_merkle_root = merkle_root_from_indexed_pod_leaves(
-        &payments_data,
-        Some(SolanaValidatorPayment::LEAF_PREFIX),
-    )
-    .unwrap();
+    let solana_validator_payments_merkle_root =
+        merkle_root_from_indexed_pod_leaves(&payments_data, Some(SolanaValidatorDebt::LEAF_PREFIX))
+            .unwrap();
 
     test_setup
         .initialize_program()
@@ -133,7 +131,7 @@ async fn test_pay_solana_validator_debt() {
             let proof = MerkleProof::from_indexed_pod_leaves(
                 &payments_data,
                 i.try_into().unwrap(),
-                Some(SolanaValidatorPayment::LEAF_PREFIX),
+                Some(SolanaValidatorDebt::LEAF_PREFIX),
             )
             .unwrap();
             (kind, proof)
@@ -151,7 +149,7 @@ async fn test_pay_solana_validator_debt() {
 
     // Initialize Solana validator deposit accounts and transfer an amount one
     // less than the debt amount.
-    for SolanaValidatorPayment { node_id, amount } in payments_data.iter() {
+    for SolanaValidatorDebt { node_id, amount } in payments_data.iter() {
         let (deposit_key, _) = SolanaValidatorDeposit::find_address(node_id);
 
         test_setup
@@ -167,11 +165,11 @@ async fn test_pay_solana_validator_debt() {
         // Cannot pay any amount except the exact debt amount.
 
         let invalid_merkle_root = proof.root_from_pod_leaf(
-            &SolanaValidatorPayment {
+            &SolanaValidatorDebt {
                 node_id: payment.node_id,
                 amount: payment.amount - 1,
             },
-            Some(SolanaValidatorPayment::LEAF_PREFIX),
+            Some(SolanaValidatorDebt::LEAF_PREFIX),
         );
 
         let pay_solana_validator_debt_ix = try_build_instruction(
@@ -225,7 +223,7 @@ async fn test_pay_solana_validator_debt() {
     let mut balances_before = vec![0; payments_data.len()];
 
     // Send last lamport to each deposit account to satisfy debt.
-    for (SolanaValidatorPayment { node_id, amount }, balance_before) in
+    for (SolanaValidatorDebt { node_id, amount }, balance_before) in
         payments_data.iter().zip(balances_before.iter_mut())
     {
         let (deposit_key, _) = SolanaValidatorDeposit::find_address(node_id);
@@ -327,7 +325,7 @@ async fn test_pay_solana_validator_debt() {
         );
         assert_eq!(
             program_logs.get(3).unwrap(),
-            "Program log: Solana validator debt already paid"
+            "Program log: Solana validator debt already processed"
         )
     }
 }

@@ -162,12 +162,12 @@ impl_unit_share!(
     Debug, BorshDeserialize, BorshSerialize, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable,
 )]
 #[repr(C)]
-pub struct SolanaValidatorPayment {
+pub struct SolanaValidatorDebt {
     pub node_id: Pubkey,
     pub amount: u64,
 }
 
-impl SolanaValidatorPayment {
+impl SolanaValidatorDebt {
     pub const LEAF_PREFIX: &'static [u8] = b"solana_validator_payment";
 }
 
@@ -227,7 +227,7 @@ impl ByteFlags {
         if index >= 8 {
             false
         } else {
-            (self.0 & (1 << index)) != 0
+            (self.0 & (1 << (7 - index))) != 0
         }
     }
 
@@ -235,9 +235,9 @@ impl ByteFlags {
     pub fn set_bit(&mut self, index: usize, value: bool) {
         if index < 8 {
             if value {
-                self.0 |= 1 << index;
+                self.0 |= 1 << (7 - index);
             } else {
-                self.0 &= !(1 << index);
+                self.0 &= !(1 << (7 - index));
             }
         }
     }

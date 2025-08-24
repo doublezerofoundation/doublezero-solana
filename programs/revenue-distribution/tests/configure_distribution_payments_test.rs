@@ -3,18 +3,17 @@ mod common;
 //
 
 use doublezero_revenue_distribution::{
-    instruction::{
-        DistributionDebtConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
-    },
+    instruction::{DistributionDebtConfiguration, ProgramConfiguration, ProgramFlagConfiguration},
     state::{self, Distribution},
-    types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
+    types::{BurnRate, DoubleZeroEpoch, SolanaValidatorDebt, ValidatorFee},
 };
 use solana_program_test::tokio;
+use solana_pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
-use svm_hash::sha2::Hash;
+use svm_hash::{merkle::merkle_root_from_indexed_pod_leaves, sha2::Hash};
 
 //
-// Configure distribution payments.
+// Configure distribution debt.
 //
 
 #[tokio::test]
@@ -84,9 +83,18 @@ async fn test_configure_distribution_debt() {
 
     let dz_epoch = DoubleZeroEpoch::new(1);
 
-    let total_solana_validator_debt = 100 * u64::pow(10, 9);
-    let solana_validator_payments_merkle_root = Hash::new_unique();
-    let uncollectible_sol_amount = 10 * u64::pow(10, 9);
+    let payments_data = (0..3)
+        .map(|i| SolanaValidatorDebt {
+            node_id: Pubkey::new_unique(),
+            amount: 10_000_000_000 * (i + 1),
+        })
+        .collect::<Vec<_>>();
+
+    let total_solana_validators = payments_data.len() as u32;
+    let total_solana_validator_debt = payments_data.iter().map(|payment| payment.amount).sum();
+    let solana_validator_payments_merkle_root =
+        merkle_root_from_indexed_pod_leaves(&payments_data, Some(SolanaValidatorDebt::LEAF_PREFIX))
+            .unwrap();
 
     test_setup
         .configure_distribution_debt(
@@ -96,15 +104,13 @@ async fn test_configure_distribution_debt() {
                 DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
                     total_validators: 3,
                     total_debt: total_solana_validator_debt + 1,
-                    merkle_root: solana_validator_payments_merkle_root,
+                    merkle_root: Hash::new_unique(),
                 },
                 DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: 2,
+                    total_validators: total_solana_validators,
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
-                DistributionDebtConfiguration::UpdateUncollectibleSol(69),
-                DistributionDebtConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
             ],
         )
         .await
@@ -122,10 +128,9 @@ async fn test_configure_distribution_debt() {
         .solana_validator_fee_parameters
         .base_block_rewards_pct =
         ValidatorFee::new(solana_validator_base_block_rewards_pct_fee).unwrap();
-    expected_distribution.total_solana_validators = 2;
+    expected_distribution.total_solana_validators = total_solana_validators;
     expected_distribution.total_solana_validator_debt = total_solana_validator_debt;
     expected_distribution.solana_validator_payments_merkle_root =
         solana_validator_payments_merkle_root;
-    expected_distribution.uncollectible_sol_debt = uncollectible_sol_amount;
     assert_eq!(distribution, expected_distribution);
 }

@@ -9,7 +9,7 @@ use doublezero_revenue_distribution::{
         DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
-    types::{DoubleZeroEpoch, RewardShare, SolanaValidatorPayment},
+    types::{DoubleZeroEpoch, RewardShare, SolanaValidatorDebt},
     ID,
 };
 use solana_program_test::tokio;
@@ -50,7 +50,7 @@ async fn test_verify_distribution_merkle_root() {
 
     // Odd-leaf merkle tree.
     let mut payments_data = (0..511)
-        .map(|i| SolanaValidatorPayment {
+        .map(|i| SolanaValidatorDebt {
             node_id: Pubkey::new_unique(),
             amount: 100_000_000_000 * (i + 1),
         })
@@ -59,7 +59,7 @@ async fn test_verify_distribution_merkle_root() {
 
     let solana_validator_payments_merkle_root = merkle_root_from_indexed_pod_leaves(
         &payments_data,
-        Some(SolanaValidatorPayment::LEAF_PREFIX),
+        Some(SolanaValidatorDebt::LEAF_PREFIX),
     )
     .unwrap();
 
@@ -131,7 +131,7 @@ async fn test_verify_distribution_merkle_root() {
         let proof = MerkleProof::from_indexed_pod_leaves(
             &payments_data,
             i.try_into().unwrap(),
-            Some(SolanaValidatorPayment::LEAF_PREFIX),
+            Some(SolanaValidatorDebt::LEAF_PREFIX),
         )
         .unwrap();
 
@@ -153,7 +153,7 @@ async fn test_verify_distribution_merkle_root() {
 
     let invalid_merkle_root = merkle_root_from_indexed_pod_leaves(
         &payments_data,
-        Some(SolanaValidatorPayment::LEAF_PREFIX),
+        Some(SolanaValidatorDebt::LEAF_PREFIX),
     )
     .unwrap();
     assert_ne!(solana_validator_payments_merkle_root, invalid_merkle_root);
@@ -161,7 +161,7 @@ async fn test_verify_distribution_merkle_root() {
     let spoofed_proof = MerkleProof::from_indexed_pod_leaves(
         &payments_data,
         payments_data.len() as u32 - 1,
-        Some(SolanaValidatorPayment::LEAF_PREFIX),
+        Some(SolanaValidatorDebt::LEAF_PREFIX),
     )
     .unwrap();
 

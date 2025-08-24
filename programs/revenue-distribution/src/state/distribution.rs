@@ -126,18 +126,9 @@ impl Distribution {
             .set_bit(Self::FLAG_HAS_SWEPT_2Z_TOKENS_BIT, has_swept);
     }
 
-    pub fn total_sol_debt(&self) -> u64 {
-        self.total_solana_validator_debt
-    }
-
     pub fn checked_total_sol_debt(&self) -> Option<u64> {
-        self.total_sol_debt()
+        self.total_solana_validator_debt
             .checked_sub(self.uncollectible_sol_debt)
-    }
-
-    pub fn checked_outstanding_sol_debt(&self) -> Option<u64> {
-        self.checked_total_sol_debt()?
-            .checked_sub(self.collected_solana_validator_payments)
     }
 }
 

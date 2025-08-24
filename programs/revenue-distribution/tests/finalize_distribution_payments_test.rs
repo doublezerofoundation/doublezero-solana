@@ -22,7 +22,7 @@ use solana_sdk::{
 use svm_hash::sha2::Hash;
 
 //
-// Finalize distribution payments.
+// Finalize distribution debt.
 //
 
 #[tokio::test]
@@ -51,7 +51,6 @@ async fn test_finalize_distribution_debt() {
     let total_solana_validators = 2;
     let total_solana_validator_debt = 100 * u64::pow(10, 9);
     let solana_validator_payments_merkle_root = Hash::new_unique();
-    let uncollectible_sol_amount = 10 * u64::pow(10, 9);
 
     test_setup
         .initialize_program()
@@ -105,7 +104,6 @@ async fn test_finalize_distribution_debt() {
                     total_debt: total_solana_validator_debt,
                     merkle_root: solana_validator_payments_merkle_root,
                 },
-                DistributionDebtConfiguration::UpdateUncollectibleSol(uncollectible_sol_amount),
             ],
         )
         .await
@@ -136,7 +134,6 @@ async fn test_finalize_distribution_debt() {
     expected_distribution.total_solana_validator_debt = total_solana_validator_debt;
     expected_distribution.solana_validator_payments_merkle_root =
         solana_validator_payments_merkle_root;
-    expected_distribution.uncollectible_sol_debt = uncollectible_sol_amount;
     assert_eq!(distribution, expected_distribution);
 
     let expected_remaining_distribution_data_len = 1;
