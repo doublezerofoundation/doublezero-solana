@@ -20,11 +20,12 @@ pub enum ProgramConfiguration {
     DoubleZeroLedgerSentinel(Pubkey),
     Sol2zSwapProgram(Pubkey),
     SolanaValidatorFeeParameters {
-        base_block_rewards: u16,
-        priority_block_rewards: u16,
-        inflation_rewards: u16,
-        jito_tips: u16,
-        _unused: [u8; 32],
+        base_block_rewards_pct: u16,
+        priority_block_rewards_pct: u16,
+        inflation_rewards_pct: u16,
+        jito_tips_pct: u16,
+        fixed_sol_amount: u32,
+        _unused: [u8; 28],
     },
     CalculationGracePeriodSeconds(u32),
     CommunityBurnRateParameters {

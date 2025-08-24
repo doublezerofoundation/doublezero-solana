@@ -289,41 +289,44 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;
         }
         ProgramConfiguration::SolanaValidatorFeeParameters {
-            base_block_rewards,
-            priority_block_rewards,
-            inflation_rewards,
-            jito_tips,
+            base_block_rewards_pct,
+            priority_block_rewards_pct,
+            inflation_rewards_pct,
+            jito_tips_pct,
+            fixed_sol_amount,
             _unused,
         } => {
-            let base_block_rewards = ValidatorFee::new(base_block_rewards).ok_or_else(|| {
-                msg!(
-                    "Invalid Solana validator base block rewards fee parameter: {}",
-                    base_block_rewards
-                );
-                ProgramError::InvalidInstructionData
-            })?;
-
-            let priority_block_rewards =
-                ValidatorFee::new(priority_block_rewards).ok_or_else(|| {
+            let base_block_rewards_pct =
+                ValidatorFee::new(base_block_rewards_pct).ok_or_else(|| {
                     msg!(
-                        "Invalid Solana validator priority block rewards fee parameter: {}",
-                        priority_block_rewards
+                        "Invalid Solana validator base block rewards percentage fee parameter: {}",
+                        base_block_rewards_pct
                     );
                     ProgramError::InvalidInstructionData
                 })?;
 
-            let inflation_rewards = ValidatorFee::new(inflation_rewards).ok_or_else(|| {
-                msg!(
-                    "Invalid Solana validator inflation rewards fee parameter: {}",
-                    inflation_rewards
-                );
-                ProgramError::InvalidInstructionData
-            })?;
+            let priority_block_rewards_pct = ValidatorFee::new(priority_block_rewards_pct)
+                .ok_or_else(|| {
+                    msg!(
+                        "Invalid Solana validator priority block rewards percentage fee parameter: {}",
+                        priority_block_rewards_pct
+                    );
+                    ProgramError::InvalidInstructionData
+                })?;
 
-            let jito_tips = ValidatorFee::new(jito_tips).ok_or_else(|| {
+            let inflation_rewards_pct =
+                ValidatorFee::new(inflation_rewards_pct).ok_or_else(|| {
+                    msg!(
+                        "Invalid Solana validator inflation rewards percentage fee parameter: {}",
+                        inflation_rewards_pct
+                    );
+                    ProgramError::InvalidInstructionData
+                })?;
+
+            let jito_tips_pct = ValidatorFee::new(jito_tips_pct).ok_or_else(|| {
                 msg!(
-                    "Invalid Solana validator Jito tips fee parameter: {}",
-                    jito_tips
+                    "Invalid Solana validator Jito tips percentage fee parameter: {}",
+                    jito_tips_pct
                 );
                 ProgramError::InvalidInstructionData
             })?;
@@ -333,17 +336,23 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 .distribution_parameters
                 .solana_validator_fee_parameters;
 
-            msg!("  base_block_rewards: {}", base_block_rewards);
-            fee_params.base_block_rewards = base_block_rewards;
+            msg!("  base_block_rewards_pct: {}", base_block_rewards_pct);
+            fee_params.base_block_rewards_pct = base_block_rewards_pct;
 
-            msg!("  priority_block_rewards: {}", priority_block_rewards);
-            fee_params.priority_block_rewards = priority_block_rewards;
+            msg!(
+                "  priority_block_rewards_pct: {}",
+                priority_block_rewards_pct
+            );
+            fee_params.priority_block_rewards_pct = priority_block_rewards_pct;
 
-            msg!("  inflation_rewards: {}", inflation_rewards);
-            fee_params.inflation_rewards = inflation_rewards;
+            msg!("  inflation_rewards_pct: {}", inflation_rewards_pct);
+            fee_params.inflation_rewards_pct = inflation_rewards_pct;
 
-            msg!("  jito_tips: {}", jito_tips);
-            fee_params.jito_tips = jito_tips;
+            msg!("  jito_tips_pct: {}", jito_tips_pct);
+            fee_params.jito_tips_pct = jito_tips_pct;
+
+            msg!("  fixed_sol_amount: {}", fixed_sol_amount);
+            fee_params.fixed_sol_amount = fixed_sol_amount;
         }
         ProgramConfiguration::CalculationGracePeriodSeconds(calculation_grace_period_seconds) => {
             msg!(
