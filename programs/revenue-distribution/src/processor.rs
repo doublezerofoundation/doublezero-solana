@@ -2212,14 +2212,13 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
 
     //
 
-    msg!("Sweep distribution tokens");
-
     // We expect the following accounts for this instruction:
     // - 0: Program config.
     // - 1: Distribution.
-    // - 2: Distribution 2Z token account.
-    // - 3: Swap authority.
-    // - 4: Swap 2Z destination account.
+    // - 2: Journal.
+    // - 3: Distribution 2Z token account.
+    // - 4: Swap authority.
+    // - 5: Swap 2Z destination account.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
@@ -2235,22 +2234,30 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
 
     // Make sure the distribution has not already swept 2Z tokens.
     try_require_has_not_swept_2z_tokens(&distribution)?;
-
     distribution.set_has_swept_2z_tokens(true);
 
     // Make sure the distribution is finalized.
     try_require_finalized_distribution_payments(&distribution)?;
 
-    let outstanding_debt = distribution.checked_outstanding_sol_debt().ok_or_else(|| {
-        msg!("Uncollectible SOL debt is misconfigured");
-        ProgramError::ArithmeticOverflow
-    })?;
+    // Account 2 must be the journal.
+    let mut journal =
+        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    // Make sure the distribution has collected solana validator payments.
-    if outstanding_debt != 0 {
-        msg!("Distribution has not collected all SOL debt");
+    // We will attempt to account for the total SOL debt and account for this
+    // amount by reducing the SOL balance of the journal. The SOL that this
+    // balance tracks will have already been swapped by the swap program.
+    let total_sol_debt = distribution.total_sol_debt();
+
+    if journal.total_sol_balance < total_sol_debt {
+        msg!("Journal does not have enough SOL to cover the SOL debt");
         return Err(ProgramError::InvalidAccountData);
     }
+
+    msg!(
+        "Journal's SOL balance before: {}",
+        journal.total_sol_balance
+    );
+    journal.total_sol_balance -= total_sol_debt;
 
     // Record the swept amount to the distribution. This amount will also be
     // used to token transfer the 2Z tokens to the distribution.
@@ -2259,7 +2266,7 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
         .saturating_mul(FIXED_SOL_2Z_SWAP_RATE_FOR_DEVELOPMENT);
     distribution.collected_sol_converted_to_2z += token_2z_amount;
 
-    // Account 2 must be the distribution's 2Z token account.
+    // Account 3 must be the distribution's 2Z token account.
     let (_, distribution_2z_token_pda_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         distribution.info.key,
@@ -2267,7 +2274,7 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
         Some(distribution.token_2z_pda_bump_seed),
     )?;
 
-    // Account 3 must be the swap authority. It is assumed to be a signer
+    // Account 4 must be the swap authority. It is assumed to be a signer
     // because it is the authority that will be used to transfer 2Z from its
     // token account to the distribution's token account.
     let (account_index, swap_authority_info) =
@@ -2284,7 +2291,7 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Account 4 must be the swap destination 2Z token account.
+    // Account 5 must be the swap destination 2Z token account.
     let (_, swap_dst_2z_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &expected_swap_authority_key,
@@ -2308,6 +2315,13 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
         &[&[SWAP_AUTHORITY_SEED_PREFIX, &[swap_authority_bump]]],
     )?;
 
+    let outstanding_sol_debt = distribution.checked_outstanding_sol_debt().ok_or_else(|| {
+        msg!("Uncollectible SOL debt is misconfigured");
+        ProgramError::ArithmeticOverflow
+    })?;
+
+    msg!("Outstanding SOL debt: {}", outstanding_sol_debt);
+    msg!("Journal's SOL balance after: {}", journal.total_sol_balance);
     msg!("Transferred {} 2Z tokens to distribution", token_2z_amount);
 
     Ok(())

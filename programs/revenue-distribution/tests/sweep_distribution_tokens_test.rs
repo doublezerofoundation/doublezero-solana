@@ -185,6 +185,9 @@ async fn test_sweep_distribution_tokens_development() {
         .await
         .unwrap();
 
+    let (_, journal, _, _) = test_setup.fetch_journal().await;
+    assert_eq!(journal.total_sol_balance, 0);
+
     // Swap destination account should have a balance change reflecting the
     // amount of SOL debt collected.
     let swap_destination_balance_after = test_setup

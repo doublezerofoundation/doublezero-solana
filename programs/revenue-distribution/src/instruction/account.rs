@@ -928,6 +928,7 @@ mod sweep_distribution_tokens {
     pub struct SweepDistributionTokensAccounts {
         pub program_config_key: Pubkey,
         pub distribution_key: Pubkey,
+        pub journal_key: Pubkey,
         pub distribution_2z_token_pda_key: Pubkey,
         pub swap_authority_key: Pubkey,
         pub swap_2z_token_pda_key: Pubkey,
@@ -941,6 +942,7 @@ mod sweep_distribution_tokens {
             Self {
                 program_config_key: ProgramConfig::find_address().0,
                 distribution_key,
+                journal_key: Journal::find_address().0,
                 distribution_2z_token_pda_key: find_2z_token_pda_address(&distribution_key).0,
                 swap_authority_key,
                 swap_2z_token_pda_key: find_2z_token_pda_address(&swap_authority_key).0,
@@ -953,6 +955,7 @@ mod sweep_distribution_tokens {
             let SweepDistributionTokensAccounts {
                 program_config_key,
                 distribution_key,
+                journal_key,
                 distribution_2z_token_pda_key,
                 swap_authority_key,
                 swap_2z_token_pda_key,
@@ -961,6 +964,7 @@ mod sweep_distribution_tokens {
             vec![
                 AccountMeta::new_readonly(program_config_key, false),
                 AccountMeta::new(distribution_key, false),
+                AccountMeta::new(journal_key, false),
                 AccountMeta::new(distribution_2z_token_pda_key, false),
                 AccountMeta::new_readonly(swap_authority_key, false),
                 AccountMeta::new(swap_2z_token_pda_key, false),
