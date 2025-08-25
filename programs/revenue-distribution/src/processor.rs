@@ -2049,7 +2049,7 @@ fn try_pay_solana_validator_debt(
         })?;
 
     // Create a ByteFlag from the byte value to check the bit.
-    let mut leaf_byte = ByteFlags(*leaf_byte_ref);
+    let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
 
     // Then, we have to grab the relevant bit from the byte and check whether
     // it is set already.
@@ -2065,7 +2065,7 @@ fn try_pay_solana_validator_debt(
 
     // Set the bit to true to indicate that the debt has been paid.
     leaf_byte.set_bit(leaf_bit, true);
-    *leaf_byte_ref = leaf_byte.0;
+    *leaf_byte_ref = leaf_byte.into();
 
     // Account 2 must be the Solana validator deposit.
     let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(

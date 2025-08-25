@@ -215,9 +215,13 @@ impl RewardShare {
     Debug, BorshDeserialize, BorshSerialize, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable,
 )]
 #[repr(C)]
-pub struct ByteFlags(pub u8);
+pub struct ByteFlags(u8);
 
 impl ByteFlags {
+    pub const fn new(value: u8) -> Self {
+        Self(value)
+    }
+
     /// Check if a specific bit is set (1)
     pub const fn bit(&self, index: usize) -> bool {
         if index >= 8 {
@@ -236,6 +240,12 @@ impl ByteFlags {
                 self.0 &= !(1 << index);
             }
         }
+    }
+}
+
+impl From<ByteFlags> for u8 {
+    fn from(value: ByteFlags) -> Self {
+        value.0
     }
 }
 
