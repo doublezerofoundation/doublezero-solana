@@ -6,8 +6,7 @@ use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
         account::{ConfigureDistributionDebtAccounts, FinalizeDistributionDebtAccounts},
-        DistributionDebtConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{self, Distribution},
     types::{BurnRate, DoubleZeroEpoch, ValidatorFee},
@@ -98,13 +97,9 @@ async fn test_finalize_distribution_debt() {
         .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
-            [
-                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: total_solana_validators,
-                    total_debt: total_solana_validator_debt,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-            ],
+            total_solana_validators,
+            total_solana_validator_debt,
+            solana_validator_payments_merkle_root,
         )
         .await
         .unwrap();
@@ -154,13 +149,11 @@ async fn test_finalize_distribution_debt() {
     let configure_distribution_rewards_ix = try_build_instruction(
         &ID,
         ConfigureDistributionDebtAccounts::new(&payments_accountant_signer.pubkey(), dz_epoch),
-        &RevenueDistributionInstructionData::ConfigureDistributionDebt(
-            DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                total_validators: 3,
-                total_debt: 1,
-                merkle_root: Hash::new_unique(),
-            },
-        ),
+        &RevenueDistributionInstructionData::ConfigureDistributionDebt {
+            total_validators: 3,
+            total_debt: 1,
+            merkle_root: Hash::new_unique(),
+        },
     )
     .unwrap();
 

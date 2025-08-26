@@ -19,8 +19,8 @@ use doublezero_revenue_distribution::{
             SweepDistributionTokensAccounts, TerminatePrepaidConnectionAccounts,
             VerifyDistributionMerkleRootAccounts,
         },
-        ContributorRewardsConfiguration, DistributionDebtConfiguration, DistributionMerkleRootKind,
-        JournalConfiguration, ProgramConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind, JournalConfiguration,
+        ProgramConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
@@ -427,33 +427,31 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn configure_distribution_debt<const N: usize>(
+    pub async fn configure_distribution_debt(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
         payments_accountant_signer: &Keypair,
-        setting: [DistributionDebtConfiguration; N],
+        total_validators: u32,
+        total_debt: u64,
+        merkle_root: Hash,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
 
-        let configure_distribution_debt_ixs = setting
-            .into_iter()
-            .map(|setting| {
-                try_build_instruction(
-                    &ID,
-                    ConfigureDistributionDebtAccounts::new(
-                        &payments_accountant_signer.pubkey(),
-                        dz_epoch,
-                    ),
-                    &RevenueDistributionInstructionData::ConfigureDistributionDebt(setting),
-                )
-                .unwrap()
-            })
-            .collect::<Vec<_>>();
+        let configure_distribution_debt_ix = try_build_instruction(
+            &ID,
+            ConfigureDistributionDebtAccounts::new(&payments_accountant_signer.pubkey(), dz_epoch),
+            &RevenueDistributionInstructionData::ConfigureDistributionDebt {
+                total_validators,
+                total_debt,
+                merkle_root,
+            },
+        )
+        .unwrap();
 
         self.cached_blockhash = process_instructions_for_test(
             &mut self.banks_client,
             &self.cached_blockhash,
-            &configure_distribution_debt_ixs,
+            &[configure_distribution_debt_ix],
             &[payer_signer, payments_accountant_signer],
         )
         .await?;

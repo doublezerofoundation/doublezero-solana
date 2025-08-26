@@ -23,9 +23,8 @@ use svm_hash::{merkle::MerkleProof, sha2::Hash};
 
 use crate::{
     instruction::{
-        ContributorRewardsConfiguration, DistributionDebtConfiguration, DistributionMerkleRootKind,
-        JournalConfiguration, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind, JournalConfiguration,
+        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, find_swap_authority_address, CommunityBurnRateParameters, ContributorRewards,
@@ -73,9 +72,11 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::InitializeDistribution => {
             try_initialize_distribution(accounts)
         }
-        RevenueDistributionInstructionData::ConfigureDistributionDebt(setting) => {
-            try_configure_distribution_debt(accounts, setting)
-        }
+        RevenueDistributionInstructionData::ConfigureDistributionDebt {
+            total_validators,
+            total_debt,
+            merkle_root,
+        } => try_configure_distribution_debt(accounts, total_validators, total_debt, merkle_root),
         RevenueDistributionInstructionData::FinalizeDistributionDebt => {
             try_finalize_distribution_debt(accounts)
         }
@@ -864,7 +865,9 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
 
 fn try_configure_distribution_debt(
     accounts: &[AccountInfo],
-    setting: DistributionDebtConfiguration,
+    total_validators: u32,
+    total_debt: u64,
+    merkle_root: Hash,
 ) -> ProgramResult {
     msg!("Configure distribution debt");
 
@@ -890,24 +893,16 @@ fn try_configure_distribution_debt(
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    match setting {
-        DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-            total_validators,
-            total_debt,
-            merkle_root,
-        } => {
-            distribution.try_require_unfinalized_debt_calculation()?;
+    distribution.try_require_unfinalized_debt_calculation()?;
 
-            msg!("Set total_solana_validators: {}", total_validators);
-            distribution.total_solana_validators = total_validators;
+    msg!("Set total_solana_validators: {}", total_validators);
+    distribution.total_solana_validators = total_validators;
 
-            msg!("Set total_solana_validator_debt: {}", total_debt);
-            distribution.total_solana_validator_debt = total_debt;
+    msg!("Set total_solana_validator_debt: {}", total_debt);
+    distribution.total_solana_validator_debt = total_debt;
 
-            msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
-            distribution.solana_validator_payments_merkle_root = merkle_root;
-        }
-    }
+    msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
+    distribution.solana_validator_payments_merkle_root = merkle_root;
 
     Ok(())
 }

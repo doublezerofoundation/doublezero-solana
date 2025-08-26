@@ -5,9 +5,8 @@ mod common;
 use doublezero_program_tools::{instruction::try_build_instruction, zero_copy};
 use doublezero_revenue_distribution::{
     instruction::{
-        account::PaySolanaValidatorDebtAccounts, DistributionDebtConfiguration,
-        DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        account::PaySolanaValidatorDebtAccounts, DistributionMerkleRootKind, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
     types::{BurnRate, DoubleZeroEpoch, SolanaValidatorDebt, ValidatorFee},
@@ -108,13 +107,9 @@ async fn test_pay_solana_validator_debt() {
         .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
-            [
-                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: total_solana_validators,
-                    total_debt: total_solana_validator_debt,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-            ],
+            total_solana_validators,
+            total_solana_validator_debt,
+            solana_validator_payments_merkle_root,
         )
         .await
         .unwrap()

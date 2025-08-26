@@ -6,9 +6,8 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::SweepDistributionTokensAccounts, DistributionDebtConfiguration,
-        DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        account::SweepDistributionTokensAccounts, DistributionMerkleRootKind, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, find_2z_token_pda_address, find_swap_authority_address, Distribution,
@@ -40,7 +39,7 @@ async fn test_sweep_distribution_tokens() {
     test_sweep_distribution_tokens_mainnet().await;
 }
 
-//#[cfg(feature = "development")]
+#[cfg(feature = "development")]
 async fn test_sweep_distribution_tokens_development() {
     use doublezero_revenue_distribution::FIXED_SOL_2Z_SWAP_RATE_FOR_DEVELOPMENT;
 
@@ -144,13 +143,9 @@ async fn test_sweep_distribution_tokens_development() {
         .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
-            [
-                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: total_solana_validators,
-                    total_debt: total_solana_validator_debt,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-            ],
+            total_solana_validators,
+            total_solana_validator_debt,
+            solana_validator_payments_merkle_root,
         )
         .await
         .unwrap()
@@ -236,13 +231,9 @@ async fn test_sweep_distribution_tokens_development() {
         .configure_distribution_debt(
             next_dz_epoch,
             &payments_accountant_signer,
-            [
-                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: total_solana_validators,
-                    total_debt: total_solana_validator_debt,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-            ],
+            total_solana_validators,
+            total_solana_validator_debt,
+            solana_validator_payments_merkle_root,
         )
         .await
         .unwrap()

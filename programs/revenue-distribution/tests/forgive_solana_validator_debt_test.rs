@@ -5,8 +5,8 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::ForgiveSolanaValidatorDebtAccounts, DistributionDebtConfiguration,
-        ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        account::ForgiveSolanaValidatorDebtAccounts, ProgramConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
     types::{BurnRate, DoubleZeroEpoch, SolanaValidatorDebt, ValidatorFee},
@@ -111,26 +111,18 @@ async fn test_forgive_solana_validator_debt() {
         .configure_distribution_debt(
             dz_epoch,
             &payments_accountant_signer,
-            [
-                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: total_solana_validators,
-                    total_debt: total_solana_validator_debt,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-            ],
+            total_solana_validators,
+            total_solana_validator_debt,
+            solana_validator_payments_merkle_root,
         )
         .await
         .unwrap()
         .configure_distribution_debt(
             next_dz_epoch,
             &payments_accountant_signer,
-            [
-                DistributionDebtConfiguration::UpdateSolanaValidatorPayments {
-                    total_validators: total_solana_validators,
-                    total_debt: total_solana_validator_debt,
-                    merkle_root: solana_validator_payments_merkle_root,
-                },
-            ],
+            total_solana_validators,
+            total_solana_validator_debt,
+            solana_validator_payments_merkle_root,
         )
         .await
         .unwrap();

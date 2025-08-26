@@ -55,15 +55,6 @@ pub enum ProgramFlagConfiguration {
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
-pub enum DistributionDebtConfiguration {
-    UpdateSolanaValidatorPayments {
-        total_validators: u32,
-        total_debt: u64,
-        merkle_root: Hash,
-    },
-}
-
-#[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ContributorRewardsConfiguration {
     Recipients(Vec<(Pubkey, u16)>),
 }
@@ -83,7 +74,11 @@ pub enum RevenueDistributionInstructionData {
     InitializeJournal,
     ConfigureJournal(JournalConfiguration),
     InitializeDistribution,
-    ConfigureDistributionDebt(DistributionDebtConfiguration),
+    ConfigureDistributionDebt {
+        total_validators: u32,
+        total_debt: u64,
+        merkle_root: Hash,
+    },
     FinalizeDistributionDebt,
     ConfigureDistributionRewards {
         total_contributors: u32,
@@ -189,8 +184,15 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             Self::INITIALIZE_JOURNAL => Ok(Self::InitializeJournal),
             Self::INITIALIZE_DISTRIBUTION => Ok(Self::InitializeDistribution),
             Self::CONFIGURE_DISTRIBUTION_DEBT => {
-                DistributionDebtConfiguration::deserialize_reader(reader)
-                    .map(Self::ConfigureDistributionDebt)
+                let total_validators = BorshDeserialize::deserialize_reader(reader)?;
+                let total_debt = BorshDeserialize::deserialize_reader(reader)?;
+                let merkle_root = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::ConfigureDistributionDebt {
+                    total_validators,
+                    total_debt,
+                    merkle_root,
+                })
             }
             Self::FINALIZE_DISTRIBUTION_DEBT => Ok(Self::FinalizeDistributionDebt),
             Self::CONFIGURE_DISTRIBUTION_REWARDS => {
@@ -282,9 +284,15 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::InitializeJournal => Self::INITIALIZE_JOURNAL.serialize(writer),
             Self::InitializeDistribution => Self::INITIALIZE_DISTRIBUTION.serialize(writer),
-            Self::ConfigureDistributionDebt(setting) => {
+            Self::ConfigureDistributionDebt {
+                total_validators,
+                total_debt,
+                merkle_root,
+            } => {
                 Self::CONFIGURE_DISTRIBUTION_DEBT.serialize(writer)?;
-                setting.serialize(writer)
+                total_validators.serialize(writer)?;
+                total_debt.serialize(writer)?;
+                merkle_root.serialize(writer)
             }
             Self::FinalizeDistributionDebt => Self::FINALIZE_DISTRIBUTION_DEBT.serialize(writer),
             Self::ConfigureDistributionRewards {
