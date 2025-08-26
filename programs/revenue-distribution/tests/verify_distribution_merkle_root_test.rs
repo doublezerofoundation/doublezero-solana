@@ -57,11 +57,9 @@ async fn test_verify_distribution_merkle_root() {
         .collect::<Vec<_>>();
     assert_eq!(payments_data.len() % 2, 1);
 
-    let solana_validator_payments_merkle_root = merkle_root_from_indexed_pod_leaves(
-        &payments_data,
-        Some(SolanaValidatorDebt::LEAF_PREFIX),
-    )
-    .unwrap();
+    let solana_validator_payments_merkle_root =
+        merkle_root_from_indexed_pod_leaves(&payments_data, Some(SolanaValidatorDebt::LEAF_PREFIX))
+            .unwrap();
 
     let total_debt = payments_data.iter().map(|payment| payment.amount).sum();
 
@@ -151,11 +149,9 @@ async fn test_verify_distribution_merkle_root() {
     let last_leaf = *payments_data.last().unwrap();
     payments_data.push(last_leaf);
 
-    let invalid_merkle_root = merkle_root_from_indexed_pod_leaves(
-        &payments_data,
-        Some(SolanaValidatorDebt::LEAF_PREFIX),
-    )
-    .unwrap();
+    let invalid_merkle_root =
+        merkle_root_from_indexed_pod_leaves(&payments_data, Some(SolanaValidatorDebt::LEAF_PREFIX))
+            .unwrap();
     assert_ne!(solana_validator_payments_merkle_root, invalid_merkle_root);
 
     let spoofed_proof = MerkleProof::from_indexed_pod_leaves(

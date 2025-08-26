@@ -154,7 +154,7 @@ async fn test_forgive_solana_validator_debt() {
             next_dz_epoch,
         ),
         &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
-            debt: debt,
+            debt,
             proof: proof.clone(),
         },
     )
@@ -218,7 +218,7 @@ async fn test_forgive_solana_validator_debt() {
             DoubleZeroEpoch::new(0),
         ),
         &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
-            debt: debt,
+            debt,
             proof: proof.clone(),
         },
     )
@@ -234,7 +234,10 @@ async fn test_forgive_solana_validator_debt() {
         tx_err,
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
-    assert_eq!(program_logs.get(2).unwrap(), &format!("Program log: Next distribution's epoch must be ahead of the current distribution's epoch"));
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Next distribution's epoch must be ahead of the current distribution's epoch"
+    );
 
     // Pay debt for one validator.
     let upstanding_citizen_index = 3;
