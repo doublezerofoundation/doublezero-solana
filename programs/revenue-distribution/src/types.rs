@@ -191,6 +191,8 @@ impl RewardShare {
     pub const LEAF_PREFIX: &'static [u8] = b"reward_share";
 
     pub const FLAG_IS_BLOCKED_BIT: usize = 31;
+    pub const FLAG_IS_BLOCKED_MASK: u32 = 1 << Self::FLAG_IS_BLOCKED_BIT;
+    pub const ECONOMIC_BURN_RATE_MASK: u32 = 0x3FFFFFFF;
 
     pub fn new(
         contributor_key: Pubkey,
@@ -207,7 +209,7 @@ impl RewardShare {
 
         // Set the blocked flag.
         if should_block {
-            combined_value |= 1 << Self::FLAG_IS_BLOCKED_BIT;
+            combined_value |= Self::FLAG_IS_BLOCKED_MASK;
         }
 
         Some(Self {
@@ -223,22 +225,22 @@ impl RewardShare {
 
     pub fn is_blocked(&self) -> bool {
         let combined_value = u32::from_le_bytes(self.remaining_bytes);
-        combined_value & (1 << Self::FLAG_IS_BLOCKED_BIT) != 0
+        combined_value & Self::FLAG_IS_BLOCKED_MASK != 0
     }
 
     pub fn set_is_blocked(&mut self, should_block: bool) {
         let mut combined_value = u32::from_le_bytes(self.remaining_bytes);
         if should_block {
-            combined_value |= 1 << Self::FLAG_IS_BLOCKED_BIT;
+            combined_value |= Self::FLAG_IS_BLOCKED_MASK;
         } else {
-            combined_value &= !(1 << Self::FLAG_IS_BLOCKED_BIT);
+            combined_value &= !Self::FLAG_IS_BLOCKED_MASK;
         }
         self.remaining_bytes = combined_value.to_le_bytes();
     }
 
     pub fn economic_burn_rate(&self) -> u32 {
         let combined_value = u32::from_le_bytes(self.remaining_bytes);
-        combined_value & 0x3FFFFFFF
+        combined_value & Self::ECONOMIC_BURN_RATE_MASK
     }
 
     pub fn checked_economic_burn_rate(&self) -> Option<UnitShare32> {
@@ -247,7 +249,7 @@ impl RewardShare {
 
     pub fn set_economic_burn_rate(&mut self, economic_burn_rate: UnitShare32) {
         let mut combined_value = u32::from_le_bytes(self.remaining_bytes);
-        combined_value &= !(0x3FFFFFFF);
+        combined_value &= !Self::ECONOMIC_BURN_RATE_MASK;
         combined_value |= economic_burn_rate.0;
         self.remaining_bytes = combined_value.to_le_bytes();
     }
