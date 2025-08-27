@@ -2167,8 +2167,8 @@ fn try_forgive_solana_validator_debt(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Account 4 must be the distribution reflecting one epoch after the current
-    // distribution's epoch.
+    // Account 3 must be the distribution reflecting an epoch ahead of the
+    // current distribution's epoch.
     let mut next_distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
@@ -2206,11 +2206,6 @@ fn try_forgive_solana_validator_debt(
     // will be reduced for this distribution by the amount of SOL debt that was
     // forgiven.
     next_distribution.uncollectible_sol_debt += debt.amount;
-    msg!(
-        "Updated uncollectible SOL debt to {} for distribution epoch {}",
-        next_distribution.uncollectible_sol_debt,
-        next_distribution.dz_epoch
-    );
 
     // Double-check that the uncollectible debt does not exceed the total debt
     // for this distribution.
@@ -2218,6 +2213,12 @@ fn try_forgive_solana_validator_debt(
         msg!("Uncollectible SOL debt exceeds total debt");
         ProgramError::ArithmeticOverflow
     })?;
+
+    msg!(
+        "Updated uncollectible SOL debt to {} for distribution epoch {}",
+        next_distribution.uncollectible_sol_debt,
+        next_distribution.dz_epoch
+    );
 
     Ok(())
 }

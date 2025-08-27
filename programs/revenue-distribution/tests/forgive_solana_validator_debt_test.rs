@@ -44,10 +44,10 @@ async fn test_forgive_solana_validator_debt() {
     // Relay settings.
     let contributor_reward_claim_relay_lamports = 10_000;
 
-    // Distribution payments.
-
     let dz_epoch = DoubleZeroEpoch::new(1);
     let next_dz_epoch = dz_epoch.saturating_add_duration(1);
+
+    // Distribution debt accounting.
 
     let payments_data = (0..16)
         .map(|i| SolanaValidatorDebt {
