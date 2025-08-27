@@ -319,8 +319,7 @@ async fn test_sweep_distribution_tokens_development() {
     expected_distribution.collected_sol_converted_to_2z = expected_swept_2z_amount_1;
     assert_eq!(distribution, expected_distribution);
 
-    assert_eq!(remaining_distribution_data.len(), 1);
-    assert_eq!(remaining_distribution_data, vec![0b11011111]);
+    assert_eq!(remaining_distribution_data, vec![0b11111011]);
 
     // Forgive debt for the uncollectible validator.
     let proof = MerkleProof::from_indexed_pod_leaves(
@@ -386,7 +385,6 @@ async fn test_sweep_distribution_tokens_development() {
     expected_distribution.uncollectible_sol_debt = uncollectible_debt.amount;
     assert_eq!(distribution, expected_distribution);
 
-    assert_eq!(remaining_distribution_data.len(), 1);
     assert_eq!(remaining_distribution_data, vec![0b11111111]);
 }
 

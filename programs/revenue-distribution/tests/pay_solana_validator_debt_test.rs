@@ -287,8 +287,7 @@ async fn test_pay_solana_validator_debt() {
         solana_validator_payments_merkle_root;
     assert_eq!(distribution, expected_distribution);
 
-    assert_eq!(remaining_distribution_data.len(), 2);
-    assert_eq!(remaining_distribution_data, vec![255, 255]);
+    assert_eq!(remaining_distribution_data, vec![0b11111111, 0b11111111]);
 
     let (_, journal, _, _) = test_setup.fetch_journal().await;
     assert_eq!(journal.total_sol_balance, total_solana_validator_debt);

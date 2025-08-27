@@ -301,7 +301,6 @@ async fn test_forgive_solana_validator_debt() {
     expected_distribution.collected_solana_validator_payments = paid_debt.amount;
     assert_eq!(distribution, expected_distribution);
 
-    assert_eq!(remaining_distribution_data.len(), 2);
     assert_eq!(remaining_distribution_data, vec![0b11111111, 0b11111111]);
 
     let (distribution_key, distribution, remaining_distribution_data, _, _) =
@@ -325,7 +324,6 @@ async fn test_forgive_solana_validator_debt() {
     expected_distribution.uncollectible_sol_debt = total_solana_validator_debt - paid_debt.amount;
     assert_eq!(distribution, expected_distribution);
 
-    assert_eq!(remaining_distribution_data.len(), 2);
     assert_eq!(remaining_distribution_data, vec![0, 0]);
 
     let (_, journal, _, _) = test_setup.fetch_journal().await;
