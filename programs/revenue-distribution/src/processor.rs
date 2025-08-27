@@ -1804,6 +1804,11 @@ fn try_set_rewards_manager(accounts: &[AccountInfo], rewards_manager_key: Pubkey
     let mut contributor_rewards =
         ZeroCopyMutAccount::<ContributorRewards>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    if contributor_rewards.is_set_rewards_manager_blocked() {
+        msg!("Blocked");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
     msg!("rewards_manager_key: {}", rewards_manager_key);
     contributor_rewards.rewards_manager_key = rewards_manager_key;
 
@@ -1856,10 +1861,18 @@ fn try_configure_contributor_rewards(
             })?;
 
             msg!("Recipients");
-            recipients.iter().for_each(|recipient| {
-                msg!("{}: {}", recipient.recipient_key, recipient.share);
-            });
+            recipients
+                .iter()
+                .filter(|recipient| recipient.recipient_key != Pubkey::default())
+                .for_each(|recipient| {
+                    msg!("{}: {}", recipient.recipient_key, recipient.share);
+                });
             contributor_rewards.recipient_shares = recipients;
+        }
+        ContributorRewardsConfiguration::IsSetRewardsManagerBlocked(should_block) => {
+            msg!("Set flag");
+            msg!("is_set_rewards_manager_blocked: {}", should_block);
+            contributor_rewards.set_is_set_rewards_manager_blocked(should_block);
         }
     }
 

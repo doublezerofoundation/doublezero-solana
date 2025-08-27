@@ -57,6 +57,7 @@ pub enum ProgramFlagConfiguration {
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
 pub enum ContributorRewardsConfiguration {
     Recipients(Vec<(Pubkey, u16)>),
+    IsSetRewardsManagerBlocked(bool),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
