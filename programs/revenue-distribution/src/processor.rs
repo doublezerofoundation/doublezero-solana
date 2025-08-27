@@ -27,9 +27,10 @@ use crate::{
         ProgramConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, find_swap_authority_address, CommunityBurnRateParameters, ContributorRewards,
-        Distribution, Journal, JournalEntries, PrepaidConnection, ProgramConfig, RecipientShares,
-        RelayParameters, SolanaValidatorDeposit, TOKEN_2Z_PDA_SEED_PREFIX,
+        self, find_swap_authority_address, find_withdraw_sol_authority_address,
+        CommunityBurnRateParameters, ContributorRewards, Distribution, Journal, JournalEntries,
+        PrepaidConnection, ProgramConfig, RecipientShares, RelayParameters, SolanaValidatorDeposit,
+        TOKEN_2Z_PDA_SEED_PREFIX,
     },
     types::{BurnRate, ByteFlags, DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, ValidatorFee},
     DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
@@ -126,6 +127,9 @@ fn try_process_instruction(
         }
         RevenueDistributionInstructionData::SweepDistributionTokens => {
             try_sweep_distribution_tokens(accounts)
+        }
+        RevenueDistributionInstructionData::WithdrawSol(amount) => {
+            try_withdraw_sol(accounts, amount)
         }
     }
 }
@@ -2425,6 +2429,117 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
     msg!("Total SOL debt accounted for: {}", total_sol_debt);
     msg!("Journal's SOL balance after: {}", journal.total_sol_balance);
     msg!("Transferred {} 2Z tokens to distribution", token_2z_amount);
+
+    Ok(())
+}
+
+fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
+    msg!("Withdraw SOL");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Withdraw SOL authority.
+    // - 2: Swap 2Z destination account.
+    // - 3: Journal.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
+
+    // Account 1 must be the withdraw SOL authority.
+    let (account_index, withdraw_sol_authority_info) = try_next_enumerated_account(
+        &mut accounts_iter,
+        NextAccountOptions {
+            must_be_signer: true,
+            ..Default::default()
+        },
+    )?;
+
+    // TODO: Store seeds for these PDAs in program config to be able to use
+    // Pubkey::create_program_address.
+
+    let (expected_withdraw_sol_authority_key, _) =
+        find_withdraw_sol_authority_address(&program_config.sol_2z_swap_program_id);
+
+    // Enforce this account location.
+    if withdraw_sol_authority_info.key != &expected_withdraw_sol_authority_key {
+        msg!(
+            "Invalid address for withdraw SOL authority (account {})",
+            account_index
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let (swap_authority_key, _) = find_swap_authority_address();
+
+    // Account 1 must be the swap 2Z destination account. This account is not
+    // used by this instruction. We are only validating that the caller of this
+    // instruction has access to the swap 2Z destination account and that the
+    // 2Z transfer the caller is making is valid.
+    let (_, swap_2z_dst_info, _) = try_next_2z_token_pda_info(
+        &mut accounts_iter,
+        &swap_authority_key,
+        "swap destination",
+        None, // bump_seed
+    )?;
+
+    // Check sibling instruction that a transfer for 2Z tokens is made
+    // alongside this call.
+    let sibling_ix = solana_instruction::syscalls::get_processed_sibling_instruction(1)
+        .ok_or_else(|| {
+            msg!("No processed sibling instruction found");
+            ProgramError::InvalidAccountData
+        })?;
+
+    // We are enforcing that the sibling instruction is an SPL Token transfer
+    // to the swap destination account.
+    //
+    // First, check that the program ID is SPL Token.
+    if sibling_ix.program_id != spl_token::ID {
+        msg!("Sibling instruction's program ID is not SPL Token");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Next, make sure that the instruction is either a transfer or a transfer
+    // checked call.
+    let destination_account_index =
+        match spl_token::instruction::TokenInstruction::unpack(&sibling_ix.data)? {
+            spl_token::instruction::TokenInstruction::Transfer { .. } => 2,
+            spl_token::instruction::TokenInstruction::TransferChecked { .. } => 3,
+            _ => {
+                msg!("Sibling instruction is not a token transfer");
+                return Err(ProgramError::InvalidAccountData);
+            }
+        };
+
+    // Finally, make sure that the transfer is to the swap destination account.
+    if &sibling_ix.accounts[destination_account_index].pubkey != swap_2z_dst_info.key {
+        msg!("Sibling transfer not for swap destination");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Account 2 must be the journal.
+    let mut journal =
+        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    msg!(
+        "Journal's SOL balance before: {}",
+        journal.total_sol_balance
+    );
+
+    // Make sure the journal has enough SOL to cover the amount.
+    if journal.total_sol_balance < amount {
+        msg!("Journal does not have enough SOL to cover the amount");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Reduce the journal's SOL balance by the amount.
+    journal.total_sol_balance -= amount;
+    msg!("Journal's SOL balance after: {}", journal.total_sol_balance);
 
     Ok(())
 }
