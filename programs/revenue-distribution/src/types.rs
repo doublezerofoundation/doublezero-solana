@@ -168,7 +168,7 @@ pub struct SolanaValidatorDebt {
 }
 
 impl SolanaValidatorDebt {
-    pub const LEAF_PREFIX: &'static [u8] = b"solana_validator_payment";
+    pub const LEAF_PREFIX: &'static [u8] = b"solana_validator_debt";
 }
 
 #[derive(
