@@ -2284,22 +2284,15 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
 
     // Account 3 must be the new swap destination 2Z token account. This account
     // should not exist yet.
-    let (_, new_swap_dst_2z_token_pda_info, swap_dst_2z_token_pda_bump) =
-        try_next_2z_token_pda_info(
-            &mut accounts_iter,
-            &expected_swap_authority_key,
-            "swap destination",
-            None, // bump_seed
-        )?;
-    program_config.swap_destination_bump_seed = swap_dst_2z_token_pda_bump;
+    let (_, new_swap_destination_2z_info, swap_destination_2z_bump) = try_next_2z_token_pda_info(
+        &mut accounts_iter,
+        &expected_swap_authority_key,
+        "swap destination",
+        None, // bump_seed
+    )?;
+    program_config.swap_destination_2z_bump_seed = swap_destination_2z_bump;
 
     // Account 4 must be the 2Z mint.
-    //
-    // NOTE: Enforcing this account to be the 2Z mint can be removed if this
-    // program supports swap destination accounts for other mints. But keep in
-    // mind that the swap destination bump seed setting above assumes that there
-    // is only one mint (2Z). If this instruction ever supports multiple mints,
-    // please change the above logic when storing token PDA bump seeds.
     try_next_2z_mint_info(&mut accounts_iter)?;
 
     // Account 5 must be the SPL Token program.
@@ -2308,16 +2301,16 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
     try_create_token_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
-            key: new_swap_dst_2z_token_pda_info.key,
+            key: new_swap_destination_2z_info.key,
             signer_seeds: &[
                 TOKEN_2Z_PDA_SEED_PREFIX,
                 expected_swap_authority_key.as_ref(),
-                &[swap_dst_2z_token_pda_bump],
+                &[swap_destination_2z_bump],
             ],
         },
         &DOUBLEZERO_MINT_KEY,
         &expected_swap_authority_key,
-        new_swap_dst_2z_token_pda_info.lamports(),
+        new_swap_destination_2z_info.lamports(),
         accounts,
         None, // rent_sysvar
     )?;
@@ -2424,7 +2417,7 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
     }
 
     // Account 5 must be the swap destination 2Z token account.
-    let (_, swap_dst_2z_info, _) = try_next_2z_token_pda_info(
+    let (_, swap_destination_2z_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &expected_swap_authority_key,
         "swap destination",
@@ -2433,7 +2426,7 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
 
     let token_transfer_ix = spl_token::instruction::transfer(
         &spl_token::ID,
-        swap_dst_2z_info.key,
+        swap_destination_2z_info.key,
         distribution_2z_token_pda_info.key,
         swap_authority_info.key,
         &[], // signer_pubkeys
@@ -2455,6 +2448,9 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
 }
 
 fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
+    const MINT_2Z_ACCOUNT_INDEX: usize = 2;
+    const DESTINATION_ACCOUNT_INDEX: usize = 3;
+
     msg!("Withdraw SOL");
 
     // We expect the following accounts for this instruction:
@@ -2516,31 +2512,38 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Next, make sure that the instruction is either a transfer or a transfer
-    // checked call. We will need the destination account index to validate the
-    // swap destination account and the transfer amount to update the journal.
-    let (destination_account_index, transfer_amount) =
-        match spl_token::instruction::TokenInstruction::unpack(&sibling_ix.data)? {
-            spl_token::instruction::TokenInstruction::Transfer { amount } => (2, amount),
-            spl_token::instruction::TokenInstruction::TransferChecked {
-                amount,
-                decimals: _,
-            } => (3, amount),
-            _ => {
-                msg!("Sibling instruction is not a token transfer");
-                return Err(ProgramError::InvalidInstructionData);
-            }
-        };
+    // Next, make sure that the instruction is a transfer checked call. Transfer
+    // checked requires the mint account, which we will verify is the 2Z mint.
+    // We will need the transfer amount to update the journal's balance of the
+    // swap destination account.
+    let transfer_amount = if let Ok(spl_token::instruction::TokenInstruction::TransferChecked {
+        amount,
+        decimals: _,
+    }) = spl_token::instruction::TokenInstruction::unpack(&sibling_ix.data)
+    {
+        amount
+    } else {
+        msg!("Sibling instruction is not a token transfer checked call");
+        return Err(ProgramError::InvalidInstructionData);
+    };
 
     // Generate the swap destination key so we can validate the destination
     // token account in the sibling instruction. Presumably, the swap
     // destination account has already been created if the token transfer was
     // successful.
-    let expected_swap_destination_key = program_config.checked_swap_destination_address().unwrap();
+    let expected_swap_destination_2z_key = program_config
+        .checked_swap_destination_2z_address()
+        .unwrap();
+
+    // Make sure the mint of the transfer checked call is 2Z.
+    if sibling_ix.accounts[MINT_2Z_ACCOUNT_INDEX].pubkey != DOUBLEZERO_MINT_KEY {
+        msg!("Sibling transfer checked call is not for 2Z mint");
+        return Err(ProgramError::InvalidInstructionData);
+    }
 
     // Finally, make sure that the transfer is to the swap destination account.
-    if sibling_ix.accounts[destination_account_index].pubkey != expected_swap_destination_key {
-        msg!("Sibling transfer not for swap destination");
+    if sibling_ix.accounts[DESTINATION_ACCOUNT_INDEX].pubkey != expected_swap_destination_2z_key {
+        msg!("Sibling transfer not for 2Z swap destination");
         return Err(ProgramError::InvalidInstructionData);
     }
 

@@ -54,7 +54,7 @@ async fn test_initialize_swap_destination() {
     let (_, program_config, _) = test_setup.fetch_program_config().await;
     assert_eq!(program_config.swap_authority_bump_seed, swap_authority_bump);
     assert_eq!(
-        program_config.swap_destination_bump_seed,
+        program_config.swap_destination_2z_bump_seed,
         swap_dst_2z_token_pda_bump
     );
 }

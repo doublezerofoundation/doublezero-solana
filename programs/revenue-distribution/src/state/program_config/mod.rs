@@ -37,7 +37,7 @@ pub struct ProgramConfig {
     pub swap_authority_bump_seed: u8,
 
     /// Cache this seed to validate token PDA address.
-    pub swap_destination_bump_seed: u8,
+    pub swap_destination_2z_bump_seed: u8,
 
     /// Cache this seed to validate withdraw SOL authority address, which is
     /// the required signer of [Self::sol_2z_swap_program_id] to withdraw SOL.
@@ -114,9 +114,9 @@ impl ProgramConfig {
         .ok()
     }
 
-    pub fn checked_swap_destination_address(&self) -> Option<Pubkey> {
+    pub fn checked_swap_destination_2z_address(&self) -> Option<Pubkey> {
         let swap_authority_key = self.checked_swap_authority_address()?;
-        checked_2z_token_pda_address(&swap_authority_key, self.swap_destination_bump_seed)
+        checked_2z_token_pda_address(&swap_authority_key, self.swap_destination_2z_bump_seed)
     }
 
     pub fn checked_withdraw_sol_authority_address(&self) -> Option<Pubkey> {
