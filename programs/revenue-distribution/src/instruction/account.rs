@@ -1027,6 +1027,7 @@ pub struct WithdrawSolAccounts {
     pub program_config_key: Pubkey,
     pub withdraw_sol_authority_key: Pubkey,
     pub journal_key: Pubkey,
+    pub sol_destination_key: Pubkey,
 }
 
 impl WithdrawSolAccounts {
@@ -1035,12 +1036,13 @@ impl WithdrawSolAccounts {
     /// 1,500 CU per bump iteration. It is recommended to instantiate the
     /// struct by defining its members directly. Please only use this method
     /// for testing purposes.
-    pub fn new(sol_2z_swap_program_id: &Pubkey) -> Self {
+    pub fn new(sol_2z_swap_program_id: &Pubkey, sol_destination_key: &Pubkey) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
             withdraw_sol_authority_key: find_withdraw_sol_authority_address(sol_2z_swap_program_id)
                 .0,
             journal_key: Journal::find_address().0,
+            sol_destination_key: *sol_destination_key,
         }
     }
 }
@@ -1051,12 +1053,14 @@ impl From<WithdrawSolAccounts> for Vec<AccountMeta> {
             program_config_key,
             withdraw_sol_authority_key,
             journal_key,
+            sol_destination_key,
         } = accounts;
 
         vec![
             AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new_readonly(withdraw_sol_authority_key, true),
             AccountMeta::new(journal_key, false),
+            AccountMeta::new(sol_destination_key, false),
         ]
     }
 }

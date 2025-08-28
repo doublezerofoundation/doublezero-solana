@@ -2457,6 +2457,7 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     // - 0: Program config.
     // - 1: Withdraw SOL authority.
     // - 2: Journal.
+    // - 3: SOL destination.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
@@ -2573,6 +2574,22 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         journal.swap_2z_destination_balance,
         transfer_amount
     );
+
+    // Move lamports from the journal to the SOL destination.
+    let (_, sol_destination_info) = try_next_enumerated_account(
+        &mut accounts_iter,
+        NextAccountOptions {
+            must_be_writable: true,
+            ..Default::default()
+        },
+    )?;
+
+    // TODO: We may be able to remove this when we test this instruction.
+    let journal_info = journal.info;
+    drop(journal);
+
+    **journal_info.lamports.borrow_mut() -= amount;
+    **sol_destination_info.lamports.borrow_mut() += amount;
 
     Ok(())
 }
