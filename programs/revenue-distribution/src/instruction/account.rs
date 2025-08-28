@@ -5,8 +5,9 @@ use solana_system_interface::program as system_program;
 
 use crate::{
     state::{
-        find_2z_token_pda_address, find_swap_authority_address, ContributorRewards, Distribution,
-        Journal, PrepaidConnection, ProgramConfig, SolanaValidatorDeposit,
+        find_2z_token_pda_address, find_swap_authority_address,
+        find_withdraw_sol_authority_address, ContributorRewards, Distribution, Journal,
+        PrepaidConnection, ProgramConfig, SolanaValidatorDeposit,
     },
     types::DoubleZeroEpoch,
 };
@@ -1020,3 +1021,44 @@ mod sweep_distribution_tokens {
 }
 
 pub use sweep_distribution_tokens::*;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WithdrawSolAccounts {
+    pub program_config_key: Pubkey,
+    pub withdraw_sol_authority_key: Pubkey,
+    pub journal_key: Pubkey,
+}
+
+impl WithdrawSolAccounts {
+    /// NOTE: The swap program should not use this method when invoking the
+    /// withdraw SOL instruction because the find program address calls cost
+    /// 1,500 CU per bump iteration. It is recommended to instantiate the
+    /// struct by defining its members directly. Please only use this method
+    /// for testing purposes.
+    pub fn new(sol_2z_swap_program_id: &Pubkey) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            withdraw_sol_authority_key: find_withdraw_sol_authority_address(
+                &sol_2z_swap_program_id,
+            )
+            .0,
+            journal_key: Journal::find_address().0,
+        }
+    }
+}
+
+impl From<WithdrawSolAccounts> for Vec<AccountMeta> {
+    fn from(accounts: WithdrawSolAccounts) -> Self {
+        let WithdrawSolAccounts {
+            program_config_key,
+            withdraw_sol_authority_key,
+            journal_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new_readonly(withdraw_sol_authority_key, true),
+            AccountMeta::new(journal_key, false),
+        ]
+    }
+}
