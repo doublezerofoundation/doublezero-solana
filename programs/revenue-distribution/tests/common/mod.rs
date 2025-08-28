@@ -9,15 +9,15 @@ use doublezero_revenue_distribution::{
             ConfigureContributorRewardsAccounts, ConfigureDistributionDebtAccounts,
             ConfigureDistributionRewardsAccounts, ConfigureJournalAccounts,
             ConfigureProgramAccounts, DenyPrepaidConnectionAccessAccounts,
-            FinalizeDistributionDebtAccounts, FinalizeDistributionRewardsAccounts,
-            ForgiveSolanaValidatorDebtAccounts, GrantPrepaidConnectionAccessAccounts,
-            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
-            InitializeJournalAccounts, InitializePrepaidConnectionAccounts,
-            InitializeProgramAccounts, InitializeSolanaValidatorDepositAccounts,
-            InitializeSwapDestinationAccounts, LoadPrepaidConnectionAccounts,
-            PaySolanaValidatorDebtAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
-            SweepDistributionTokensAccounts, TerminatePrepaidConnectionAccounts,
-            VerifyDistributionMerkleRootAccounts,
+            DistributeRewardsAccounts, FinalizeDistributionDebtAccounts,
+            FinalizeDistributionRewardsAccounts, ForgiveSolanaValidatorDebtAccounts,
+            GrantPrepaidConnectionAccessAccounts, InitializeContributorRewardsAccounts,
+            InitializeDistributionAccounts, InitializeJournalAccounts,
+            InitializePrepaidConnectionAccounts, InitializeProgramAccounts,
+            InitializeSolanaValidatorDepositAccounts, InitializeSwapDestinationAccounts,
+            LoadPrepaidConnectionAccounts, PaySolanaValidatorDebtAccounts, SetAdminAccounts,
+            SetRewardsManagerAccounts, SweepDistributionTokensAccounts,
+            TerminatePrepaidConnectionAccounts, VerifyDistributionMerkleRootAccounts,
         },
         ContributorRewardsConfiguration, DistributionMerkleRootKind, JournalConfiguration,
         ProgramConfiguration, RevenueDistributionInstructionData,
@@ -223,6 +223,32 @@ impl ProgramTestWithOwner {
             &mut self.banks_client,
             &self.cached_blockhash,
             &[transfer_ix],
+            &[payer_signer],
+        )
+        .await?;
+
+        Ok(self)
+    }
+
+    pub async fn create_2z_ata(
+        &mut self,
+        owner_key: &Pubkey,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+        let payer_key = payer_signer.pubkey();
+
+        // No consequence if the ATA already exists.
+        let create_ix = spl_associated_token_account_interface::instruction::create_associated_token_account_idempotent(
+            &payer_key,
+            &owner_key,
+            &DOUBLEZERO_MINT_KEY,
+            &spl_token::ID,
+        );
+
+        self.cached_blockhash = process_instructions_for_test(
+            &mut self.banks_client,
+            &self.cached_blockhash,
+            &[create_ix],
             &[payer_signer],
         )
         .await?;
@@ -535,6 +561,49 @@ impl ProgramTestWithOwner {
             &mut self.banks_client,
             &self.cached_blockhash,
             &[finalize_distribution_rewards_ix],
+            &[payer_signer],
+        )
+        .await?;
+
+        Ok(self)
+    }
+
+    // TODO: Define a struct for these arguments.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn distribute_rewards(
+        &mut self,
+        dz_epoch: DoubleZeroEpoch,
+        service_key: &Pubkey,
+        dz_mint_key: &Pubkey,
+        relayer_key: &Pubkey,
+        recipient_keys: &[&Pubkey],
+        unit_share: u32,
+        economic_burn_rate: u32,
+        proof: MerkleProof,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.payer_signer;
+
+        let distribute_rewards_ix = try_build_instruction(
+            &ID,
+            DistributeRewardsAccounts::new(
+                dz_epoch,
+                service_key,
+                dz_mint_key,
+                relayer_key,
+                recipient_keys,
+            ),
+            &RevenueDistributionInstructionData::DistributeRewards {
+                unit_share,
+                economic_burn_rate,
+                proof,
+            },
+        )
+        .unwrap();
+
+        self.cached_blockhash = process_instructions_for_test(
+            &mut self.banks_client,
+            &self.cached_blockhash,
+            &[distribute_rewards_ix],
             &[payer_signer],
         )
         .await?;
