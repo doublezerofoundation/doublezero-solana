@@ -1038,10 +1038,8 @@ impl WithdrawSolAccounts {
     pub fn new(sol_2z_swap_program_id: &Pubkey) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
-            withdraw_sol_authority_key: find_withdraw_sol_authority_address(
-                &sol_2z_swap_program_id,
-            )
-            .0,
+            withdraw_sol_authority_key: find_withdraw_sol_authority_address(sol_2z_swap_program_id)
+                .0,
             journal_key: Journal::find_address().0,
         }
     }
