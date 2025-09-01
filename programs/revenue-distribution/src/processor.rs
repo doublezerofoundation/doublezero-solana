@@ -1350,6 +1350,10 @@ fn try_distribute_rewards(
     // Add any dust to the burn amount.
     burn_share_amount += remaining_share_amount - total_transferred_share_amount;
 
+    distribution.distributed_2z_amount += total_transferred_share_amount;
+    distribution.burned_2z_amount += burn_share_amount;
+    distribution.distributed_rewards_count += 1;
+
     let token_burn_ix = token_instruction::burn(
         &spl_token::ID,
         distribution_2z_token_pda_info.key,
@@ -1634,7 +1638,7 @@ fn try_deny_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResult
     )?;
 
     let termination_relay_lamports = program_config
-        .checked_relay_prepaid_connection_termination_lamports()
+        .checked_prepaid_connection_termination_relay_lamports()
         .map(u64::from)
         .ok_or_else(|| {
             msg!("Prepaid connection termination relay lamports are misconfigured");
@@ -2264,6 +2268,7 @@ fn try_pay_solana_validator_debt(
     // Update the collected payments amount now to avoid a borrow issue later
     // in this instruction.
     distribution.collected_solana_validator_payments += amount;
+    distribution.solana_validator_payments_count += 1;
 
     // This merkle root will be used to verify the payment after we determine
     // the debt has not already been paid.

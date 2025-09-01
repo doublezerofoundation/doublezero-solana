@@ -311,6 +311,7 @@ async fn test_sweep_distribution_tokens_development() {
         .base_block_rewards_pct =
         ValidatorFee::new(solana_validator_base_block_rewards_pct_fee).unwrap();
     expected_distribution.total_solana_validators = total_solana_validators;
+    expected_distribution.solana_validator_payments_count = total_solana_validators - 1;
     expected_distribution.total_solana_validator_debt = total_solana_validator_debt;
     expected_distribution.collected_solana_validator_payments =
         total_solana_validator_debt - uncollectible_debt.amount;
@@ -380,6 +381,7 @@ async fn test_sweep_distribution_tokens_development() {
         .base_block_rewards_pct =
         ValidatorFee::new(solana_validator_base_block_rewards_pct_fee).unwrap();
     expected_distribution.total_solana_validators = total_solana_validators;
+    expected_distribution.solana_validator_payments_count = total_solana_validators;
     expected_distribution.total_solana_validator_debt = total_solana_validator_debt;
     expected_distribution.collected_solana_validator_payments = total_solana_validator_debt;
     expected_distribution.solana_validator_payments_merkle_root =

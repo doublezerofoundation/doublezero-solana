@@ -171,7 +171,7 @@ impl ProgramConfig {
         }
     }
 
-    pub fn checked_relay_prepaid_connection_termination_lamports(&self) -> Option<u32> {
+    pub fn checked_prepaid_connection_termination_relay_lamports(&self) -> Option<u32> {
         let lamports = self
             .relay_parameters
             .prepaid_connection_termination_lamports;

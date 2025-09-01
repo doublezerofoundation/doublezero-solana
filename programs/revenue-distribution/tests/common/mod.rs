@@ -240,7 +240,7 @@ impl ProgramTestWithOwner {
         // No consequence if the ATA already exists.
         let create_ix = spl_associated_token_account_interface::instruction::create_associated_token_account_idempotent(
             &payer_key,
-            &owner_key,
+            owner_key,
             &DOUBLEZERO_MINT_KEY,
             &spl_token::ID,
         );

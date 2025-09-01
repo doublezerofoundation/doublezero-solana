@@ -79,7 +79,10 @@ pub struct Distribution {
     pub processed_rewards_end_index: u32,
 
     pub distribute_rewards_relay_lamports: u32,
-    _padding_1: [u32; 5],
+    _padding_1: [u32; 1],
+
+    pub distributed_2z_amount: u64,
+    pub burned_2z_amount: u64,
 
     _storage_gap: StorageGap<7>,
 }

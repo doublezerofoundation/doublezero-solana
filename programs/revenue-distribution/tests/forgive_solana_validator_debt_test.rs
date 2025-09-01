@@ -295,6 +295,7 @@ async fn test_forgive_solana_validator_debt() {
         .base_block_rewards_pct =
         ValidatorFee::new(solana_validator_base_block_rewards_pct_fee).unwrap();
     expected_distribution.total_solana_validators = total_solana_validators;
+    expected_distribution.solana_validator_payments_count = 1;
     expected_distribution.total_solana_validator_debt = total_solana_validator_debt;
     expected_distribution.solana_validator_payments_merkle_root =
         solana_validator_payments_merkle_root;
