@@ -1162,7 +1162,7 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
 
     msg!(
-        "Transferred {} lamports to distribution for {} contributor distributions",
+        "Transferred {} lamports to distribution for {} contributors",
         additional_lamports_for_distributing,
         total_contributors
     );
@@ -1309,7 +1309,7 @@ fn try_distribute_rewards(
         share,
     } in contributor_rewards.recipient_shares.active_iter()
     {
-        // Account 5 + i must be the ATA owned by the recipient. This account
+        // Account 7 + i must be the ATA owned by the recipient. This account
         // must be writable, but we do not need to check this because the
         // transfer CPI call will fail if this account is not.
         let (account_index, ata_info) =

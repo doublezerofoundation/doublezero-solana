@@ -5,28 +5,22 @@ mod common;
 
 use std::collections::HashMap;
 
-use doublezero_program_tools::{instruction::try_build_instruction, zero_copy};
+use doublezero_program_tools::zero_copy;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::SweepDistributionTokensAccounts, ContributorRewardsConfiguration,
-        DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind, ProgramConfiguration,
+        ProgramFlagConfiguration,
     },
     state::{
         self, find_2z_token_pda_address, find_swap_authority_address, Distribution,
         SolanaValidatorDeposit,
     },
     types::{BurnRate, DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, ValidatorFee},
-    DOUBLEZERO_MINT_KEY, ID,
+    DOUBLEZERO_MINT_KEY,
 };
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
-use solana_sdk::{
-    instruction::InstructionError,
-    signature::{Keypair, Signer},
-    transaction::TransactionError,
-};
-use spl_associated_token_account_interface::address::get_associated_token_address;
+use solana_sdk::signature::{Keypair, Signer};
 use svm_hash::merkle::{merkle_root_from_indexed_pod_leaves, MerkleProof};
 
 //
@@ -421,12 +415,10 @@ async fn test_distribute_rewards_development() {
         test_setup
             .distribute_rewards(
                 dz_epoch,
-                contributor_key,
+                &share,
                 &DOUBLEZERO_MINT_KEY,
                 &relayer_key,
                 &recipient_keys,
-                share.unit_share,
-                share.economic_burn_rate(),
                 proof.clone(),
             )
             .await
@@ -443,12 +435,10 @@ async fn test_distribute_rewards_development() {
         test_setup
             .distribute_rewards(
                 next_dz_epoch,
-                contributor_key,
+                &share,
                 &DOUBLEZERO_MINT_KEY,
                 &relayer_key,
                 &recipient_keys,
-                share.unit_share,
-                share.economic_burn_rate(),
                 proof,
             )
             .await

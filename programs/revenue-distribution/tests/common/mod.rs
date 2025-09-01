@@ -26,7 +26,7 @@ use doublezero_revenue_distribution::{
         self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
         ProgramConfig, SolanaValidatorDeposit,
     },
-    types::{DoubleZeroEpoch, SolanaValidatorDebt},
+    types::{DoubleZeroEpoch, RewardShare, SolanaValidatorDebt},
     DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_loader_v3_interface::{get_program_data_address, state::UpgradeableLoaderState};
@@ -568,26 +568,26 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    // TODO: Define a struct for these arguments.
-    #[allow(clippy::too_many_arguments)]
     pub async fn distribute_rewards(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        service_key: &Pubkey,
+        reward_share: &RewardShare,
         dz_mint_key: &Pubkey,
         relayer_key: &Pubkey,
         recipient_keys: &[&Pubkey],
-        unit_share: u32,
-        economic_burn_rate: u32,
         proof: MerkleProof,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.payer_signer;
+
+        let contributor_key = &reward_share.contributor_key;
+        let unit_share = reward_share.unit_share;
+        let economic_burn_rate = reward_share.economic_burn_rate();
 
         let distribute_rewards_ix = try_build_instruction(
             &ID,
             DistributeRewardsAccounts::new(
                 dz_epoch,
-                service_key,
+                contributor_key,
                 dz_mint_key,
                 relayer_key,
                 recipient_keys,
