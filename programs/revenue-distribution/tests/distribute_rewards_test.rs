@@ -68,7 +68,7 @@ async fn test_distribute_rewards_development() {
     // relayer can get paid without the transaction reverting. But practically,
     // the relayer will have enough lamports to be rent exempt so this will not
     // be a problem if the configured value is less than this.
-    let contributor_reward_claim_relay_lamports = 128 * 6_960;
+    let distribute_rewards_relay_lamports = 128 * 6_960;
 
     // Distribution debt.
 
@@ -144,8 +144,8 @@ async fn test_distribute_rewards_development() {
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-                ProgramConfiguration::ContributorRewardClaimLamports(
-                    contributor_reward_claim_relay_lamports,
+                ProgramConfiguration::DistributeRewardsRelayLamports(
+                    distribute_rewards_relay_lamports,
                 ),
                 ProgramConfiguration::MinimumEpochDurationToFinalizeRewards(
                     minimum_epoch_duration_to_finalize_rewards,

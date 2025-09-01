@@ -35,7 +35,7 @@ pub enum ProgramConfiguration {
         initial_rate: Option<u32>,
     },
     PrepaidConnectionTerminationRelayLamports(u32),
-    ContributorRewardClaimLamports(u32),
+    DistributeRewardsRelayLamports(u32),
     MinimumEpochDurationToFinalizeRewards(u16),
 }
 

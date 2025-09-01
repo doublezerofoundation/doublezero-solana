@@ -60,7 +60,7 @@ async fn test_sweep_distribution_tokens_development() {
     let dz_epochs_to_cbr_limit = 20;
 
     // Relay settings.
-    let contributor_reward_claim_relay_lamports = 10_000;
+    let distribute_rewards_relay_lamports = 10_000;
 
     // Distribution payments.
 
@@ -126,8 +126,8 @@ async fn test_sweep_distribution_tokens_development() {
                     dz_epochs_to_limit: dz_epochs_to_cbr_limit,
                     initial_rate: Some(initial_cbr),
                 },
-                ProgramConfiguration::ContributorRewardClaimLamports(
-                    contributor_reward_claim_relay_lamports,
+                ProgramConfiguration::DistributeRewardsRelayLamports(
+                    distribute_rewards_relay_lamports,
                 ),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
             ],
@@ -316,7 +316,10 @@ async fn test_sweep_distribution_tokens_development() {
         total_solana_validator_debt - uncollectible_debt.amount;
     expected_distribution.solana_validator_payments_merkle_root =
         solana_validator_payments_merkle_root;
-    expected_distribution.collected_sol_converted_to_2z = expected_swept_2z_amount_1;
+    expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount_1;
+    expected_distribution.processed_solana_validator_payments_end_index =
+        total_solana_validators / 8;
+    expected_distribution.distribute_rewards_relay_lamports = distribute_rewards_relay_lamports;
     assert_eq!(distribution, expected_distribution);
 
     assert_eq!(remaining_distribution_data, vec![0b11111011]);
@@ -381,8 +384,11 @@ async fn test_sweep_distribution_tokens_development() {
     expected_distribution.collected_solana_validator_payments = total_solana_validator_debt;
     expected_distribution.solana_validator_payments_merkle_root =
         solana_validator_payments_merkle_root;
-    expected_distribution.collected_sol_converted_to_2z = expected_swept_2z_amount_2;
+    expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount_2;
     expected_distribution.uncollectible_sol_debt = uncollectible_debt.amount;
+    expected_distribution.processed_solana_validator_payments_end_index =
+        total_solana_validators / 8;
+    expected_distribution.distribute_rewards_relay_lamports = distribute_rewards_relay_lamports;
     assert_eq!(distribution, expected_distribution);
 
     assert_eq!(remaining_distribution_data, vec![0b11111111]);

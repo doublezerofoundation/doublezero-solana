@@ -42,7 +42,7 @@ pub struct Distribution {
     pub solana_validator_payments_merkle_root: Hash,
 
     pub total_solana_validators: u32,
-    pub num_validators_paid: u32,
+    pub solana_validator_payments_count: u32,
 
     pub total_solana_validator_debt: u64,
     pub collected_solana_validator_payments: u64,
@@ -56,15 +56,15 @@ pub struct Distribution {
     /// [num_contributors_redeemed]: Self::num_contributors_redeemed
     pub total_contributors: u32,
 
-    /// Tracking how many contributors redeemed rewards. Off-chain processes
-    /// can monitor how many are left to redeem when comparing to
+    /// Tracking how many contributors have had rewards distributed. Offchain
+    /// processes can monitor how many are left to distribute when comparing to
     /// [total_contributors].
     ///
     /// [total_contributors]: Self::total_contributors
-    pub num_contributors_claimed: u32,
+    pub distributed_rewards_count: u32,
 
     pub collected_prepaid_2z_payments: u64,
-    pub collected_sol_converted_to_2z: u64,
+    pub collected_2z_converted_from_sol: u64,
 
     /// The amount of SOL that was owed in past distributions. The payments
     /// accountant can configure this amount to alleviate the system from
@@ -72,11 +72,14 @@ pub struct Distribution {
     /// total amount owed to the system.
     pub uncollectible_sol_debt: u64,
 
-    pub processed_solana_validator_payments_index: u32,
-    pub processed_rewards_index: u32,
+    pub processed_solana_validator_payments_start_index: u32,
+    pub processed_solana_validator_payments_end_index: u32,
 
-    pub distribute_rewards_relay_lamports: u64,
-    _padding_1: [u64; 3],
+    pub processed_rewards_start_index: u32,
+    pub processed_rewards_end_index: u32,
+
+    pub distribute_rewards_relay_lamports: u32,
+    _padding_1: [u32; 5],
 
     _storage_gap: StorageGap<7>,
 }
@@ -142,7 +145,7 @@ impl Distribution {
     pub fn total_collected_2z_tokens(&self) -> u64 {
         // Panic in case something goes horribly wrong.
         self.collected_prepaid_2z_payments
-            .checked_add(self.collected_sol_converted_to_2z)
+            .checked_add(self.collected_2z_converted_from_sol)
             .unwrap()
     }
 
