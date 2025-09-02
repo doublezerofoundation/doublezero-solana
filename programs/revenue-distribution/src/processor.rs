@@ -2669,8 +2669,8 @@ fn try_sweep_distribution_tokens_development(accounts: &[AccountInfo]) -> Progra
 }
 
 fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
-    const MINT_2Z_ACCOUNT_INDEX: usize = 2;
-    const DESTINATION_ACCOUNT_INDEX: usize = 3;
+    const MINT_2Z_ACCOUNT_INDEX: usize = 1;
+    const DESTINATION_ACCOUNT_INDEX: usize = 2;
 
     msg!("Withdraw SOL");
 
@@ -2719,7 +2719,7 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
 
     // Check for a sibling instruction immediately before the invocation of this
     // instruction.
-    let sibling_ix = solana_instruction::syscalls::get_processed_sibling_instruction(1)
+    let sibling_ix = solana_instruction::syscalls::get_processed_sibling_instruction(0)
         .ok_or_else(|| {
             msg!("No processed sibling instruction found");
             ProgramError::InvalidAccountData
