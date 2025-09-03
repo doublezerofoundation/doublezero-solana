@@ -592,8 +592,3 @@ async fn test_distribute_rewards() {
     // All tokens should have been transferred to all recipients.
     assert_eq!(distribution_2z_token_pda.amount, 0);
 }
-
-#[cfg(not(feature = "development"))]
-async fn test_distribute_rewards_mainnet() {
-    todo!()
-}

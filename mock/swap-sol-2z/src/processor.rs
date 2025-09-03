@@ -22,7 +22,7 @@ use crate::{
 
 solana_program_entrypoint::entrypoint!(try_process_instruction);
 
-pub fn try_process_instruction(
+fn try_process_instruction(
     program_id: &Pubkey,
     accounts: &[AccountInfo],
     data: &[u8],
