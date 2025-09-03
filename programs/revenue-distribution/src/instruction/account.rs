@@ -1050,14 +1050,11 @@ impl DequeueFillsCpiAccounts {
         Self {
             configuration_registry_key: Pubkey::find_program_address(
                 &[b"system_config_v1"],
-                &sol_2z_swap_program_id,
+                sol_2z_swap_program_id,
             )
             .0,
-            program_state_key: Pubkey::find_program_address(
-                &[b"state_v1"],
-                &sol_2z_swap_program_id,
-            )
-            .0,
+            program_state_key: Pubkey::find_program_address(&[b"state_v1"], sol_2z_swap_program_id)
+                .0,
             fills_registry_key: *fills_registery_key,
             journal_key: Journal::find_address().0,
             sol_2z_swap_program_id: Some(*sol_2z_swap_program_id),
