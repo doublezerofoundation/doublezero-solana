@@ -281,9 +281,9 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 }
             };
         }
-        ProgramConfiguration::PaymentsAccountant(payments_accountant_key) => {
-            msg!("Set payments_accountant_key: {}", payments_accountant_key);
-            program_config.payments_accountant_key = payments_accountant_key;
+        ProgramConfiguration::DebtAccountant(debt_accountant_key) => {
+            msg!("Set debt_accountant_key: {}", debt_accountant_key);
+            program_config.debt_accountant_key = debt_accountant_key;
         }
         ProgramConfiguration::RewardsAccountant(rewards_accountant_key) => {
             msg!("Set rewards_accountant_key: {}", rewards_accountant_key);
@@ -701,7 +701,7 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
 
     let authorized_use = VerifiedProgramAuthorityMut::try_next_accounts(
         &mut accounts_iter,
-        Authority::PaymentsAccountant,
+        Authority::DebtAccountant,
     )?;
     let mut program_config = authorized_use.program_config;
 
@@ -906,18 +906,17 @@ fn try_configure_distribution_debt(
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Payments accountant.
+    // - 1: Debt accountant.
     // - 2: Distribution.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
-    // Account 1 must be the payments accountant.
+    // Account 1 must be the debt accountant.
     //
-    // This method verifies that account 1 is the payments accountant and is a signer.
-    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
-        &mut accounts_iter,
-        Authority::PaymentsAccountant,
-    )?;
+    // This method verifies that account 1 is the debt accountant and is a
+    // signer.
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
 
     // Make sure the program is not paused.
     authorized_use.program_config.try_require_unpaused()?;
@@ -934,8 +933,8 @@ fn try_configure_distribution_debt(
     msg!("Set total_solana_validator_debt: {}", total_debt);
     distribution.total_solana_validator_debt = total_debt;
 
-    msg!("Set solana_validator_payments_merkle_root: {}", merkle_root);
-    distribution.solana_validator_payments_merkle_root = merkle_root;
+    msg!("Set solana_validator_debt_merkle_root: {}", merkle_root);
+    distribution.solana_validator_debt_merkle_root = merkle_root;
 
     Ok(())
 }
@@ -945,20 +944,19 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Payments accountant.
+    // - 1: Debt accountant.
     // - 2: Distribution.
     // - 3: Payer (funder of realloc lamports).
     // - 4: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
-    // Account 1 must be the payments accountant.
+    // Account 1 must be the debt accountant.
     //
-    // This method verifies that account 1 is the payments accountant and is a signer.
-    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
-        &mut accounts_iter,
-        Authority::PaymentsAccountant,
-    )?;
+    // This method verifies that account 1 is the debt accountant and is a
+    // signer.
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
 
     // Make sure the program is not paused.
     authorized_use.program_config.try_require_unpaused()?;
@@ -978,12 +976,12 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
         distribution.total_solana_validators / 8 + 1
     };
 
-    // Set the index of where to find the bits start to indicate which Solana
-    // validator payments have been processed.
-    distribution.processed_solana_validator_payments_start_index =
+    // Set the index of where to find the bits to indicate which Solana
+    // validator debt have been processed.
+    distribution.processed_solana_validator_debt_start_index =
         distribution.remaining_data.len() as u32;
-    distribution.processed_solana_validator_payments_end_index = distribution
-        .processed_solana_validator_payments_start_index
+    distribution.processed_solana_validator_debt_end_index = distribution
+        .processed_solana_validator_debt_start_index
         .saturating_add(additional_data_len);
 
     // Avoid borrowing while in mutable borrow state.
@@ -1146,10 +1144,11 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
         if additional_data_len == 1 { "" } else { "s" }
     );
 
-    // The rewards accountant can pay with another account. But most likely this account
-    // will be the same as the payments accountant. This account will need to be writable
-    // in order to transfer lamports to the payer (but we do not need to check this because
-    // the transfer CPI call will fail if this account is not writable).
+    // The rewards accountant can pay with another account. But most likely this
+    // account will be the same as the rewards accountant. This account will
+    // need to be writable in order to transfer lamports to the payer (but we do
+    // not need to check this because the transfer CPI call will fail if this
+    // account is not writable).
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let additional_lamports_for_distributing =
@@ -2120,7 +2119,7 @@ fn try_verify_distribution_merkle_root(
     kind: DistributionMerkleRootKind,
     proof: MerkleProof,
 ) -> ProgramResult {
-    msg!("Verify distribution payment");
+    msg!("Verify distribution merkle root");
 
     // Enforce that the merkle proof uses an indexed tree. This index will be
     // referenced later in this instruction processor.
@@ -2132,19 +2131,19 @@ fn try_verify_distribution_merkle_root(
         ZeroCopyAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     match kind {
-        DistributionMerkleRootKind::SolanaValidatorPayment(payment) => {
-            msg!("Solana validator payment {}", leaf_index);
+        DistributionMerkleRootKind::SolanaValidatorDebt(debt) => {
+            msg!("Solana validator debt {}", leaf_index);
 
             let computed_merkle_root =
-                proof.root_from_pod_leaf(&payment, Some(SolanaValidatorDebt::LEAF_PREFIX));
+                proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
 
-            if computed_merkle_root != distribution.solana_validator_payments_merkle_root {
+            if computed_merkle_root != distribution.solana_validator_debt_merkle_root {
                 msg!("Invalid computed merkle root: {}", computed_merkle_root);
                 return Err(ProgramError::InvalidInstructionData);
             }
 
-            msg!("  node_id: {}", payment.node_id);
-            msg!("  amount: {}", payment.amount);
+            msg!("  node_id: {}", debt.node_id);
+            msg!("  amount: {}", debt.amount);
         }
         DistributionMerkleRootKind::RewardShare(reward) => {
             msg!("Reward share {}", leaf_index);
@@ -2263,7 +2262,7 @@ fn try_pay_solana_validator_debt(
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    // We cannot pay Solana validator debt until the Payments Accountant has
+    // We cannot pay Solana validator debt until the debt accountant has
     // finalized the debt calculation.
     distribution.try_require_finalized_debt_calculation()?;
 
@@ -2272,15 +2271,14 @@ fn try_pay_solana_validator_debt(
     distribution.collected_solana_validator_payments += amount;
     distribution.solana_validator_payments_count += 1;
 
-    // This merkle root will be used to verify the payment after we determine
+    // This merkle root will be used to verify the debt after we determine
     // the debt has not already been paid.
-    let expected_merkle_root = distribution.solana_validator_payments_merkle_root;
+    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
 
     // Bits indicating whether debt has been paid for specific leaf indices are
     // stored in the distribution's remaining data.
-    let processed_start_index =
-        distribution.processed_solana_validator_payments_start_index as usize;
-    let processed_end_index = distribution.processed_solana_validator_payments_end_index as usize;
+    let processed_start_index = distribution.processed_solana_validator_debt_start_index as usize;
+    let processed_end_index = distribution.processed_solana_validator_debt_end_index as usize;
 
     try_process_remaining_data_leaf_index(
         &mut distribution.remaining_data[processed_start_index..processed_end_index],
@@ -2353,16 +2351,14 @@ fn try_forgive_solana_validator_debt(
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Payments accountant.
+    // - 1: Debt accountant.
     // - 2: Distribution.
     // - 3: Next distribution.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
-    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
-        &mut accounts_iter,
-        Authority::PaymentsAccountant,
-    )?;
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
 
     // Make sure the program is not paused.
     authorized_use.program_config.try_require_unpaused()?;
@@ -2371,23 +2367,22 @@ fn try_forgive_solana_validator_debt(
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    // We cannot pay Solana validator debt until the Payments Accountant has
-    // finalized the debt calculation.
+    // We cannot pay Solana validator debt until the accountant has finalized
+    // the debt calculation.
     distribution
         .try_require_finalized_debt_calculation()
         .inspect_err(|_| {
             msg!("Epoch {} has unfinalized debt", distribution.dz_epoch);
         })?;
 
-    // This merkle root will be used to verify the payment after we determine
+    // This merkle root will be used to verify the debt after we determine
     // the debt has not already been paid.
-    let expected_merkle_root = distribution.solana_validator_payments_merkle_root;
+    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
 
     // Bits indicating whether debt has been paid for specific leaf indices are
     // stored in the distribution's remaining data.
-    let processed_start_index =
-        distribution.processed_solana_validator_payments_start_index as usize;
-    let processed_end_index = distribution.processed_solana_validator_payments_end_index as usize;
+    let processed_start_index = distribution.processed_solana_validator_debt_start_index as usize;
+    let processed_end_index = distribution.processed_solana_validator_debt_end_index as usize;
 
     try_process_remaining_data_leaf_index(
         &mut distribution.remaining_data[processed_start_index..processed_end_index],
@@ -2899,7 +2894,7 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
 
 enum Authority {
     Admin,
-    PaymentsAccountant,
+    DebtAccountant,
     RewardsAccountant,
     ContributorManager,
     DoubleZeroLedgerSentinel,
@@ -2927,9 +2922,9 @@ impl Authority {
                     return Err(ProgramError::InvalidAccountData);
                 }
             }
-            Authority::PaymentsAccountant => {
-                if authority_info.key != &program_config.payments_accountant_key {
-                    msg!("Unauthorized payments accountant (account {})", index);
+            Authority::DebtAccountant => {
+                if authority_info.key != &program_config.debt_accountant_key {
+                    msg!("Unauthorized debt accountant (account {})", index);
                     return Err(ProgramError::InvalidAccountData);
                 }
             }
@@ -3162,8 +3157,7 @@ fn try_process_remaining_data_leaf_index(
 ) -> ProgramResult {
     let leaf_byte_index = leaf_index as usize / 8;
 
-    // First, we have to grab the relevant byte from the processed payments
-    //data.
+    // First, we have to grab the relevant byte from the processed data.
     let leaf_byte_ref = processed_leaf_data
         .get_mut(leaf_byte_index)
         .ok_or_else(|| {
@@ -3171,11 +3165,11 @@ fn try_process_remaining_data_leaf_index(
             ProgramError::InvalidInstructionData
         })?;
 
-    // Create a ByteFlag from the byte value to check the bit.
+    // Create ByteFlags from the byte value to check the bit.
     let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
 
-    // Then, we have to grab the relevant bit from the byte and check whether
-    // it is set already.
+    // We have to grab the relevant bit from the byte and check whether it is
+    // set already.
     let leaf_bit = leaf_index as usize % 8;
 
     if leaf_byte.bit(leaf_bit) {

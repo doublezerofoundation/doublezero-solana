@@ -47,8 +47,8 @@ pub struct ProgramConfig {
 
     pub admin_key: Pubkey,
 
-    /// Authority to determine the payments due for distributions.
-    pub payments_accountant_key: Pubkey,
+    /// Authority to determine the debt due for distributions.
+    pub debt_accountant_key: Pubkey,
 
     /// Authority to determine the rewards for contributors.
     pub rewards_accountant_key: Pubkey,
