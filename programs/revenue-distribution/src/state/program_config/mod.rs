@@ -59,11 +59,9 @@ pub struct ProgramConfig {
     /// Authority to allow access to the DoubleZero Ledger network.
     pub dz_ledger_sentinel_key: Pubkey,
 
-    /// The program allowed to CPI to this program to withdraw SOL to swap for 2Z. The Revenue
-    /// Distribution program trusts that the SOL/2Z Swap program will be depositing 2Z when it
-    /// withdraws SOL.
-    ///
-    /// If the setup ever becomes trust-less, the procedure to swap SOL to 2Z will have to change.
+    /// The program allowed to CPI to this program to withdraw SOL to swap for
+    /// 2Z. The Revenue Distribution program will be verifying that the SOL/2Z
+    /// Swap program will be transferring 2Z when it withdraws SOL.
     pub sol_2z_swap_program_id: Pubkey,
 
     pub distribution_parameters: DistributionParameters,
