@@ -207,7 +207,7 @@ async fn test_sweep_distribution_tokens() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Journal does not have enough swapped SOL to cover the SOL debt"
     );
 

@@ -174,11 +174,11 @@ async fn test_verify_distribution_merkle_root() {
         TransactionError::InstructionError(0, InstructionError::InvalidInstructionData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Solana validator debt 511"
     );
     assert_eq!(
-        program_logs.get(3).unwrap(),
+        program_logs.get(4).unwrap(),
         &format!("Program log: Invalid computed merkle root: {invalid_merkle_root}")
     );
 

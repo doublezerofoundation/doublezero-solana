@@ -123,7 +123,7 @@ async fn test_finalize_distribution_rewards() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution debt calculation is not finalized yet"
     );
 
@@ -141,7 +141,7 @@ async fn test_finalize_distribution_rewards() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Minimum epoch duration to finalize rewards is misconfigured"
     );
 
@@ -171,7 +171,7 @@ async fn test_finalize_distribution_rewards() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         &format!(
             "Program log: DZ epoch must be at least {} (currently {}) to finalize rewards",
             minimum_dz_epoch_to_finalize, program_config.next_dz_epoch
@@ -271,7 +271,7 @@ async fn test_finalize_distribution_rewards() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution rewards have already been finalized"
     );
 
@@ -284,7 +284,7 @@ async fn test_finalize_distribution_rewards() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution rewards have already been finalized"
     );
 }

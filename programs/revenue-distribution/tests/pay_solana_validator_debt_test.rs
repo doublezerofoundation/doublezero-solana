@@ -185,7 +185,7 @@ async fn test_pay_solana_validator_debt() {
             TransactionError::InstructionError(0, InstructionError::InvalidInstructionData)
         );
         assert_eq!(
-            program_logs.get(2).unwrap(),
+            program_logs.get(4).unwrap(),
             &format!("Program log: Invalid computed merkle root: {invalid_merkle_root}")
         );
 
@@ -209,7 +209,7 @@ async fn test_pay_solana_validator_debt() {
             TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
         );
         assert_eq!(
-            program_logs.get(2).unwrap(),
+            program_logs.get(4).unwrap(),
             "Program log: Insufficient funds in Solana validator deposit to pay debt"
         );
     }
@@ -313,11 +313,11 @@ async fn test_pay_solana_validator_debt() {
             TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
         );
         assert_eq!(
-            program_logs.get(2).unwrap(),
+            program_logs.get(4).unwrap(),
             &format!("Program log: Merkle leaf index {leaf_index} has already been processed")
         );
         assert_eq!(
-            program_logs.get(3).unwrap(),
+            program_logs.get(5).unwrap(),
             "Program log: Solana validator debt already processed"
         )
     }

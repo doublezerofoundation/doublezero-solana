@@ -169,7 +169,7 @@ async fn test_grant_access() {
         .get_balance(sentinel_signer.pubkey())
         .await
         .unwrap();
-    assert_eq!(sentinel_after_balance, 128 * 6_960 + access_fee); 
+    assert_eq!(sentinel_after_balance, 128 * 6_960 + access_fee);
 
     let access_request_info = test_setup
         .banks_client

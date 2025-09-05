@@ -30,10 +30,9 @@ use crate::{
         ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, find_swap_authority_address, find_withdraw_sol_authority_address,
-        CommunityBurnRateParameters, ContributorRewards, Distribution, Journal, JournalEntries,
-        PrepaidConnection, ProgramConfig, RecipientShare, RecipientShares, RelayParameters,
-        SolanaValidatorDeposit, SWAP_AUTHORITY_SEED_PREFIX, TOKEN_2Z_PDA_SEED_PREFIX,
+        self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
+        JournalEntries, PrepaidConnection, ProgramConfig, RecipientShare, RecipientShares,
+        RelayParameters, SolanaValidatorDeposit,
     },
     types::{BurnRate, ByteFlags, DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, ValidatorFee},
     DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
@@ -50,7 +49,7 @@ fn try_process_instruction(
         return Err(ProgramError::IncorrectProgramId);
     }
 
-    // NOTE: Instruction data that happens to deserialize to any of the enum\
+    // NOTE: Instruction data that happens to deserialize to any of the enum
     // variants and has trailing data constitutes invalid instruction data.
     let ix_data =
         BorshDeserialize::try_from_slice(data).map_err(|_| ProgramError::InvalidInstructionData)?;
@@ -146,7 +145,7 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Initialize program");
 
     // We expect the following accounts for this instruction:
-    // - 0: Payer (funder for new accounts).
+    // - 0: Payer.
     // - 1: New program config.
     // - 2: New reserve 2Z.
     // - 3: SPL 2Z mint.
@@ -154,21 +153,20 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
     // - 5: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be a signer and writable (i.e., payer) because it will be
-    // sending lamports to the new config account when the system program
-    // allocates data to it. But because the create-account instruction requires
-    // that this account is a signer and is writable, we do not need to check
-    // these fields explicitly in its account info.
+    // Account 0 must be a signer and writable because it will send lamports to
+    // the new config account and reserve 2Z account. We do not check these
+    // fields because the create-account workflow requires that this account is
+    // writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 1 must be the new program config account. This account should not
-    // exist yet.
+    // Account 1 must be the new program config account. The create-account
+    // workflow requires that this account does not exist yet and is writable.
     let (account_index, new_program_config_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let (expected_program_config_key, program_config_bump) = ProgramConfig::find_address();
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if new_program_config_info.key != &expected_program_config_key {
         msg!(
             "Invalid seeds for program config (account {})",
@@ -177,6 +175,8 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidSeeds);
     }
 
+    // Rent sysvar will be used to create the new program config account and
+    // the new reserve 2Z token account.
     let rent_sysvar = Rent::get().unwrap();
 
     try_create_account(
@@ -195,8 +195,8 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         },
     )?;
 
-    // Account 2 must be the new reserve 2Z token account. This account should
-    // not exist yet.
+    // Account 2 must be the new reserve 2Z token account. The create-account
+    // workflow requires that this account does not exist yet and is writable.
     let (_, new_reserve_2z_info, reserve_2z_bump) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &expected_program_config_key,
@@ -204,10 +204,12 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         None, // bump_seed
     )?;
 
-    // Account 3 must be the 2Z mint.
+    // Account 3 must be the 2Z mint. We need this account to initialize the new
+    // reserve 2Z token account.
     try_next_2z_mint_info(&mut accounts_iter)?;
 
-    // Account 4 must be the SPL Token program.
+    // Account 4 must be the SPL Token program, which will initialize the new
+    // reserve 2Z token account.
     try_next_token_program_info(&mut accounts_iter)?;
 
     try_create_token_account(
@@ -215,7 +217,7 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
         Invoker::Pda {
             key: new_reserve_2z_info.key,
             signer_seeds: &[
-                TOKEN_2Z_PDA_SEED_PREFIX,
+                state::TOKEN_2Z_PDA_SEED_PREFIX,
                 expected_program_config_key.as_ref(),
                 &[reserve_2z_bump],
             ],
@@ -243,18 +245,20 @@ fn try_set_admin(accounts: &[AccountInfo], admin_key: Pubkey) -> ProgramResult {
     msg!("Set admin");
 
     // We expect the following accounts for this instruction:
-    // - 0: This program's program data account (BPF Loader Upgradeable
-    // program).
-    // - 1: The program's owner (i.e., upgrade authority).
+    // - 0: Program data.
+    // - 1: Upgrade authority.
     // - 2: Program config.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program data belonging to this program.
-    // Account 1 must be the owner of the program data (i.e., the upgrade
-    // authority).
+    // Account 1 must be the upgrade authority.
+    //
+    // This call ensures that the upgrade authority is a signer and is the
+    // same authority encoded in the program data.
     UpgradeAuthority::try_next_accounts(&mut accounts_iter, &ID)?;
 
-    // Account 2 must be the program config account.
+    // Account 2 must be the program config. Ensure it is writable so we can
+    // update the admin key.
     let mut program_config =
         ZeroCopyMutAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
@@ -272,6 +276,11 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
     // - 1: Admin.
     let mut accounts_iter = accounts.iter().enumerate();
 
+    // Account 0 must be the program config.
+    // Account 1 must be the admin.
+    //
+    // This call ensures that the admin is a signer and is the same admin
+    // encoded in the program config.
     let authorized_use =
         VerifiedProgramAuthorityMut::try_next_accounts(&mut accounts_iter, Authority::Admin)?;
     let mut program_config = authorized_use.program_config;
@@ -308,9 +317,10 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
 
             // The SOL/2Z swap program will use its withdraw SOL authority to
             // invoke the withdraw SOL instruction. We cache the bump seed for
-            // the withdraw SOL authority to validate the authority account.
+            // the withdraw SOL authority to validate the authority account
+            // when the withdraw SOL instruction is invoked.
             let (withdraw_sol_authority_key, withdraw_sol_authority_bump) =
-                find_withdraw_sol_authority_address(&sol_2z_swap_program_id);
+                state::find_withdraw_sol_authority_address(&sol_2z_swap_program_id);
             msg!(
                 "Established withdraw SOL authority: {}",
                 withdraw_sol_authority_key
@@ -404,17 +414,17 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             })?;
 
             match initial_rate {
-                // We only allow specifying the initial rate if the accountant
-                // has not initialized any distributions yet.
+                // We only allow specifying the initial rate if the debt
+                // accountant has not initialized any distributions yet.
                 Some(initial_rate) => {
                     // When the accountant initializes a new distribution, the
                     // initialize-distribution instruction first checks whether
                     // the last community burn rate is non-zero. If there is a
                     // non-zero value, a new community burn rate will be
-                    // calculated for this DZ epoch. This updated community burn
-                    // rate will be saved to the program config.
-                    // Finally, the program config's next DZ epoch will increase
-                    // by one.
+                    // calculated for this DZ epoch.
+                    //
+                    // This updated community burn rate will be saved to the
+                    // program config.
                     if program_config.next_dz_epoch != 0 {
                         msg!(
                             "Cannot initialize community burn rate parameters if not zero DZ epoch"
@@ -485,8 +495,6 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             }
         }
         ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(relay_lamports) => {
-            // The specified lamports must be greater than the cost of a
-            // transaction signature.
             if relay_lamports < RelayParameters::MIN_LAMPORTS {
                 msg!("Relay lamports must be greater than the cost of a transaction signature");
                 return Err(ProgramError::InvalidInstructionData);
@@ -501,8 +509,6 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 .prepaid_connection_termination_lamports = relay_lamports;
         }
         ProgramConfiguration::DistributeRewardsRelayLamports(relay_lamports) => {
-            // The specified lamports must be greater than the cost of a
-            // transaction signature.
             if relay_lamports < RelayParameters::MIN_LAMPORTS {
                 msg!("Relay lamports must be greater than the cost of a transaction signature");
                 return Err(ProgramError::InvalidInstructionData);
@@ -515,6 +521,12 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             program_config.relay_parameters.distribute_rewards_lamports = relay_lamports;
         }
         ProgramConfiguration::MinimumEpochDurationToFinalizeRewards(epoch_duration) => {
+            // If the epoch duration is zero, we treat this as unset.
+            if epoch_duration == 0 {
+                msg!("Minimum epoch duration to finalize rewards is zero");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
             msg!(
                 "Set distribution_parameters.minimum_epoch_duration_to_finalize_rewards: {}",
                 epoch_duration
@@ -532,7 +544,7 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Initialize journal");
 
     // We expect the following accounts for this instruction:
-    // - 0: Payer (funder for new accounts).
+    // - 0: Payer.
     // - 1: New journal.
     // - 2: New journal's 2Z token account.
     // - 3: 2Z mint.
@@ -540,33 +552,33 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     // - 5: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be a signer and writable (i.e., payer) because it will be
-    // sending lamports to the new journal account when the system program
-    // allocates data to it. But because the create-account instruction requires
-    // that this account is a signer and is writable, we do not need to
-    // explicitly check these fields in its account info.
+    // Account 0 must be a signer and writable because it will send lamports to
+    // the new journal account and journal's 2Z token account. We do not check
+    // these fields because the create-account workflow requires that this
+    // account is writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 1 must be the new journal account. This account should not exist
-    // yet.
+    // Account 1 must be the new journal account. The create-account workflow
+    // requires that this account does not exist yet and is writable.
     let (account_index, new_journal_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let (expected_journal_key, journal_bump) = Journal::find_address();
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if new_journal_info.key != &expected_journal_key {
         msg!("Invalid seeds for journal (account {})", account_index);
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // We declare this because Rent will be used multiple times in this
-    // instruction.
+    // Rent sysvar will be used to create the new journal account and the new
+    // journal's 2Z token account.
     let rent_sysvar = Rent::get().unwrap();
 
     // NOTE: We are creating the journal account with the max allowable size for
     // CPI (10kb). By doing this, we avoid having to realloc when the journal
-    // entries size changes.
+    // entries size changes. This pre-allocation strategy saves compute units
+    // and prevents potential realloc failures.
     try_create_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
@@ -583,8 +595,8 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         },
     )?;
 
-    // Account 2 must be the new 2Z token account. This account should not exist
-    // yet.
+    // Account 2 must be the new 2Z token account. The create-account workflow
+    // requires that this account does not exist yet and is writable.
     let (_, new_journal_2z_token_pda_info, journal_2z_token_pda_bump) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &expected_journal_key,
@@ -592,10 +604,12 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         None, // bump_seed
     )?;
 
-    // Account 3 must be the 2Z mint.
+    // Account 3 must be the 2Z mint. We need this account to initialize the new
+    // journal's 2Z token account.
     try_next_2z_mint_info(&mut accounts_iter)?;
 
-    // Account 4 must be the SPL Token program.
+    // Account 4 must be the SPL Token program, which will initialize the new
+    // journal's 2Z token account.
     try_next_token_program_info(&mut accounts_iter)?;
 
     try_create_token_account(
@@ -603,7 +617,7 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
         Invoker::Pda {
             key: new_journal_2z_token_pda_info.key,
             signer_seeds: &[
-                TOKEN_2Z_PDA_SEED_PREFIX,
+                state::TOKEN_2Z_PDA_SEED_PREFIX,
                 expected_journal_key.as_ref(),
                 &[journal_2z_token_pda_bump],
             ],
@@ -632,8 +646,15 @@ fn try_configure_journal(accounts: &[AccountInfo], setting: JournalConfiguration
     // - 2: Journal.
     let mut accounts_iter = accounts.iter().enumerate();
 
+    // Account 0 must be the program config.
+    // Account 1 must be the admin.
+    //
+    // This call ensures that the admin is a signer and is the same admin
+    // encoded in the program config.
     VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Admin)?;
 
+    // Account 2 must be the journal. Ensure it is writable so we can update its
+    // prepaid connection parameters.
     let mut journal =
         ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
@@ -698,14 +719,14 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Accountant.
-    // - 2: Payer (funder for new accounts).
+    // - 1: Debt accountant.
+    // - 2: Payer.
     // - 3: New distribution.
     // - 4: New distribution's 2Z token account.
     // - 5: 2Z mint.
     // - 6: SPL Token program.
     // - 7: Journal.
-    // - 8: Journal 2Z token account.
+    // - 8: Journal's 2Z token account.
     // - 9: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
@@ -735,21 +756,29 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Account 2 must be a signer and writable (i.e., payer) because it will be
-    // sending lamports to the new journal account when the system program
-    // allocates data to it. But because the create-account instruction requires
-    // that this account is a signer and is writable, we do not need to
-    //explicitly check these fields in its account info.
+    // Account 2 must be a signer and writable because it will send lamports to
+    // the new distribution account and distribution's 2Z token account. We do
+    // not check these fields because the create-account workflow requires that
+    // this account is writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 3 must be the new distribution account. This account should not
-    // exist yet.
+    // Account 3 must be the new distribution account. The create-account
+    // workflow requires that this account does not exist yet and is writable.
     let (account_index, new_distribution_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // We will need this DZ epoch for the distribution account.
     let dz_epoch = program_config.next_dz_epoch;
+    let (expected_distribution_key, distribution_bump) = Distribution::find_address(dz_epoch);
 
+    // Enforce this account location and seed validity.
+    if new_distribution_info.key != &expected_distribution_key {
+        msg!("Invalid seeds for distribution (account {})", account_index);
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    // Calculate the community burn rate for this distribution based on the
+    // configured parameters (initial rate, limit, slope, etc.)
     let community_burn_rate = program_config
         .distribution_parameters
         .community_burn_rate_parameters
@@ -777,14 +806,6 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     // We no longer need the program config for anything.
     drop(program_config);
 
-    let (expected_distribution_key, distribution_bump) = Distribution::find_address(dz_epoch);
-
-    // Enforce this account location.
-    if new_distribution_info.key != &expected_distribution_key {
-        msg!("Invalid seeds for distribution (account {})", account_index);
-        return Err(ProgramError::InvalidSeeds);
-    }
-
     // We declare this because Rent will be used multiple times in this
     // instruction.
     let rent_sysvar = Rent::get().unwrap();
@@ -809,8 +830,8 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         },
     )?;
 
-    // Account 2 must be the new 2Z token account. This account should not exist
-    // yet.
+    // Account 4 must be the new 2Z token account. The create-account workflow
+    // requires that this account does not exist yet and is writable.
     let (_, new_distribution_2z_token_pda_info, distribution_2z_token_pda_bump) =
         try_next_2z_token_pda_info(
             &mut accounts_iter,
@@ -819,10 +840,10 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
             None, // bump_seed
         )?;
 
-    // Account 3 must be the 2Z mint.
+    // Account 5 must be the 2Z mint.
     try_next_2z_mint_info(&mut accounts_iter)?;
 
-    // Account 4 must be the SPL Token program.
+    // Account 6 must be the SPL Token program.
     try_next_token_program_info(&mut accounts_iter)?;
 
     try_create_token_account(
@@ -830,7 +851,7 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         Invoker::Pda {
             key: new_distribution_2z_token_pda_info.key,
             signer_seeds: &[
-                TOKEN_2Z_PDA_SEED_PREFIX,
+                state::TOKEN_2Z_PDA_SEED_PREFIX,
                 expected_distribution_key.as_ref(),
                 &[distribution_2z_token_pda_bump],
             ],
@@ -877,7 +898,8 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
             // Update the journal account with the modified entries.
             try_serialize_journal_entries(&journal_entries, &mut journal)?;
 
-            // This operation should be safe. u32::MAX * 10 ^ 8 < u64::MAX
+            // Convert the entry amount to the actual token amount using the mint's decimals.
+            // This operation should be safe: u32::MAX * 10^8 < u64::MAX
             let transfer_amount = entry.checked_amount(DOUBLEZERO_MINT_DECIMALS).unwrap();
 
             // We are transferring between token PDAs. No need to check mint's
@@ -926,8 +948,8 @@ fn try_configure_distribution_debt(
     // Account 0 must be the program config.
     // Account 1 must be the debt accountant.
     //
-    // This method verifies that account 1 is the debt accountant and is a
-    // signer.
+    // This call ensures that the debt accountant is a signer and is the same
+    // debt accountant encoded in the program config.
     let authorized_use =
         VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
 
@@ -937,6 +959,7 @@ fn try_configure_distribution_debt(
     // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     distribution.try_require_unfinalized_debt_calculation()?;
 
@@ -966,8 +989,8 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
     // Account 0 must be the program config.
     // Account 1 must be the debt accountant.
     //
-    // This method verifies that account 1 is the debt accountant and is a
-    // signer.
+    // This call ensures that the debt accountant is a signer and is the same
+    // debt accountant encoded in the program config.
     let authorized_use =
         VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
 
@@ -977,6 +1000,7 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
     // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     distribution.try_require_unfinalized_debt_calculation()?;
     distribution.set_is_debt_calculation_finalized(true);
@@ -1011,6 +1035,8 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
         .minimum_balance(new_data_len)
         .saturating_sub(distribution_info.lamports());
 
+    // Account 3 must be the payer. In order to transfer lamports from the payer
+    // to the distribution, this account must be writable.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let transfer_ix = system_instruction::transfer(
@@ -1046,8 +1072,8 @@ fn try_configure_distribution_rewards(
     // Account 0 must be the program config.
     // Account 1 must be the rewards accountant.
     //
-    // This method verifies that account 1 is the rewards accountant and is a
-    // signer.
+    // This call ensures that the rewards accountant is a signer and is the same
+    // rewards accountant encoded in the program config.
     let authorized_use = VerifiedProgramAuthority::try_next_accounts(
         &mut accounts_iter,
         Authority::RewardsAccountant,
@@ -1059,6 +1085,7 @@ fn try_configure_distribution_rewards(
     // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // If the distribution rewards calculation has already been finalized,
     // we have nothing to do.
@@ -1090,9 +1117,10 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     // Make sure the program is not paused.
     program_config.try_require_unpaused()?;
 
-    // Account 0 must be the distribution.
+    // Account 1 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // If the distribution rewards calculation has already been finalized,
     // we have nothing to do.
@@ -1124,10 +1152,13 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a contributor has distributed rewards.
+    // Each bit represents one contributor, so we need ceil(contributors/8)
+    // bytes.
     let total_contributors = distribution.total_contributors;
     let additional_data_len = if total_contributors % 8 == 0 {
         total_contributors / 8
     } else {
+        // Round up for partial byte.
         total_contributors / 8 + 1
     };
 
@@ -1161,10 +1192,9 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     );
 
     // The rewards accountant can pay with another account. But most likely this
-    // account will be the same as the rewards accountant. This account will
-    // need to be writable in order to transfer lamports to the payer (but we do
-    // not need to check this because the transfer CPI call will fail if this
-    // account is not writable).
+    // account will be the same as the rewards accountant. In order to transfer
+    // lamports from the payer to the distribution, this account must be
+    // writable.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let additional_lamports_for_distributing =
@@ -1226,6 +1256,7 @@ fn try_distribute_rewards(
     // Account 1 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // Make sure the distribution rewards calculation is finalized.
     if !distribution.is_rewards_calculation_finalized() {
@@ -1240,7 +1271,8 @@ fn try_distribute_rewards(
     }
 
     // Bits indicating whether rewards have been distributed for specific leaf
-    // indices are stored in the distribution's remaining data.
+    // indices are stored in the distribution's remaining data as a bitfield.
+    // Each bit represents one leaf: 1 = distributed, 0 = not yet distributed.
     let processed_start_index = distribution.processed_rewards_start_index as usize;
     let processed_end_index = distribution.processed_rewards_end_index as usize;
 
@@ -1254,6 +1286,7 @@ fn try_distribute_rewards(
 
     let contributor_rewards =
         ZeroCopyAccount::<ContributorRewards>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("Service key: {}", contributor_rewards.service_key);
 
     let reward_share = RewardShare::new(
         contributor_rewards.service_key,
@@ -1304,6 +1337,7 @@ fn try_distribute_rewards(
     // Account 6 must be the SPL Token program.
     try_next_token_program_info(&mut accounts_iter)?;
 
+    // Split the reward into two parts: the amount to burn and the amount to distribute.
     // This operation is safe to unwrap because under the hood, the unit share
     // and economic burn rate are checked, but these values do not need to be
     // checked since they were already checked in the `RewardShare::new` call.
@@ -1343,6 +1377,8 @@ fn try_distribute_rewards(
             return Err(ProgramError::InvalidAccountData);
         }
 
+        // Calculate this recipient's portion of the remaining share amount
+        // based on their proportional share percentage
         let recipient_share_amount = share.mul_scalar(remaining_share_amount);
         total_transferred_share_amount += recipient_share_amount;
 
@@ -1364,7 +1400,8 @@ fn try_distribute_rewards(
         );
     }
 
-    // Add any dust to the burn amount.
+    // Add any dust (rounding remainder) to the burn amount to ensure all tokens
+    // are accounted for.
     burn_share_amount += remaining_share_amount - total_transferred_share_amount;
 
     distribution.distributed_2z_amount += total_transferred_share_amount;
@@ -1419,7 +1456,7 @@ fn try_initialize_prepaid_connection(
     // - 4: Reserve 2Z.
     // - 5: Token transfer authority.
     // - 6: SPL Token program.
-    // - 7: Payer (funder for new accounts).
+    // - 7: Payer.
     // - 8: New prepaid connection.
     // - 9: System program.
     let mut accounts_iter = accounts.iter().enumerate();
@@ -1445,15 +1482,15 @@ fn try_initialize_prepaid_connection(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Account 1 must be the source of 2Z tokens. The activation amount will be
+    // Account 2 must be the source of 2Z tokens. The activation amount will be
     // burned from this token account.
     let (_, src_2z_token_account_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 2 must be the 2Z mint.
+    // Account 3 must be the 2Z mint.
     try_next_2z_mint_info(&mut accounts_iter)?;
 
-    // Account 3 must be the reserve 2Z token account. The activation fees are
+    // Account 4 must be the reserve 2Z token account. The activation fees are
     // diverted to this token account effectively to burn them.
     let (_, reserve_2z_info, _) = try_next_2z_token_pda_info(
         &mut accounts_iter,
@@ -1462,12 +1499,12 @@ fn try_initialize_prepaid_connection(
         Some(program_config.reserve_2z_bump_seed),
     )?;
 
-    // Account 4 must be the token transfer authority. The token transfer will
+    // Account 5 must be the token transfer authority. The token transfer will
     // fail if this account is not a signer.
     let (_, token_transfer_authority_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 5 must be the SPL Token program.
+    // Account 6 must be the SPL Token program.
     try_next_token_program_info(&mut accounts_iter)?;
 
     // Transfer the activation fee to the reserve account.
@@ -1485,21 +1522,21 @@ fn try_initialize_prepaid_connection(
 
     invoke_signed_unchecked(&token_transfer_checked_ix, accounts, &[])?;
 
-    // Account 6 must be a signer and writable (i.e., payer) because it will be
-    // sending lamports to the new prepaid connection account when the system
-    // program allocates data to it. But because the create-account instruction
-    // requires that this account is a signer and is writable, we do not need to
-    // explicitly check these fields in its account info.
+    // Account 7 must be a signer and writable because it will send lamports to
+    // the new prepaid connection account. We do not check these fields
+    // because the create-account workflow requires that this account is
+    // writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 7 must be the new prepaid connection account. This account should not exist yet.
+    // Account 8 must be the new prepaid connection account. The create-account
+    // workflow requires that this account does not exist yet and is writable.
     let (account_index, new_prepaid_connection_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let (expected_prepaid_connection_key, prepaid_connection_bump) =
         PrepaidConnection::find_address(&user_key);
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if new_prepaid_connection_info.key != &expected_prepaid_connection_key {
         msg!(
             "Invalid seeds for prepaid connection (account {})",
@@ -1525,7 +1562,8 @@ fn try_initialize_prepaid_connection(
         Default::default(),
     )?;
 
-    // Finalize initialize the prepaid connection with the user and beneficiary keys.
+    // Finalize the prepaid connection with the user and termination beneficiary
+    // keys.
     let (mut prepaid_connection, _) =
         zero_copy::try_initialize::<PrepaidConnection>(new_prepaid_connection_info, None)?;
 
@@ -1551,22 +1589,23 @@ fn try_grant_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResul
     // Account 0 must be the program config.
     // Account 1 must be the DoubleZero ledger sentinel.
     //
-    // This method verifies that account 1 is the DoubleZero ledger sentinel and
-    // is a signer.
-    VerifiedProgramAuthority::try_next_accounts(
+    // This call ensures that the DoubleZero ledger sentinel is a signer and is
+    // the same sentinel encoded in the program config.
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
         &mut accounts_iter,
         Authority::DoubleZeroLedgerSentinel,
     )?;
 
-    // TODO: Do we want to check if the program is paused?
+    // Make sure the program is not paused.
+    authorized_use.program_config.try_require_unpaused()?;
 
     // Account 2 must be the prepaid connection. The access granted flag will be
     // set to true by the end of this instruction.
     let mut prepaid_connection =
         ZeroCopyMutAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("User key: {}", prepaid_connection.user_key);
 
     prepaid_connection.set_has_access_granted(true);
-    msg!("Granted {} access", prepaid_connection.user_key);
 
     Ok(())
 }
@@ -1586,20 +1625,24 @@ fn try_deny_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResult
     // Account 0 must be the program config.
     // Account 1 must be the DoubleZero ledger sentinel.
     //
-    // This method verifies that account 1 is the DoubleZero ledger sentinel and
-    // is a signer.
+    // This call ensures that the DoubleZero ledger sentinel is a signer and is the
+    // same sentinel encoded in the program config.
     let authorized_use = VerifiedProgramAuthority::try_next_accounts(
         &mut accounts_iter,
         Authority::DoubleZeroLedgerSentinel,
     )?;
 
-    // TODO: Do we want to check if the program is paused?
+    let program_config = authorized_use.program_config;
+
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
 
     // Account 2 must be the prepaid connection. This account will be closed by
     // sending termination relay lamports to the sentinel and remaining rent
     // lamports to the termination beneficiary key.
     let prepaid_connection =
         ZeroCopyAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("User key: {}", prepaid_connection.user_key);
 
     // Revert if we try to deny access to a prepaid connection that already has
     // access. This check also covers the case when the prepaid connection has
@@ -1608,8 +1651,6 @@ fn try_deny_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResult
         msg!("Prepaid connection already has access");
         return Err(ProgramError::InvalidAccountData);
     }
-
-    let program_config = authorized_use.program_config;
 
     // Account 3 must be the reserve 2Z token account. The activation cost will
     // be transferred from this account back to the activation funder.
@@ -1690,7 +1731,6 @@ fn try_deny_prepaid_connection_access(accounts: &[AccountInfo]) -> ProgramResult
     // connection will be closed.
     **prepaid_connection_info_lamports = 0;
 
-    msg!("Deny {} access", prepaid_connection.user_key);
     msg!(
         "Return {} 2Z tokens to {}",
         activation_cost,
@@ -1755,6 +1795,7 @@ fn try_load_prepaid_connection(
     // DZ epoch using the current DZ epoch that this account is valid through.
     let mut prepaid_connection =
         ZeroCopyMutAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("User key: {}", prepaid_connection.user_key);
 
     // Make sure the prepaid connection has access to the DoubleZero Ledger
     // network.
@@ -1763,11 +1804,12 @@ fn try_load_prepaid_connection(
         return Err(ProgramError::InvalidAccountData);
     }
 
+    // Determine the starting point for the new prepaid period.
     // If the prepaid connection was freshly created, the valid-through DZ epoch
     // will be zero, so this value will default to the program config's next DZ
     // epoch. But if service was already prepaid up through some specified DZ
     // epoch beyond the program config's next DZ epoch, the service's DZ epoch
-    // will be used as a starting point.
+    // will be used as a starting point to allow extending existing connections.
     let next_dz_epoch = prepaid_connection
         .checked_valid_through_dz_epoch()
         .map(|epoch| epoch.saturating_add_duration(1))
@@ -1901,6 +1943,9 @@ fn try_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResult {
     let program_config =
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
+
     let termination_relay_lamports = u64::from(
         program_config
             .relay_parameters
@@ -1914,6 +1959,7 @@ fn try_terminate_prepaid_connection(accounts: &[AccountInfo]) -> ProgramResult {
 
     let prepaid_connection =
         ZeroCopyAccount::<PrepaidConnection>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("User key: {}", prepaid_connection.user_key);
 
     if !prepaid_connection.has_paid() {
         msg!("Prepaid connection has not been paid yet");
@@ -1992,27 +2038,26 @@ fn try_initialize_contributor_rewards(
     msg!("Initialize contributor rewards");
 
     // We expect the following accounts for this instruction:
-    // - 0: Payer (funder for new accounts).
+    // - 0: Payer.
     // - 1: New contributor rewards.
     // - 2: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be a signer and writable (i.e., payer) because it will be
-    // sending lamports to the new contributor rewards account when the system
-    // program allocates data to it. But because the create-account instruction
-    // requires that this account is a signer and is writable, we do not need to
-    // explicitly check these fields in its account info.
+    // Account 0 must be a signer and writable because it will send lamports to
+    // the new contributor rewards account. We do not check these fields
+    // because the create-account workflow requires that this account is
+    // writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    // Account 1 must be the new contributor rewards account. This account
-    // should not exist yet.
+    // Account 1 must be the new contributor rewards account. The create-account
+    // workflow requires that this account does not exist yet and is writable.
     let (account_index, new_contributor_rewards_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     let (expected_contributor_rewards_key, contributor_rewards_bump) =
         ContributorRewards::find_address(&service_key);
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if new_contributor_rewards_info.key != &expected_contributor_rewards_key {
         msg!(
             "Invalid seeds for contributor rewards (account {})",
@@ -2059,8 +2104,8 @@ fn try_set_rewards_manager(accounts: &[AccountInfo], rewards_manager_key: Pubkey
     // Account 0 must be the program config.
     // Account 1 must be the contributor manager.
     //
-    // This method verifies that account 1 is the contributor manager and is a
-    // signer.
+    // This call ensures that the contributor manager is a signer and is the
+    // same contributor manager encoded in the program config.
     let authorized_use = VerifiedProgramAuthority::try_next_accounts(
         &mut accounts_iter,
         Authority::ContributorManager,
@@ -2072,6 +2117,7 @@ fn try_set_rewards_manager(accounts: &[AccountInfo], rewards_manager_key: Pubkey
     // Account 2 must be the contributor rewards.
     let mut contributor_rewards =
         ZeroCopyMutAccount::<ContributorRewards>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("Service key: {}", contributor_rewards.service_key);
 
     if contributor_rewards.is_set_rewards_manager_blocked() {
         msg!("Blocked");
@@ -2106,6 +2152,7 @@ fn try_configure_contributor_rewards(
     // Account 1 must be the contributor rewards.
     let mut contributor_rewards =
         ZeroCopyMutAccount::<ContributorRewards>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("Service key: {}", contributor_rewards.service_key);
 
     // Account 2 must be the rewards manager.
     let (account_index, rewards_manager_info) = try_next_enumerated_account(
@@ -2159,8 +2206,10 @@ fn try_verify_distribution_merkle_root(
 
     // We expect only the distribution account for this instruction.
     let mut accounts_iter = accounts.iter().enumerate();
+
     let distribution =
         ZeroCopyAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     match kind {
         DistributionMerkleRootKind::SolanaValidatorDebt(debt) => {
@@ -2219,7 +2268,8 @@ fn try_initialize_solana_validator_deposit(
     // - 2: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be the new Solana validator deposit.
+    // Account 0 must be the new Solana validator deposit. The create-account
+    // workflow requires that this account does not exist yet and is writable.
     let (account_index, new_solana_validator_deposit_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
@@ -2235,7 +2285,10 @@ fn try_initialize_solana_validator_deposit(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Account 1 must be the payer.
+    // Account 1 must be a signer and writable because it will send lamports to
+    // the new Solana validator deposit account. We do not check these fields
+    // because the create-account workflow requires that this account is
+    // writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     try_create_account(
@@ -2293,6 +2346,7 @@ fn try_pay_solana_validator_debt(
     // Account 1 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // We cannot pay Solana validator debt until the debt accountant has
     // finalized the debt calculation.
@@ -2312,6 +2366,13 @@ fn try_pay_solana_validator_debt(
     let processed_start_index = distribution.processed_solana_validator_debt_start_index as usize;
     let processed_end_index = distribution.processed_solana_validator_debt_end_index as usize;
 
+    // Account 2 must be the Solana validator deposit.
+    let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
+        &mut accounts_iter,
+        Some(&ID),
+    )?;
+    msg!("Node ID: {}", solana_validator_deposit.node_id);
+
     try_process_remaining_data_leaf_index(
         &mut distribution.remaining_data[processed_start_index..processed_end_index],
         leaf_index,
@@ -2319,12 +2380,6 @@ fn try_pay_solana_validator_debt(
     .inspect_err(|_| {
         msg!("Solana validator debt already processed");
     })?;
-
-    // Account 2 must be the Solana validator deposit.
-    let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
-        &mut accounts_iter,
-        Some(&ID),
-    )?;
 
     let debt = SolanaValidatorDebt {
         node_id: solana_validator_deposit.node_id,
@@ -2398,6 +2453,7 @@ fn try_forgive_solana_validator_debt(
     // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // We cannot pay Solana validator debt until the accountant has finalized
     // the debt calculation.
@@ -2439,6 +2495,7 @@ fn try_forgive_solana_validator_debt(
     // current distribution's epoch.
     let mut next_distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("Next DZ epoch: {}", next_distribution.dz_epoch);
 
     if next_distribution.dz_epoch <= distribution.dz_epoch {
         msg!("Next distribution's epoch must be ahead of the current distribution's epoch");
@@ -2451,7 +2508,7 @@ fn try_forgive_solana_validator_debt(
         .try_require_has_not_swept_2z_tokens()
         .inspect_err(|_| {
             msg!(
-                "Epoch {} has already swept 2Z tokens",
+                "Next epoch {} has already swept 2Z tokens",
                 next_distribution.dz_epoch
             );
         })?;
@@ -2461,7 +2518,10 @@ fn try_forgive_solana_validator_debt(
     next_distribution
         .try_require_finalized_debt_calculation()
         .inspect_err(|_| {
-            msg!("Epoch {} has unfinalized debt", next_distribution.dz_epoch);
+            msg!(
+                "Next epoch {} has unfinalized debt",
+                next_distribution.dz_epoch
+            );
         })?;
 
     // Update the uncollectible SOL debt amount of the next distribution.
@@ -2496,7 +2556,7 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Payer (funder for new accounts).
+    // - 1: Payer.
     // - 2: Swap authority.
     // - 3: New swap destination 2Z token account.
     // - 4: 2Z mint.
@@ -2508,11 +2568,10 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
     let mut program_config =
         ZeroCopyMutAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    // Account 1 must be a signer and writable (i.e., payer) because it will be
-    // sending lamports to the new journal account when the system program
-    // allocates data to it. But because the create-account instruction requires
-    // that this account is a signer and is writable, we do not need to
-    // explicitly check these fields in its account info.
+    // Account 1 must be a signer and writable because it will send lamports to
+    // the new swap destination 2Z token account. We do not check these fields
+    // because the create-account workflow requires that this account is
+    // writable and a signer.
     let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // Account 2 must be the swap authority. We do not store any data in this
@@ -2520,10 +2579,10 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
     let (account_index, swap_authority_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    let (expected_swap_authority_key, swap_authority_bump) = find_swap_authority_address();
+    let (expected_swap_authority_key, swap_authority_bump) = state::find_swap_authority_address();
     program_config.swap_authority_bump_seed = swap_authority_bump;
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if swap_authority_info.key != &expected_swap_authority_key {
         msg!(
             "Invalid seeds for swap authority (account {})",
@@ -2532,8 +2591,9 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Account 3 must be the new swap destination 2Z token account. This account
-    // should not exist yet.
+    // Account 3 must be the new swap destination 2Z token account. The
+    // create-account workflow requires that this account does not exist yet and
+    // is writable.
     let (_, new_swap_destination_2z_info, swap_destination_2z_bump) = try_next_2z_token_pda_info(
         &mut accounts_iter,
         &expected_swap_authority_key,
@@ -2553,7 +2613,7 @@ fn try_initialize_swap_destination(accounts: &[AccountInfo]) -> ProgramResult {
         Invoker::Pda {
             key: new_swap_destination_2z_info.key,
             signer_seeds: &[
-                TOKEN_2Z_PDA_SEED_PREFIX,
+                state::TOKEN_2Z_PDA_SEED_PREFIX,
                 expected_swap_authority_key.as_ref(),
                 &[swap_destination_2z_bump],
             ],
@@ -2594,6 +2654,7 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
     // Account 1 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // Make sure the distribution has not already swept 2Z tokens.
     distribution.try_require_has_not_swept_2z_tokens()?;
@@ -2729,9 +2790,9 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
     let (account_index, swap_authority_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
-    let (expected_swap_authority_key, swap_authority_bump) = find_swap_authority_address();
+    let expected_swap_authority_key = program_config.checked_swap_authority_address().unwrap();
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if swap_authority_info.key != &expected_swap_authority_key {
         msg!(
             "Invalid address for swap authority (account {})",
@@ -2761,7 +2822,10 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
     invoke_signed_unchecked(
         &token_transfer_ix,
         accounts,
-        &[&[SWAP_AUTHORITY_SEED_PREFIX, &[swap_authority_bump]]],
+        &[&[
+            state::SWAP_AUTHORITY_SEED_PREFIX,
+            &[program_config.swap_authority_bump_seed],
+        ]],
     )?;
 
     msg!("Total SOL debt accounted for: {}", total_sol_debt);
@@ -2824,7 +2888,8 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     }
 
     // Check for a sibling instruction immediately before the invocation of this
-    // instruction.
+    // instruction. This ensures that a token transfer happened right before
+    // this withdraw SOL instruction, implementing atomic swap semantics.
     let sibling_ix = solana_instruction::syscalls::get_processed_sibling_instruction(0)
         .ok_or_else(|| {
             msg!("No processed sibling instruction found");
@@ -2832,7 +2897,8 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         })?;
 
     // We are enforcing that the sibling instruction is an SPL Token transfer
-    // to the swap destination account.
+    // to the swap destination account. This creates an atomic swap where
+    // 2Z tokens must be transferred before SOL can be withdrawn.
     //
     // First, check that the program is the SPL Token program.
     if sibling_ix.program_id != spl_token::ID {
@@ -2924,11 +2990,18 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
 // Account info handling.
 //
 
+/// Represents the different types of authorities that can perform
+/// privileged operations in the revenue distribution program.
 enum Authority {
+    /// Configures program settings.
     Admin,
+    /// Initializes distributions, configures and finalizes distribution debt.
     DebtAccountant,
+    /// Configures and finalizes distribution rewards.
     RewardsAccountant,
+    /// Sets reward managers for contributor rewards.
     ContributorManager,
+    /// Grants and denies prepaid connection access.
     DoubleZeroLedgerSentinel,
 }
 
@@ -3080,7 +3153,7 @@ fn try_next_2z_token_pda_info<'a, 'b>(
         None => state::find_2z_token_pda_address(token_owner),
     };
 
-    // Enforce this account location.
+    // Enforce this account location and seed validity.
     if token_pda_info.key != &expected_token_pda_key {
         msg!(
             "Invalid seeds for {} 2Z token PDA (account {})",
@@ -3110,6 +3183,9 @@ fn try_next_token_program_info(accounts_iter: &mut EnumeratedAccountInfoIter) ->
     Ok(())
 }
 
+/// Serializes journal entries using Borsh and writes them to the journal's
+/// remaining data. This is used to persist prepaid connection payment
+/// schedules.
 #[inline(always)]
 fn try_serialize_journal_entries(
     journal_entries: &JournalEntries,
@@ -3121,6 +3197,8 @@ fn try_serialize_journal_entries(
     })
 }
 
+/// Extracts the leaf index from a merkle proof, ensuring it's from an indexed
+/// tree. Indexed trees are required to track which leaves have been processed.
 #[inline(always)]
 fn try_leaf_index(proof: &MerkleProof) -> Result<u32, ProgramError> {
     proof.leaf_index.ok_or_else(|| {
@@ -3183,10 +3261,18 @@ impl Distribution {
     }
 }
 
+/// Marks a merkle leaf as processed by setting its corresponding bit in a byte
+/// array. This prevents double-processing of rewards or other merkle-verified
+/// operations.
+///
+/// The leaf indices are stored as a bitfield where each bit represents whether
+/// a leaf at that index has been processed (1 = processed, 0 = not processed).
 fn try_process_remaining_data_leaf_index(
     processed_leaf_data: &mut [u8],
     leaf_index: u32,
 ) -> ProgramResult {
+    // Calculate which byte contains the bit for this leaf index
+    // (8 bits per byte, so divide by 8)
     let leaf_byte_index = leaf_index as usize / 8;
 
     // First, we have to grab the relevant byte from the processed data.
@@ -3200,8 +3286,8 @@ fn try_process_remaining_data_leaf_index(
     // Create ByteFlags from the byte value to check the bit.
     let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
 
-    // We have to grab the relevant bit from the byte and check whether it is
-    // set already.
+    // Calculate which bit within the byte corresponds to this leaf
+    // (modulo 8 gives us the bit position within the byte: 0-7)
     let leaf_bit = leaf_index as usize % 8;
 
     if leaf_byte.bit(leaf_bit) {
@@ -3213,6 +3299,7 @@ fn try_process_remaining_data_leaf_index(
     }
 
     // Set the bit to true to indicate that the leaf has been processed.
+    // This prevents replay attacks using the same merkle proof.
     leaf_byte.set_bit(leaf_bit, true);
     *leaf_byte_ref = leaf_byte.into();
 

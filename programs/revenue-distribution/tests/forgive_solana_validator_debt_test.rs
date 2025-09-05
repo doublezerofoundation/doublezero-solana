@@ -163,11 +163,11 @@ async fn test_forgive_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution debt calculation is not finalized yet"
     );
     assert_eq!(
-        program_logs.get(3).unwrap(),
+        program_logs.get(4).unwrap(),
         &format!("Program log: Epoch {dz_epoch} has unfinalized debt")
     );
 
@@ -187,12 +187,12 @@ async fn test_forgive_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(4).unwrap(),
         "Program log: Distribution debt calculation is not finalized yet"
     );
     assert_eq!(
-        program_logs.get(3).unwrap(),
-        &format!("Program log: Epoch {next_dz_epoch} has unfinalized debt")
+        program_logs.get(5).unwrap(),
+        &format!("Program log: Next epoch {next_dz_epoch} has unfinalized debt")
     );
 
     test_setup
@@ -227,7 +227,7 @@ async fn test_forgive_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(4).unwrap(),
         "Program log: Next distribution's epoch must be ahead of the current distribution's epoch"
     );
 
@@ -367,11 +367,11 @@ async fn test_forgive_solana_validator_debt() {
         );
 
         assert_eq!(
-            program_logs.get(2).unwrap(),
+            program_logs.get(3).unwrap(),
             &format!("Program log: Merkle leaf index {leaf_index} has already been processed")
         );
         assert_eq!(
-            program_logs.get(3).unwrap(),
+            program_logs.get(4).unwrap(),
             &format!("Program log: Solana validator debt already processed for epoch {dz_epoch}")
         )
     }

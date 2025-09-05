@@ -126,7 +126,7 @@ async fn test_load_prepaid_connection() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Prepaid connection does not have access to DoubleZero Ledger"
     );
 
@@ -631,7 +631,7 @@ async fn test_load_prepaid_connection() {
             TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
         );
         assert_eq!(
-            program_logs.get(2).unwrap(),
+            program_logs.get(3).unwrap(),
             "Program log: Prepaid connection already has access"
         );
     }

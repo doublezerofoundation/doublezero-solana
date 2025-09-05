@@ -170,7 +170,7 @@ async fn test_finalize_distribution_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution debt calculation has already been finalized"
     );
 
@@ -200,7 +200,7 @@ async fn test_finalize_distribution_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution debt calculation has already been finalized"
     );
 }
