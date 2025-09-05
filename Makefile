@@ -45,7 +45,7 @@ test-sbf: build-sbf-mock
 
 .PHONY: test-lib
 test-lib:
-	cargo test --lib --features $(CARGO_FEATURES)
+	cargo test --lib --features development
 
 .PHONY: lint
 lint:
