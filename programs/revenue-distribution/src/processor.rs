@@ -2976,11 +2976,7 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         },
     )?;
 
-    // TODO: We may be able to remove this when we test this instruction.
-    let journal_info = journal.info;
-    drop(journal);
-
-    **journal_info.lamports.borrow_mut() -= amount;
+    **journal.info.lamports.borrow_mut() -= amount;
     **sol_destination_info.lamports.borrow_mut() += amount;
 
     Ok(())

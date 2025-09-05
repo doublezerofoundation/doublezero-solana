@@ -321,7 +321,6 @@ impl ProgramTestWithOwner {
         )
         .unwrap();
 
-        // TODO: Remove from here and use this for happy path testing.
         let remove_me_ix = solana_system_interface::instruction::transfer(
             &payer_signer.pubkey(),
             &program_config_key,
@@ -402,7 +401,6 @@ impl ProgramTestWithOwner {
         )
         .unwrap();
 
-        // TODO: Remove from here and use this for happy path testing.
         let remove_me_ix =
             solana_system_interface::instruction::transfer(&payer_signer.pubkey(), &journal_key, 1);
 

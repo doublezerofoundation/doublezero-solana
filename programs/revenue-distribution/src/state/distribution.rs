@@ -12,9 +12,6 @@ use crate::{
 };
 
 /// Account representing distribution information for a given DoubleZero epoch.
-///
-/// TODO: Do we add a gap? Unused data will cost the accountant a real amount of
-/// SOL per epoch.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct Distribution {
