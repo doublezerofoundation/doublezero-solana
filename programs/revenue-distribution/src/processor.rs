@@ -31,11 +31,11 @@ use crate::{
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
-        JournalEntries, PrepaidConnection, ProgramConfig, RecipientShare, RecipientShares,
+        PrepaidConnection, PrepaymentEntries, ProgramConfig, RecipientShare, RecipientShares,
         RelayParameters, SolanaValidatorDeposit,
     },
     types::{BurnRate, ByteFlags, DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, ValidatorFee},
-    DOUBLEZERO_MINT_DECIMALS, DOUBLEZERO_MINT_KEY, ID,
+    DOUBLEZERO_MINT_KEY, ID,
 };
 
 solana_program_entrypoint::entrypoint!(try_process_instruction);
@@ -586,10 +586,6 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     // journal's 2Z token account.
     let rent_sysvar = Rent::get().unwrap();
 
-    // NOTE: We are creating the journal account with the max allowable size for
-    // CPI (10kb). By doing this, we avoid having to realloc when the journal
-    // entries size changes. This pre-allocation strategy saves compute units
-    // and prevents potential realloc failures.
     try_create_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
@@ -597,7 +593,7 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
             signer_seeds: &[Journal::SEED_PREFIX, &[journal_bump]],
         },
         new_journal_info.lamports(),
-        MAX_PERMITTED_DATA_INCREASE,
+        zero_copy::data_end::<Journal>(),
         &ID,
         accounts,
         CreateAccountOptions {
@@ -906,20 +902,13 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
         Some(journal.token_2z_pda_bump_seed),
     )?;
 
+    let prepayment_entries = &mut journal.prepayment_entries;
+
     // Check the front of the journal entries. If the front entry's epoch
-    // matches this distribution's epoch, pop the front and transfer the amount.
-    let mut journal_entries = Journal::checked_journal_entries(&journal.remaining_data).unwrap();
-
-    if let Some(entry) = journal_entries.front_entry() {
-        if entry.dz_epoch == distribution.dz_epoch {
-            let entry = journal_entries.pop_front_entry().unwrap();
-
-            // Update the journal account with the modified entries.
-            try_serialize_journal_entries(&journal_entries, &mut journal)?;
-
-            // Convert the entry amount to the actual token amount using the mint's decimals.
-            // This operation should be safe: u32::MAX * 10^8 < u64::MAX
-            let transfer_amount = entry.checked_amount(DOUBLEZERO_MINT_DECIMALS).unwrap();
+    // matches this distribution's epoch, pop the front for the transfer amount.
+    if let Some(entry) = prepayment_entries.front_entry() {
+        if entry.dz_epoch == dz_epoch {
+            let transfer_amount = prepayment_entries.pop_front_entry().unwrap().amount;
 
             // We are transferring between token PDAs. No need to check mint's
             // decimals.
@@ -1865,16 +1854,13 @@ fn try_load_prepaid_connection(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // We trust the remaining data of the journal account is serialized
-    // correctly.
-    let mut journal_entries = Journal::checked_journal_entries(&journal.remaining_data).unwrap();
-
-    let cost_per_dz_epoch = journal.checked_cost_per_dz_epoch().ok_or_else(|| {
+    let cost_per_dz_epoch = journal.checked_cost_per_dz_epoch(decimals).ok_or_else(|| {
         msg!("Cost per DZ epoch is misconfigured");
         ProgramError::InvalidAccountData
     })?;
 
-    let num_entries = journal_entries
+    let num_entries = journal
+        .prepayment_entries
         .update(next_dz_epoch, valid_through_dz_epoch, cost_per_dz_epoch)
         .ok_or_else(|| {
             msg!(
@@ -1884,9 +1870,6 @@ fn try_load_prepaid_connection(
             );
             ProgramError::InvalidInstructionData
         })?;
-
-    // Update the journal account with the updated entries.
-    try_serialize_journal_entries(&journal_entries, &mut journal)?;
 
     msg!(
         "Loaded from DZ epoch {} through {}",
@@ -3225,20 +3208,6 @@ fn try_next_token_program_info(accounts_iter: &mut EnumeratedAccountInfoIter) ->
     }
 
     Ok(())
-}
-
-/// Serializes journal entries using Borsh and writes them to the journal's
-/// remaining data. This is used to persist prepaid connection payment
-/// schedules.
-#[inline(always)]
-fn try_serialize_journal_entries(
-    journal_entries: &JournalEntries,
-    journal: &mut ZeroCopyMutAccount<Journal>,
-) -> ProgramResult {
-    borsh::to_writer(&mut journal.remaining_data[..], &journal_entries).map_err(|e| {
-        msg!("Failed to serialize journal entries");
-        ProgramError::BorshIoError(e.to_string())
-    })
 }
 
 /// Extracts the leaf index from a merkle proof, ensuring it's from an indexed

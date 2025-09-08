@@ -23,7 +23,7 @@ use doublezero_revenue_distribution::{
         ProgramConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, ContributorRewards, Distribution, Journal, JournalEntries, PrepaidConnection,
+        self, ContributorRewards, Distribution, Journal, PrepaidConnection, PrepaymentEntries,
         ProgramConfig, SolanaValidatorDeposit,
     },
     types::{DoubleZeroEpoch, RewardShare, SolanaValidatorDebt},
@@ -1162,7 +1162,7 @@ impl ProgramTestWithOwner {
         )
     }
 
-    pub async fn fetch_journal(&self) -> (Pubkey, Journal, JournalEntries, TokenAccount) {
+    pub async fn fetch_journal(&self) -> (Pubkey, Journal, TokenAccount) {
         let journal_key = Journal::find_address().0;
 
         let program_config_account_data = self
@@ -1174,10 +1174,8 @@ impl ProgramTestWithOwner {
             .unwrap()
             .data;
 
-        let (journal, remaining_data) =
+        let (journal, _) =
             checked_from_bytes_with_discriminator(&program_config_account_data).unwrap();
-
-        let journal_entries = Journal::checked_journal_entries(remaining_data).unwrap();
 
         let token_pda_key = state::find_2z_token_pda_address(&journal_key).0;
         let journal_2z_token_pda_data = self
@@ -1191,7 +1189,7 @@ impl ProgramTestWithOwner {
 
         let token_pda = TokenAccount::unpack(&journal_2z_token_pda_data).unwrap();
 
-        (journal_key, *journal, journal_entries, token_pda)
+        (journal_key, *journal, token_pda)
     }
 
     pub async fn fetch_distribution(

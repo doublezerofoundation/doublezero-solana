@@ -331,7 +331,7 @@ async fn test_sweep_distribution_tokens() {
         .unwrap()
         .amount;
 
-    let (_, journal, _, _) = test_setup.fetch_journal().await;
+    let (_, journal, _) = test_setup.fetch_journal().await;
     let journal_sol_balance_before = journal.swapped_sol_amount;
 
     test_setup
@@ -339,7 +339,7 @@ async fn test_sweep_distribution_tokens() {
         .await
         .unwrap();
 
-    let (_, journal, _, _) = test_setup.fetch_journal().await;
+    let (_, journal, _) = test_setup.fetch_journal().await;
     assert_eq!(
         journal_sol_balance_before - journal.swapped_sol_amount,
         total_solana_validator_debt
@@ -417,7 +417,7 @@ async fn test_sweep_distribution_tokens() {
         .await
         .unwrap();
 
-    let (_, journal, _, _) = test_setup.fetch_journal().await;
+    let (_, journal, _) = test_setup.fetch_journal().await;
     assert_eq!(journal.total_sol_balance, 0);
 
     // No data in the distribution changes except for the bit reflecting the
