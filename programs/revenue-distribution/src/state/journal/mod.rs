@@ -175,8 +175,7 @@ impl PrepaymentEntries {
         let last_dz_epoch = if self.length == 0 {
             next_dz_epoch
         } else {
-            let last_index =
-                (self.head + self.length - 1) % (JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH as u16);
+            let last_index = (self.head + self.length - 1) % JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH;
             self.entries[last_index as usize]
                 .dz_epoch
                 .saturating_add_duration(1)
@@ -199,7 +198,7 @@ impl PrepaymentEntries {
 
         // Update existing entries in the range.
         for i in 0..self.length {
-            let index = (self.head + i) % (JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH as u16);
+            let index = (self.head + i) % JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH;
             let entry = &mut self.entries[index as usize];
 
             if entry.dz_epoch >= next_dz_epoch && entry.dz_epoch <= valid_through_dz_epoch {
@@ -210,8 +209,7 @@ impl PrepaymentEntries {
         // Add new entries.
         if last_dz_epoch <= valid_through_dz_epoch {
             for epoch_value in last_dz_epoch.value()..=valid_through_dz_epoch.value() {
-                let new_index =
-                    (self.head + self.length) % (JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH as u16);
+                let new_index = (self.head + self.length) % JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH;
                 self.entries[new_index as usize] = PrepaymentEntry {
                     dz_epoch: DoubleZeroEpoch::new(epoch_value),
                     amount: cost_per_epoch,
@@ -236,7 +234,7 @@ impl PrepaymentEntries {
             None
         } else {
             let entry = std::mem::take(&mut self.entries[self.head as usize]);
-            self.head = (self.head + 1) % (JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH as u16);
+            self.head = (self.head + 1) % JOURNAL_ENTRIES_ABSOLUTE_MAX_LENGTH;
             self.length -= 1;
             Some(entry)
         }
@@ -263,9 +261,10 @@ mod tests {
 
         let cost_per_epoch = 69;
 
-        let mut journal_entries = PrepaymentEntries::default();
-        journal_entries.head = 0;
-        journal_entries.length = 2;
+        let mut journal_entries = PrepaymentEntries {
+            length: 2,
+            ..Default::default()
+        };
         journal_entries.entries[0] = PrepaymentEntry {
             dz_epoch: DoubleZeroEpoch::new(0),
             amount: 100,
@@ -277,9 +276,10 @@ mod tests {
 
         journal_entries.update(next_dz_epoch, valid_through_dz_epoch, cost_per_epoch);
 
-        let mut expected_journal_entries = PrepaymentEntries::default();
-        expected_journal_entries.head = 0;
-        expected_journal_entries.length = 6;
+        let mut expected_journal_entries = PrepaymentEntries {
+            length: 6,
+            ..Default::default()
+        };
         expected_journal_entries.entries[0] = PrepaymentEntry {
             dz_epoch: DoubleZeroEpoch::new(0),
             amount: 169,

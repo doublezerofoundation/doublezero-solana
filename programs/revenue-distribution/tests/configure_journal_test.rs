@@ -5,7 +5,7 @@ mod common;
 use doublezero_program_tools::zero_copy::checked_from_bytes_with_discriminator;
 use doublezero_revenue_distribution::{
     instruction::JournalConfiguration,
-    state::{self, Journal, PrepaymentEntries},
+    state::{self, Journal},
     DOUBLEZERO_MINT_KEY,
 };
 use solana_program_pack::Pack;
@@ -61,7 +61,7 @@ async fn test_configure_journal() {
         .unwrap()
         .data;
 
-    let (journal, remaining_data) =
+    let (journal, _) =
         checked_from_bytes_with_discriminator::<Journal>(&journal_account_data).unwrap();
 
     let (journal_key, journal_bump) = Journal::find_address();

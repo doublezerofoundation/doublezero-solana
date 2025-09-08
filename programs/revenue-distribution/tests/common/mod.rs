@@ -23,8 +23,8 @@ use doublezero_revenue_distribution::{
         ProgramConfiguration, RevenueDistributionInstructionData,
     },
     state::{
-        self, ContributorRewards, Distribution, Journal, PrepaidConnection, PrepaymentEntries,
-        ProgramConfig, SolanaValidatorDeposit,
+        self, ContributorRewards, Distribution, Journal, PrepaidConnection, ProgramConfig,
+        SolanaValidatorDeposit,
     },
     types::{DoubleZeroEpoch, RewardShare, SolanaValidatorDebt},
     DOUBLEZERO_MINT_KEY, ID,
