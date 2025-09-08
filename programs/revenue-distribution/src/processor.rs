@@ -12,7 +12,7 @@ use doublezero_program_tools::{
     },
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
 };
-use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
+use solana_account_info::AccountInfo;
 use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
@@ -31,8 +31,8 @@ use crate::{
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
-        PrepaidConnection, PrepaymentEntries, ProgramConfig, RecipientShare, RecipientShares,
-        RelayParameters, SolanaValidatorDeposit,
+        PrepaidConnection, ProgramConfig, RecipientShare, RecipientShares, RelayParameters,
+        SolanaValidatorDeposit,
     },
     types::{BurnRate, ByteFlags, DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, ValidatorFee},
     DOUBLEZERO_MINT_KEY, ID,
@@ -231,7 +231,7 @@ fn try_initialize_program(accounts: &[AccountInfo]) -> ProgramResult {
 
     // Set the bump seeds and pause the program.
     let (mut program_config, _) =
-        zero_copy::try_initialize::<ProgramConfig>(new_program_config_info, None)?;
+        zero_copy::try_initialize::<ProgramConfig>(new_program_config_info)?;
     program_config.bump_seed = program_config_bump;
     program_config.reserve_2z_bump_seed = reserve_2z_bump;
 
@@ -637,7 +637,7 @@ fn try_initialize_journal(accounts: &[AccountInfo]) -> ProgramResult {
     )?;
 
     // Set the bump seeds.
-    let (mut journal, _) = zero_copy::try_initialize::<Journal>(new_journal_info, None)?;
+    let (mut journal, _) = zero_copy::try_initialize::<Journal>(new_journal_info)?;
     journal.bump_seed = journal_bump;
     journal.token_2z_pda_bump_seed = journal_2z_token_pda_bump;
 
@@ -869,8 +869,7 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     )?;
 
     // Finally, initialize some distribution account fields.
-    let (mut distribution, _) =
-        zero_copy::try_initialize::<Distribution>(new_distribution_info, None)?;
+    let (mut distribution, _) = zero_copy::try_initialize::<Distribution>(new_distribution_info)?;
 
     // Set DZ epoch. The DZ epoch should never change with any interaction with
     // the epoch distribution account.
@@ -1582,7 +1581,7 @@ fn try_initialize_prepaid_connection(
     // Finalize the prepaid connection with the user and termination beneficiary
     // keys.
     let (mut prepaid_connection, _) =
-        zero_copy::try_initialize::<PrepaidConnection>(new_prepaid_connection_info, None)?;
+        zero_copy::try_initialize::<PrepaidConnection>(new_prepaid_connection_info)?;
 
     prepaid_connection.user_key = user_key;
     prepaid_connection.termination_beneficiary_key = *payer_info.key;
@@ -2096,7 +2095,7 @@ fn try_initialize_contributor_rewards(
 
     // Finally, initialize the contributor rewards with the service key.
     let (mut contributor_rewards, _) =
-        zero_copy::try_initialize::<ContributorRewards>(new_contributor_rewards_info, None)?;
+        zero_copy::try_initialize::<ContributorRewards>(new_contributor_rewards_info)?;
 
     contributor_rewards.service_key = service_key;
 
@@ -2320,10 +2319,8 @@ fn try_initialize_solana_validator_deposit(
     )?;
 
     // Finally, initialize the solana validator deposit with the node id.
-    let (mut solana_validator_deposit, _) = zero_copy::try_initialize::<SolanaValidatorDeposit>(
-        new_solana_validator_deposit_info,
-        None,
-    )?;
+    let (mut solana_validator_deposit, _) =
+        zero_copy::try_initialize::<SolanaValidatorDeposit>(new_solana_validator_deposit_info)?;
     solana_validator_deposit.node_id = node_id;
 
     Ok(())
