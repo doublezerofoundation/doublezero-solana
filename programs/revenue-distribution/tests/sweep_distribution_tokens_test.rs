@@ -188,7 +188,40 @@ async fn test_sweep_distribution_tokens() {
             .unwrap();
     }
 
-    // Cannot sweep yet.
+    // Cannot sweep until distribution 0 is swept.
+
+    let sweep_distribution_tokens_ix = try_build_instruction(
+        &ID,
+        SweepDistributionTokensAccounts::new(
+            dz_epoch,
+            &Pubkey::new_unique(),
+            &Pubkey::new_unique(),
+        ),
+        &RevenueDistributionInstructionData::SweepDistributionTokens,
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(&[sweep_distribution_tokens_ix], &[])
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(3).unwrap(),
+        "Program log: Can only sweep tokens for DZ epoch 0"
+    );
+
+    test_setup
+        .finalize_distribution_debt(DoubleZeroEpoch::default(), &debt_accountant_signer)
+        .await
+        .unwrap()
+        .sweep_distribution_tokens(DoubleZeroEpoch::default())
+        .await
+        .unwrap();
+
+    // Cannot sweep if there is not enough swapped SOL to cover the debt.
 
     let sol_2z_swap_fills_registry_key = test_setup.sol_2z_swap_fills_registry_key;
 

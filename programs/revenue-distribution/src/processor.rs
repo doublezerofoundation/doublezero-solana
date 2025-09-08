@@ -1023,7 +1023,15 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("DZ epoch: {}", distribution.dz_epoch);
 
     distribution.try_require_unfinalized_debt_calculation()?;
+    distribution.try_require_calculation_allowed()?;
     distribution.set_is_debt_calculation_finalized(true);
+
+    // If there is no debt accounted for, we can return early.
+    if distribution.checked_total_sol_debt().unwrap() == 0 {
+        msg!("Zero SOL debt. No need to increase distribution account size");
+
+        return Ok(());
+    }
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a Solana validator has paid.
@@ -1144,6 +1152,7 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
     // If the distribution rewards calculation has already been finalized,
     // we have nothing to do.
     distribution.try_require_unfinalized_rewards_calculation()?;
+    distribution.try_require_calculation_allowed()?;
     distribution.set_is_rewards_calculation_finalized(true);
 
     // Debt calculation must have been finalized before rewards can be
@@ -2686,10 +2695,30 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
     let mut journal =
         ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    if journal.next_dz_epoch_to_sweep_tokens != distribution.dz_epoch {
+        msg!(
+            "Can only sweep tokens for DZ epoch {}",
+            journal.next_dz_epoch_to_sweep_tokens
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Uptick the next DZ epoch for the next distribution to sweep tokens.
+    journal.next_dz_epoch_to_sweep_tokens = journal
+        .next_dz_epoch_to_sweep_tokens
+        .saturating_add_duration(1);
+
     // We will attempt to account for the total SOL debt and account for this
     // amount by reducing the SOL balance of the journal. The SOL that this
     // balance tracks will have already been swapped by the swap program.
     let total_sol_debt = distribution.checked_total_sol_debt().unwrap();
+
+    // If there is no debt, we can return early.
+    if total_sol_debt == 0 {
+        msg!("Zero SOL debt. Nothing to sweep");
+
+        return Ok(());
+    }
 
     if journal.swapped_sol_amount < total_sol_debt {
         msg!("Journal does not have enough swapped SOL to cover the SOL debt");
@@ -2793,7 +2822,7 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
 
     // Record the swept amount to the distribution. This amount will also be
     // used to token transfer the 2Z tokens to the distribution.
-    distribution.collected_2z_converted_from_sol += token_2z_amount;
+    distribution.collected_2z_converted_from_sol = token_2z_amount;
 
     // Account 6 must be the distribution's 2Z token account.
     let (_, distribution_2z_token_pda_info, _) = try_next_2z_token_pda_info(

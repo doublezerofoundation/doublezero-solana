@@ -44,7 +44,10 @@ pub struct Journal {
     pub swap_2z_destination_balance: u64,
 
     pub swapped_sol_amount: u64,
-    _padding: [u64; 2],
+
+    pub next_dz_epoch_to_sweep_tokens: DoubleZeroEpoch,
+
+    _padding: [u64; 1],
 
     /// 8 * 32 bytes of a storage gap in case we need more fields.
     _storage_gap: StorageGap<7>,
