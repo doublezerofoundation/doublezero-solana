@@ -237,7 +237,7 @@ async fn test_pay_solana_validator_debt() {
             .unwrap();
 
         // Balance must include rent.
-        // assert_eq!(balance, amount + deposit_rent_exemption);
+        assert_eq!(balance, amount + deposit_rent_exemption);
 
         // Store balance before paying debt.
         *balance_before = balance;
