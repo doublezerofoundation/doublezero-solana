@@ -411,7 +411,7 @@ impl Authority {
 }
 
 struct VerifiedProgramAuthority<'a, 'b> {
-    _program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
+    program_config: ZeroCopyAccount<'a, 'b, ProgramConfig>,
     authority: (usize, &'a AccountInfo<'b>),
 }
 
@@ -429,7 +429,7 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, Authority> for VerifiedProgramAuthority<'a,
             authority.try_next_as_authorized_account(accounts_iter, &program_config.data)?;
 
         Ok(Self {
-            _program_config: program_config,
+            program_config,
             authority: (index, authority_info),
         })
     }
