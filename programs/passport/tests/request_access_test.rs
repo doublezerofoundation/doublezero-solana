@@ -120,13 +120,13 @@ async fn test_request_access() {
             &service_key_2,
             AccessMode::SolanaValidatorWithBackupIds {
                 attestation: attestation_2,
-                backup_ids,
+                backup_ids: backup_ids.clone(),
             },
         )
         .await
         .unwrap();
 
-    let (access_request_key, access_request) =
+    let (access_request_key, access_request, access_mode) =
         test_setup.fetch_access_request(&service_key_1).await;
 
     let expected_access_request = AccessRequest {
@@ -141,18 +141,20 @@ async fn test_request_access() {
         .get_rent()
         .await
         .unwrap()
-        .minimum_balance(zero_copy::data_end::<AccessRequest>());
-    let access_request_balance = test_setup
+        .minimum_balance(
+            zero_copy::data_end::<AccessRequest>() + borsh::object_length(&access_mode).unwrap(),
+        );
+    let access_request_balance_after = test_setup
         .banks_client
         .get_balance(access_request_key)
         .await
         .unwrap();
     assert_eq!(
-        access_request_balance,
+        access_request_balance_after,
         request_deposit_lamports + request_rent
     );
 
-    let (access_request_key, access_request) =
+    let (access_request_key, access_request, access_mode) =
         test_setup.fetch_access_request(&service_key_2).await;
     let expected_access_request = AccessRequest {
         service_key: service_key_2,
@@ -160,14 +162,29 @@ async fn test_request_access() {
         request_fee_lamports,
     };
     assert_eq!(access_request, expected_access_request);
+    assert_eq!(
+        access_mode,
+        AccessMode::SolanaValidatorWithBackupIds {
+            attestation: attestation_2,
+            backup_ids,
+        }
+    );
 
-    let access_request_balance = test_setup
+    let request_rent = test_setup
+        .banks_client
+        .get_rent()
+        .await
+        .unwrap()
+        .minimum_balance(
+            zero_copy::data_end::<AccessRequest>() + borsh::object_length(&access_mode).unwrap(),
+        );
+    let access_request_balance_after = test_setup
         .banks_client
         .get_balance(access_request_key)
         .await
         .unwrap();
     assert_eq!(
-        access_request_balance,
+        access_request_balance_after,
         request_deposit_lamports + request_rent
     );
 

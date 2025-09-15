@@ -218,7 +218,7 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let service_key = match access_mode {
+    let service_key = match &access_mode {
         AccessMode::SolanaValidator(attestation) => {
             msg!("Solana validator");
 
@@ -275,6 +275,14 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
         return Err(ProgramError::InvalidSeeds);
     }
 
+    // We will be caching the access mode in the access request.
+    let serialized_access_mode = borsh::to_vec(&access_mode).unwrap();
+
+    // Account for the additional size of the access mode.
+    let access_request_data_len = serialized_access_mode
+        .len()
+        .saturating_add(zero_copy::data_end::<AccessRequest>());
+
     try_create_account(
         Invoker::Signer(payer_info.key),
         Invoker::Pda {
@@ -286,7 +294,7 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
             ],
         },
         new_access_request_info.lamports(),
-        zero_copy::data_end::<AccessRequest>(),
+        access_request_data_len,
         &ID,
         accounts,
         CreateAccountOptions {
@@ -296,11 +304,14 @@ fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> Prog
     )?;
 
     // Finalize the access request with the user service and beneficiary keys.
-    let (mut access_request, _) =
+    let (mut access_request, mut remaining_data) =
         zero_copy::try_initialize::<AccessRequest>(new_access_request_info)?;
     access_request.service_key = service_key;
     access_request.rent_beneficiary_key = *payer_info.key;
     access_request.request_fee_lamports = program_config.request_fee_lamports;
+
+    // Copy the access mode into the remaining data.
+    remaining_data.copy_from_slice(&serialized_access_mode);
 
     // The sentinel service uses this log statement to filter transaction logs
     // to successfully submitted access requests when subscribing to program

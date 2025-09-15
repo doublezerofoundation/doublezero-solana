@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use borsh::BorshDeserialize;
 use doublezero_passport::{
     instruction::{
         account::{
@@ -313,7 +314,10 @@ impl ProgramTestWithOwner {
         )
     }
 
-    pub async fn fetch_access_request(&self, service_key: &Pubkey) -> (Pubkey, AccessRequest) {
+    pub async fn fetch_access_request(
+        &self,
+        service_key: &Pubkey,
+    ) -> (Pubkey, AccessRequest, AccessMode) {
         let access_request_key = AccessRequest::find_address(service_key).0;
 
         let access_request_account_data = self
@@ -324,11 +328,13 @@ impl ProgramTestWithOwner {
             .unwrap()
             .data;
 
+        let (access_request, remaining_data) =
+            checked_from_bytes_with_discriminator(&access_request_account_data).unwrap();
+
         (
             access_request_key,
-            *checked_from_bytes_with_discriminator(&access_request_account_data)
-                .unwrap()
-                .0,
+            *access_request,
+            BorshDeserialize::try_from_slice(remaining_data).unwrap(),
         )
     }
 }
