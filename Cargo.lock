@@ -1434,7 +1434,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "doublezero-passport-admin"
+name = "doublezero-passport-admin-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1496,7 +1496,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "doublezero-revenue-distribution-admin"
+name = "doublezero-revenue-distribution-admin-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",

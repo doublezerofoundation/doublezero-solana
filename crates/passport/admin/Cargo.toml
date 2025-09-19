@@ -1,5 +1,5 @@
 [package]
-name = "doublezero-passport-admin"
+name = "doublezero-passport-admin-cli"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
@@ -15,3 +15,7 @@ doublezero-program-tools.workspace = true
 doublezero-solana-client-tools.workspace = true
 solana-sdk.workspace = true
 tokio.workspace = true
+
+[[bin]]
+name = "doublezero-passport-admin"
+path = "src/main.rs"

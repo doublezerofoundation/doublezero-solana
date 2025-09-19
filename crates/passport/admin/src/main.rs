@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use doublezero_passport_admin::command::PassportAdminSubCommand;
+use doublezero_passport_admin_cli::command::PassportAdminSubCommand;
 
 #[derive(Debug, Parser)]
 #[command(term_width = 0)]

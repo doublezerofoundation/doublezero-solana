@@ -1,5 +1,5 @@
 [package]
-name = "doublezero-revenue-distribution-admin"
+name = "doublezero-revenue-distribution-admin-cli"
 edition.workspace = true
 homepage.workspace = true
 license.workspace = true
@@ -15,3 +15,7 @@ doublezero-revenue-distribution.workspace = true
 doublezero-solana-client-tools.workspace = true
 solana-sdk.workspace = true
 tokio.workspace = true
+
+[[bin]]
+name = "doublezero-revenue-distribution-admin"
+path = "src/main.rs"

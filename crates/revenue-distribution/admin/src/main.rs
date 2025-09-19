@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use doublezero_revenue_distribution_admin::command::RevenueDistributionAdminSubCommand;
+use doublezero_revenue_distribution_admin_cli::command::RevenueDistributionAdminSubCommand;
 
 #[derive(Debug, Parser)]
 #[command(term_width = 0)]
