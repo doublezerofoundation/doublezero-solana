@@ -11,7 +11,7 @@ const SOLANA_MAINNET_GENESIS_HASH: Pubkey =
     solana_sdk::pubkey!("5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d");
 
 #[derive(Debug, Args)]
-pub struct DoubleZeroLedgerRpcOptions {
+pub struct DoubleZeroLedgerConnectionOptions {
     /// URL for DoubleZero Ledger's JSON RPC. Required.
     #[arg(long, required = true)]
     pub dz_ledger_url: String,
