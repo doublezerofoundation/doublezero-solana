@@ -429,7 +429,7 @@ pub async fn execute_configure_program(
             ProgramConfiguration::DebtAccountant(debt_accountant_key),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_500;
+        compute_unit_limit += 3_000;
     }
 
     if let Some(rewards_accountant_key) = rewards_accountant {
@@ -438,7 +438,7 @@ pub async fn execute_configure_program(
             ProgramConfiguration::RewardsAccountant(rewards_accountant_key),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_500;
+        compute_unit_limit += 3_000;
     }
 
     if let Some(contributor_manager_key) = contributor_manager {
@@ -447,7 +447,7 @@ pub async fn execute_configure_program(
             ProgramConfiguration::ContributorManager(contributor_manager_key),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_500;
+        compute_unit_limit += 3_000;
     }
 
     if let Some(sentinel_key) = sentinel {
@@ -456,7 +456,7 @@ pub async fn execute_configure_program(
             ProgramConfiguration::DoubleZeroLedgerSentinel(sentinel_key),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_500;
+        compute_unit_limit += 3_000;
     }
 
     if let Some(sol_2z_swap_program_id) = sol_2z_swap_program {
@@ -465,7 +465,10 @@ pub async fn execute_configure_program(
             ProgramConfiguration::Sol2zSwapProgram(sol_2z_swap_program_id),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_500;
+        compute_unit_limit += 3_000;
+
+        let (_, bump) = state::find_withdraw_sol_authority_address(&sol_2z_swap_program_id);
+        compute_unit_limit += Wallet::compute_units_for_bump_seed(bump);
     }
 
     if let Some(calculation_grace_period_seconds) = calculation_grace_period_seconds {
@@ -474,7 +477,7 @@ pub async fn execute_configure_program(
             ProgramConfiguration::CalculationGracePeriodSeconds(calculation_grace_period_seconds),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_000;
+        compute_unit_limit += 1_500;
     }
 
     if let Some(prepaid_connection_termination_relay_lamports) =
@@ -487,7 +490,7 @@ pub async fn execute_configure_program(
             ),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_000;
+        compute_unit_limit += 1_500;
     }
 
     if let Some(distribute_rewards_relay_lamports) = distribute_rewards_relay_lamports {
@@ -496,7 +499,7 @@ pub async fn execute_configure_program(
             ProgramConfiguration::DistributeRewardsRelayLamports(distribute_rewards_relay_lamports),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_000;
+        compute_unit_limit += 1_500;
     }
 
     if let Some(minimum_epochs_to_finalize_rewards) = minimum_epochs_to_finalize_rewards {
@@ -507,7 +510,7 @@ pub async fn execute_configure_program(
             ),
         )?;
         instructions.push(configure_program_ix);
-        compute_unit_limit += 2_000;
+        compute_unit_limit += 1_500;
     }
 
     // All Solana validator fee parameters must be specified together in order to
@@ -544,7 +547,7 @@ pub async fn execute_configure_program(
                 },
             )?;
             instructions.push(configure_program_ix);
-            compute_unit_limit += 4_000;
+            compute_unit_limit += 4_500;
         }
         (None, None, None, None, None) => {}
         _ => {

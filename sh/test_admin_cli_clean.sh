@@ -5,11 +5,12 @@ set -eu
 PASSPORT_CLI_BIN=target/debug/doublezero-passport-admin
 REVENUE_DISTRIBUTION_CLI_BIN=target/debug/doublezero-revenue-distribution-admin
 
-
-DUMMY_KEY=devgM7SXHvoHH6jPXRsjn97gygPUo58XEnc9bqY1jpj
-
-$REVENUE_DISTRIBUTION_CLI_BIN -h
+echo "solana-keygen new --silent --no-bip39-passphrase -o dummy.json"
+solana-keygen new --silent --no-bip39-passphrase -o dummy.json
+solana airdrop -u l 1 -k dummy.json
 echo
+
+DUMMY_KEY=$(solana address -k dummy.json)
 
 ### Establish another payer.
 
