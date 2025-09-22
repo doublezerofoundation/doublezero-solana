@@ -82,17 +82,14 @@ async fn test_grant_access() {
         .await
         .unwrap();
 
-    let (access_request_key, access_request, access_mode) =
-        test_setup.fetch_access_request(&service_key).await;
+    let (access_request_key, access_request) = test_setup.fetch_access_request(&service_key).await;
 
     let request_rent = test_setup
         .banks_client
         .get_rent()
         .await
         .unwrap()
-        .minimum_balance(
-            zero_copy::data_end::<AccessRequest>() + borsh::object_length(&access_mode).unwrap(),
-        );
+        .minimum_balance(zero_copy::data_end::<AccessRequest>());
 
     let access_request_balance = test_setup
         .banks_client
@@ -148,7 +145,7 @@ async fn test_grant_access() {
 
     // Test inputs.
 
-    let (access_request_key, _, _) = test_setup.fetch_access_request(&service_key).await;
+    let (access_request_key, _) = test_setup.fetch_access_request(&service_key).await;
     let unauthorized_signer = Keypair::new();
 
     // Cannot grant access with unauthorized sentinel.
