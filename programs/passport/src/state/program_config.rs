@@ -21,7 +21,7 @@ pub struct ProgramConfig {
     pub solana_validator_backup_ids_limit: u16,
     _padding: [u8; 30],
 
-    /// 8 * 32 bytes of a storage gap in case more fields need to be added.
+    /// 7 * 32 bytes of a storage gap in case more fields need to be added.
     _storage_gap: StorageGap<7>,
 }
 
