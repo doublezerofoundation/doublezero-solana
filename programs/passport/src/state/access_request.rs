@@ -1,8 +1,10 @@
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{Discriminator, PrecomputedDiscriminator};
+#[cfg(feature = "offchain")]
 use itertools::Itertools;
 use solana_pubkey::Pubkey;
 
+#[cfg(feature = "offchain")]
 use crate::instruction::AccessMode;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Pod, Zeroable)]
