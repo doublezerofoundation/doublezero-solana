@@ -126,10 +126,6 @@ pub struct ConfigureRevenueDistributionOptions {
     #[arg(long, value_name = "PUBKEY")]
     pub contributor_manager: Option<Pubkey>,
 
-    /// Set the DoubleZero Ledger sentinel key.
-    #[arg(long, value_name = "PUBKEY")]
-    pub sentinel: Option<Pubkey>,
-
     /// Set the SOL/2Z Swap program ID.
     #[arg(long, value_name = "PUBKEY")]
     pub sol_2z_swap_program: Option<Pubkey>,
@@ -375,7 +371,6 @@ pub async fn execute_configure_program(
         debt_accountant,
         rewards_accountant,
         contributor_manager,
-        sentinel,
         sol_2z_swap_program,
         solana_validator_base_block_rewards_fee_pct,
         solana_validator_priority_block_rewards_fee_pct,
@@ -445,15 +440,6 @@ pub async fn execute_configure_program(
         let configure_program_ix = try_build_configure_program_instruction(
             &wallet_key,
             ProgramConfiguration::ContributorManager(contributor_manager_key),
-        )?;
-        instructions.push(configure_program_ix);
-        compute_unit_limit += 3_000;
-    }
-
-    if let Some(sentinel_key) = sentinel {
-        let configure_program_ix = try_build_configure_program_instruction(
-            &wallet_key,
-            ProgramConfiguration::DoubleZeroLedgerSentinel(sentinel_key),
         )?;
         instructions.push(configure_program_ix);
         compute_unit_limit += 3_000;

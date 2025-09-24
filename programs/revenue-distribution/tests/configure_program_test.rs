@@ -40,7 +40,6 @@ async fn test_configure_program() {
     let debt_accountant_key = Pubkey::new_unique();
     let rewards_accountant_key = Pubkey::new_unique();
     let contributor_manager_key = Pubkey::new_unique();
-    let dz_ledger_sentinel_key = Pubkey::new_unique();
     let sol_2z_swap_program_id = Pubkey::new_unique();
 
     // Distribution settings.
@@ -72,7 +71,6 @@ async fn test_configure_program() {
                 ProgramConfiguration::DebtAccountant(debt_accountant_key),
                 ProgramConfiguration::RewardsAccountant(rewards_accountant_key),
                 ProgramConfiguration::ContributorManager(contributor_manager_key),
-                ProgramConfiguration::DoubleZeroLedgerSentinel(dz_ledger_sentinel_key),
                 ProgramConfiguration::CalculationGracePeriodSeconds(
                     calculation_grace_period_seconds,
                 ),
@@ -120,7 +118,6 @@ async fn test_configure_program() {
     expected_program_config.set_is_paused(should_pause);
     expected_program_config.debt_accountant_key = debt_accountant_key;
     expected_program_config.rewards_accountant_key = rewards_accountant_key;
-    expected_program_config.dz_ledger_sentinel_key = dz_ledger_sentinel_key;
     expected_program_config.sol_2z_swap_program_id = sol_2z_swap_program_id;
 
     let expected_distribution_params = &mut expected_program_config.distribution_parameters;
