@@ -8,18 +8,13 @@ also burned.
 
 ## Core Components
 
-There are three main components to this accounting: debt, prepayment and
-rewards.
+There are three main components to this accounting: debt and rewards.
 
 ### Debt
 
 Distribution debt is what some users owe to the system for a given DoubleZero
 epoch. Currently, the only type of user that adds debt to the system is a Solana
 validator.
-
-All other users are prepaid users, and prepaid users do not add debt to the
-system because they pay for their service before receiving it. See
-[Auxiliary Accounts] for more details about prepaid connections.
 
 Solana validator debt is calculated by revenue-share fee parameters, where
 DoubleZero charges Solana validator network usage based on a portion of their
@@ -94,40 +89,6 @@ authority that can submit data to update these fields. It computes debt by
 fetching all of the types of rewards earned by each Solana validator on the
 DoubleZero network. Please see [Meet the Accountants] for more information about
 how this process works.
-
-### Prepayment
-
-In order for prepaid users to gain access to the DoubleZero network, they must
-pay for service upfront with 2Z tokens. The amount of 2Z required is determined
-by the following parameters:
-
-```rust
-pub struct PrepaidConnectionParameters {
-		/// Minimum duration of service in terms of DoubleZero epochs.
-    pub minimum_epoch_duration: u16,
-
-    /// Maximum duration of service in terms of DoubleZero epochs.
-    pub maximum_epoch_duration: u16,
-
-    /// One-time cost in 2Z tokens to establish a connection. This
-    /// amount will cover the reservation of an IP in the DoubleZero
-    /// network.
-    pub activation_cost: u32,
-    
-    /// Cost of basic service in 2Z tokens per DoubleZero network.
-    pub basic_cost_per_epoch: u32,
-}
-```
-
-For example, if the activation cost is 5,000 2Z and the cost per DoubleZero
-epoch is 2,500 2Z, a user will need to pay 10,000 2Z for two epochs of service.
-To extend his service by 3 epochs, he will pay an additional 7,500 2Z.
-
-Whenever a new distribution is created, the prepaid 2Z for this epoch will be
-transferred to the distribution's 2Z token account. So if there were five users
-that have paid for service for this epoch, the distribution will have 12,500 2Z
-in its token account (using the same cost-per-epoch parameter in the last
-example).
 
 ### Rewards
 
