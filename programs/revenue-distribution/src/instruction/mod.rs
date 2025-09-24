@@ -34,7 +34,7 @@ pub enum ProgramConfiguration {
         dz_epochs_to_limit: EpochDuration,
         initial_rate: Option<u32>,
     },
-    PrepaidConnectionTerminationRelayLamports(u32),
+    PlaceholderRelayLamports(u32),
     DistributeRewardsRelayLamports(u32),
     MinimumEpochDurationToFinalizeRewards(u16),
 }

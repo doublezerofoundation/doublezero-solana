@@ -486,19 +486,8 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 }
             }
         }
-        ProgramConfiguration::PrepaidConnectionTerminationRelayLamports(relay_lamports) => {
-            if relay_lamports < RelayParameters::MIN_LAMPORTS {
-                msg!("Relay lamports must be greater than the cost of a transaction signature");
-                return Err(ProgramError::InvalidInstructionData);
-            }
-
-            msg!(
-                "Set relay_parameters.prepaid_connection_termination_lamports: {}",
-                relay_lamports
-            );
-            program_config
-                .relay_parameters
-                .prepaid_connection_termination_lamports = relay_lamports;
+        ProgramConfiguration::PlaceholderRelayLamports(_) => {
+            return Err(ProgramError::InvalidInstructionData);
         }
         ProgramConfiguration::DistributeRewardsRelayLamports(relay_lamports) => {
             if relay_lamports < RelayParameters::MIN_LAMPORTS {

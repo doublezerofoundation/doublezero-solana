@@ -163,18 +163,6 @@ impl ProgramConfig {
         }
     }
 
-    pub fn checked_prepaid_connection_termination_relay_lamports(&self) -> Option<u32> {
-        let lamports = self
-            .relay_parameters
-            .prepaid_connection_termination_lamports;
-
-        if lamports == 0 {
-            None
-        } else {
-            Some(lamports)
-        }
-    }
-
     pub fn checked_minimum_epoch_duration_to_finalize_rewards(&self) -> Option<EpochDuration> {
         let duration = self
             .distribution_parameters
