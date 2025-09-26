@@ -1,7 +1,6 @@
 use doublezero_solana_client_tools::{log_debug, log_error, log_info, log_warn};
 
 fn main() {
-    // Initialize tracing subscriber when the feature is enabled
     #[cfg(feature = "tracing")]
     {
         use tracing_subscriber::FmtSubscriber;
