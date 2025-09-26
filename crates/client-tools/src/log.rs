@@ -49,8 +49,6 @@ macro_rules! log_debug {
         }
         #[cfg(not(feature = "tracing"))]
         {
-            // Debug messages are typically not shown in release builds
-            #[cfg(debug_assertions)]
             println!($($arg)*);
         }
     };
