@@ -1182,8 +1182,6 @@ fn try_distribute_rewards(
         ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Make sure the program is not paused.
-    //
-    // TODO: Do we want to pause?
     program_config.try_require_unpaused()?;
 
     // Account 1 must be the distribution.
