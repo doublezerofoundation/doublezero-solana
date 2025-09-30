@@ -1203,6 +1203,11 @@ fn try_distribute_rewards(
         return Err(ProgramError::InvalidAccountData);
     }
 
+    if distribution.distributed_rewards_count == distribution.total_contributors {
+        msg!("All rewards have already been distributed");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
     // Bits indicating whether rewards have been distributed for specific leaf
     // indices are stored in the distribution's remaining data as a bitfield.
     // Each bit represents one leaf: 1 = distributed, 0 = not yet distributed.
