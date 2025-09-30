@@ -45,7 +45,7 @@ async fn test_forgive_solana_validator_debt() {
     let distribute_rewards_relay_lamports = 10_000;
 
     let dz_epoch = DoubleZeroEpoch::new(1);
-    let next_dz_epoch = dz_epoch.saturating_add_duration(1);
+    let next_completed_dz_epoch = dz_epoch.saturating_add_duration(1);
 
     // Distribution debt accounting.
 
@@ -129,7 +129,7 @@ async fn test_forgive_solana_validator_debt() {
         .await
         .unwrap()
         .configure_distribution_debt(
-            next_dz_epoch,
+            next_completed_dz_epoch,
             &debt_accountant_signer,
             total_solana_validators,
             total_solana_validator_debt,
@@ -154,7 +154,7 @@ async fn test_forgive_solana_validator_debt() {
         ForgiveSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             dz_epoch,
-            next_dz_epoch,
+            next_completed_dz_epoch,
         ),
         &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
             debt,
@@ -203,11 +203,11 @@ async fn test_forgive_solana_validator_debt() {
     );
     assert_eq!(
         program_logs.get(5).unwrap(),
-        &format!("Program log: Next epoch {next_dz_epoch} has unfinalized debt")
+        &format!("Program log: Next epoch {next_completed_dz_epoch} has unfinalized debt")
     );
 
     test_setup
-        .finalize_distribution_debt(next_dz_epoch, &debt_accountant_signer)
+        .finalize_distribution_debt(next_completed_dz_epoch, &debt_accountant_signer)
         .await
         .unwrap();
 
@@ -282,7 +282,7 @@ async fn test_forgive_solana_validator_debt() {
         test_setup
             .forgive_solana_validator_debt(
                 dz_epoch,
-                next_dz_epoch,
+                next_completed_dz_epoch,
                 &debt_accountant_signer,
                 debt,
                 proof,
@@ -322,14 +322,14 @@ async fn test_forgive_solana_validator_debt() {
     assert_eq!(remaining_distribution_data, vec![0b11111111, 0b11111111]);
 
     let (distribution_key, distribution, remaining_distribution_data, _, _) =
-        test_setup.fetch_distribution(next_dz_epoch).await;
+        test_setup.fetch_distribution(next_completed_dz_epoch).await;
 
     let mut expected_distribution = Distribution::default();
     expected_distribution.set_is_debt_calculation_finalized(true);
-    expected_distribution.bump_seed = Distribution::find_address(next_dz_epoch).1;
+    expected_distribution.bump_seed = Distribution::find_address(next_completed_dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;
-    expected_distribution.dz_epoch = next_dz_epoch;
+    expected_distribution.dz_epoch = next_completed_dz_epoch;
     expected_distribution.community_burn_rate = BurnRate::new(initial_cbr).unwrap();
     expected_distribution
         .solana_validator_fee_parameters
@@ -367,7 +367,7 @@ async fn test_forgive_solana_validator_debt() {
             ForgiveSolanaValidatorDebtAccounts::new(
                 &debt_accountant_signer.pubkey(),
                 dz_epoch,
-                next_dz_epoch,
+                next_completed_dz_epoch,
             ),
             &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt { debt: *debt, proof },
         )

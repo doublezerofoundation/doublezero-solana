@@ -693,13 +693,13 @@ impl ForgiveSolanaValidatorDebtAccounts {
     pub fn new(
         debt_accountant_key: &Pubkey,
         dz_epoch: DoubleZeroEpoch,
-        next_dz_epoch: DoubleZeroEpoch,
+        next_completed_dz_epoch: DoubleZeroEpoch,
     ) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
             debt_accountant_key: *debt_accountant_key,
             distribution_key: Distribution::find_address(dz_epoch).0,
-            next_distribution_key: Distribution::find_address(next_dz_epoch).0,
+            next_distribution_key: Distribution::find_address(next_completed_dz_epoch).0,
         }
     }
 }
