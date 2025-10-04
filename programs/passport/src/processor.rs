@@ -195,7 +195,7 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
 }
 
 fn try_request_access(accounts: &[AccountInfo], access_mode: AccessMode) -> ProgramResult {
-    msg!("Request access");
+    msg!("Request access: {:?}", access_mode);
 
     if get_stack_height() != TRANSACTION_LEVEL_STACK_HEIGHT {
         msg!("Cannot CPI request access");
