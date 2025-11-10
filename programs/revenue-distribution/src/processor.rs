@@ -2220,6 +2220,12 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
     );
     msg!("Transferred {} 2Z tokens to distribution", token_2z_amount);
 
+    journal.swap_2z_destination_balance -= token_2z_amount;
+    msg!(
+        "2Z swap destination balance now {}",
+        journal.swap_2z_destination_balance
+    );
+
     Ok(())
 }
 
