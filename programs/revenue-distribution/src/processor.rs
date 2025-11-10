@@ -12,6 +12,7 @@ use doublezero_program_tools::{
     },
     zero_copy::{self, ZeroCopyAccount, ZeroCopyMutAccount},
 };
+use ruint::Uint;
 use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
 use solana_cpi::invoke_signed_unchecked;
 use solana_msg::msg;
@@ -2356,6 +2357,12 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         "2Z swap destination balance now {} after transfer of {}",
         journal.swap_2z_destination_balance,
         transfer_amount
+    );
+
+    journal.lifetime_swapped_2z_amount += Uint::from(transfer_amount);
+    msg!(
+        "Lifetime swapped 2Z amount now {}",
+        journal.lifetime_swapped_2z_amount
     );
 
     // Move lamports from the journal to the SOL destination.
