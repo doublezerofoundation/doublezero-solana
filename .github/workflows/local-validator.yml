@@ -7,7 +7,7 @@ on:
 
 env:
   SOLANA_CLI: v2.3.9
-  DOUBLEZERO_OFFCHAIN_GIT_INSTALL: --git https://github.com/doublezerofoundation/doublezero-offchain.git --rev 99944f6
+  DOUBLEZERO_OFFCHAIN_GIT_INSTALL: --git https://github.com/doublezerofoundation/doublezero-offchain.git
 
 jobs:
   mainnet-fork-upgrade:
