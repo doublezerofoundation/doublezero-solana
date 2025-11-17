@@ -98,21 +98,61 @@ macro_rules! impl_unit_share {
                     .expect("mul_scalar result should fit in target type")
             }
 
-            pub fn mul_scalar_rounded<T>(&self, x: T) -> T
+            /// Multiply by a scalar using banker's rounding (round-half-to-even).
+            ///
+            /// This matches R's round() function behavior. When the fractional part is exactly
+            /// 0.5, this rounds to the nearest even number to minimize bias.
+            ///
+            /// # Examples
+            ///
+            /// ```ignore
+            /// let five_pct = UnitShare16::new(500).unwrap(); // 5%
+            ///
+            /// // Fractional part < 0.5: rounds down
+            /// assert_eq!(five_pct.mul_scalar_bankers_round(542321369_u64), 27116068_u64);
+            ///
+            /// // Fractional part > 0.5: rounds up
+            /// assert_eq!(five_pct.mul_scalar_bankers_round(542321371_u64), 27116069_u64);
+            ///
+            /// // Fractional part = 0.5, result would be even: stays
+            /// assert_eq!(five_pct.mul_scalar_bankers_round(8397919330_u64), 419895966_u64);
+            ///
+            /// // Fractional part = 0.5, result would be odd: rounds up to even
+            /// assert_eq!(five_pct.mul_scalar_bankers_round(3475706710_u64), 173785336_u64);
+            /// ```
+            pub fn mul_scalar_bankers_round<T>(&self, x: T) -> T
             where
                 T: Into<u128> + TryFrom<u128>,
                 <T as TryFrom<u128>>::Error: std::fmt::Debug,
             {
                 let numerator = u128::from(self.0).saturating_mul(x.into());
-                let denominator = Self::MAX.0.into();
+                let denominator: u128 = Self::MAX.0.into();
 
-                let result = numerator
-                    .saturating_add(denominator / 2)
-                    .saturating_div(denominator);
+                let quotient: u128 = numerator / denominator;
+                let remainder: u128 = numerator % denominator;
+
+                // Check if remainder is exactly half
+                let result: u128 = if remainder * 2 == denominator {
+                    // Fractional part is exactly 0.5
+                    // Round to nearest even number (banker's rounding)
+                    if quotient % 2 == 0 {
+                        // Already even
+                        quotient
+                    } else {
+                        // Round up to next even
+                        quotient + 1
+                    }
+                } else if remainder * 2 > denominator {
+                    // Fractional part > 0.5: round up
+                    quotient + 1
+                } else {
+                    // Fractional part < 0.5: round down
+                    quotient
+                };
 
                 result
                     .try_into()
-                    .expect("mul_scalar_rounded result should fit in target type")
+                    .expect("mul_scalar_bankers_round result should fit in target type")
             }
 
             pub fn checked_add(&self, other: Self) -> Option<Self> {
@@ -612,56 +652,80 @@ mod tests {
     }
 
     #[test]
-    fn test_unit_share16_mul_scalar_rounded() {
+    fn test_unit_share16_mul_scalar_bankers_round() {
         let five_pct = UnitShare16(500); // 5%
         let half = UnitShare16(5_000); // 50%
         let quarter = UnitShare16(2_500); // 25%
 
         // Test cases where rounding makes no difference (exact divisions)
-        assert_eq!(half.mul_scalar_rounded(100_u64), 50_u64);
-        assert_eq!(quarter.mul_scalar_rounded(100_u64), 25_u64);
-        assert_eq!(UnitShare16::MAX.mul_scalar_rounded(100_u64), 100_u64);
-        assert_eq!(UnitShare16::MIN.mul_scalar_rounded(100_u64), 0_u64);
+        assert_eq!(half.mul_scalar_bankers_round(100_u64), 50_u64);
+        assert_eq!(quarter.mul_scalar_bankers_round(100_u64), 25_u64);
+        assert_eq!(UnitShare16::MAX.mul_scalar_bankers_round(100_u64), 100_u64);
+        assert_eq!(UnitShare16::MIN.mul_scalar_bankers_round(100_u64), 0_u64);
 
         // Test cases where rounding should round UP (fractional part >= 0.5)
         // 5% of 542321371 = 27116068.55, should round to 27116069
-        assert_eq!(five_pct.mul_scalar_rounded(542321371_u64), 27116069_u64);
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(542321371_u64),
+            27116069_u64
+        );
 
         // 5% of 542321373 = 27116068.65, should round to 27116069
-        assert_eq!(five_pct.mul_scalar_rounded(542321373_u64), 27116069_u64);
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(542321373_u64),
+            27116069_u64
+        );
 
         // Test cases where rounding should round DOWN (fractional part < 0.5)
-        // 5% of 542321370 = 27116068.5, rounds to 27116069 (0.5 rounds up)
-        assert_eq!(five_pct.mul_scalar_rounded(542321370_u64), 27116069_u64);
+        // 5% of 542321370 = 27116068.5
+        // Banker's rounding: 27116068 is EVEN, so stays at 27116068
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(542321370_u64),
+            27116068_u64
+        );
 
         // 5% of 542321369 = 27116068.45, should round to 27116068
-        assert_eq!(five_pct.mul_scalar_rounded(542321369_u64), 27116068_u64);
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(542321369_u64),
+            27116068_u64
+        );
 
         // Test precision with small values
-        assert_eq!(UnitShare16(1).mul_scalar_rounded(10_000_u64), 1_u64); // 0.01% of 10000 = 1
-        assert_eq!(UnitShare16(1).mul_scalar_rounded(5_000_u64), 1_u64); // 0.01% of 5000 = 0.5, rounds to 1
-        assert_eq!(UnitShare16(1).mul_scalar_rounded(4_999_u64), 0_u64); // 0.01% of 4999 = 0.4999, rounds to 0
+        assert_eq!(UnitShare16(1).mul_scalar_bankers_round(10_000_u64), 1_u64); // 0.01% of 10000 = 1
+                                                                                // 0.01% of 5000 = 0.5, banker's rounding: 0 is EVEN, so rounds to 0
+        assert_eq!(UnitShare16(1).mul_scalar_bankers_round(5_000_u64), 0_u64);
+        assert_eq!(UnitShare16(1).mul_scalar_bankers_round(4_999_u64), 0_u64); // 0.01% of 4999 = 0.4999, rounds to 0
     }
 
     #[test]
-    fn test_unit_share32_mul_scalar_rounded() {
+    fn test_unit_share32_mul_scalar_bankers_round() {
         let half = UnitShare32(500_000_000); // 50%
         let quarter = UnitShare32(250_000_000); // 25%
 
         // Test cases where rounding makes no difference
-        assert_eq!(half.mul_scalar_rounded(100_u64), 50_u64);
-        assert_eq!(quarter.mul_scalar_rounded(100_u64), 25_u64);
-        assert_eq!(UnitShare32::MAX.mul_scalar_rounded(100_u64), 100_u64);
-        assert_eq!(UnitShare32::MIN.mul_scalar_rounded(100_u64), 0_u64);
+        assert_eq!(half.mul_scalar_bankers_round(100_u64), 50_u64);
+        assert_eq!(quarter.mul_scalar_bankers_round(100_u64), 25_u64);
+        assert_eq!(UnitShare32::MAX.mul_scalar_bankers_round(100_u64), 100_u64);
+        assert_eq!(UnitShare32::MIN.mul_scalar_bankers_round(100_u64), 0_u64);
 
         // Test high precision rounding
-        assert_eq!(UnitShare32(1).mul_scalar_rounded(1_000_000_000_u64), 1_u64);
-        assert_eq!(UnitShare32(1).mul_scalar_rounded(500_000_000_u64), 1_u64); // 0.5 rounds up
-        assert_eq!(UnitShare32(1).mul_scalar_rounded(499_999_999_u64), 0_u64); // <0.5 rounds down
+        assert_eq!(
+            UnitShare32(1).mul_scalar_bankers_round(1_000_000_000_u64),
+            1_u64
+        );
+        // Banker's rounding: 0.5 rounds to nearest EVEN (0)
+        assert_eq!(
+            UnitShare32(1).mul_scalar_bankers_round(500_000_000_u64),
+            0_u64
+        );
+        assert_eq!(
+            UnitShare32(1).mul_scalar_bankers_round(499_999_999_u64),
+            0_u64
+        ); // <0.5 rounds down
     }
 
     #[test]
-    fn test_mul_scalar_vs_mul_scalar_rounded_comparison() {
+    fn test_mul_scalar_vs_mul_scalar_bankers_round_comparison() {
         // This test documents the difference between truncating and rounding
         let five_pct = UnitShare16(500); // 5%
 
@@ -669,56 +733,186 @@ mod tests {
         let exact_input = 542321360_u64; // 5% = 27116068 exactly
         assert_eq!(
             five_pct.mul_scalar(exact_input),
-            five_pct.mul_scalar_rounded(exact_input)
+            five_pct.mul_scalar_bankers_round(exact_input)
         );
 
         // Case 2: Fractional part < 0.5 - both should truncate/round down
         let low_fraction = 542321369_u64; // 5% = 27116068.45
         assert_eq!(five_pct.mul_scalar(low_fraction), 27116068_u64); // truncates
-        assert_eq!(five_pct.mul_scalar_rounded(low_fraction), 27116068_u64); // rounds down
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(low_fraction),
+            27116068_u64
+        ); // rounds down
 
         // Case 3: Fractional part >= 0.5 - methods differ
         let high_fraction = 542321371_u64; // 5% = 27116068.55
         assert_eq!(five_pct.mul_scalar(high_fraction), 27116068_u64); // truncates
-        assert_eq!(five_pct.mul_scalar_rounded(high_fraction), 27116069_u64); // rounds up
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(high_fraction),
+            27116069_u64
+        ); // rounds up
 
         // Demonstrate the +1 difference
         assert_eq!(
-            five_pct.mul_scalar_rounded(high_fraction) - five_pct.mul_scalar(high_fraction),
+            five_pct.mul_scalar_bankers_round(high_fraction) - five_pct.mul_scalar(high_fraction),
             1_u64
         );
     }
 
     #[test]
-    fn test_mul_scalar_rounded_edge_cases() {
+    fn test_mul_scalar_bankers_round() {
+        let five_pct = UnitShare16(500); // 5%
+
+        // Test cases from R comparison showing banker's rounding behavior
+
+        // Case 1: Fractional part < 0.5 - rounds down
+        let input1 = 542321369_u64; // 5% = 27116068.45
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(input1),
+            27116068_u64,
+            "Should round down when fractional part < 0.5"
+        );
+
+        // Case 2: Fractional part > 0.5 - rounds up
+        let input2 = 542321371_u64; // 5% = 27116068.55
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(input2),
+            27116069_u64,
+            "Should round up when fractional part > 0.5"
+        );
+
+        // Case 3: Fractional part = 0.5, quotient is EVEN - stays
+        // Input: 8397919330, 5% = 419895966.5, quotient 419895966 is EVEN
+        let input3 = 8397919330_u64;
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(input3),
+            419895966_u64,
+            "Should stay at even number when fractional part = 0.5"
+        );
+
+        // Case 4: Fractional part = 0.5, quotient is ODD - rounds up to even
+        // Input: 3475706710, 5% = 173785335.5, quotient 173785335 is ODD
+        let input4 = 3475706710_u64;
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(input4),
+            173785336_u64,
+            "Should round up to even when fractional part = 0.5 and quotient is odd"
+        );
+
+        // Additional 0.5 boundary test cases from actual data
+        let test_cases_half = vec![
+            (8226441610_u64, 411322080_u64), // 411322080.5 → 411322080 (even)
+            (5536231790_u64, 276811590_u64), // 276811589.5 → 276811590 (even)
+            (6740303770_u64, 337015188_u64), // 337015188.5 → 337015188 (even)
+            (2490534970_u64, 124526748_u64), // 124526748.5 → 124526748 (even)
+        ];
+
+        for (input, expected) in test_cases_half {
+            assert_eq!(
+                five_pct.mul_scalar_bankers_round(input),
+                expected,
+                "Banker's rounding failed for input {}",
+                input
+            );
+        }
+    }
+
+    #[test]
+    fn test_mul_scalar_vs_r_script_exact_cases() {
+        // This test uses EXACT values from the R script (fee_per_epoch.R) to demonstrate
+        // the difference between mul_scalar (truncation) and mul_scalar_bankers_round (matches R).
+        //
+        // R script does: dz_fee_lamports = block_rewards * 0.05
+        // The R calculation produces floating-point results that are then rounded.
+        //
+        // Test cases are from actual validators in fees_878.csv (DZ epoch 52, Solana epoch 878)
+
+        let five_pct = UnitShare16(500); // 5% fee
+
+        // Validator: 12i8gndWWWMTRzJBFhnYkobNgZB3XMUUJq75HeUrshrk
+        // block_rewards: 542321371
+        // R calculation: 542321371 * 0.05 = 27116068.55
+        // R rounds to: 27116069
+        let block_rewards_1 = 542321371_u64;
+        assert_eq!(
+            five_pct.mul_scalar(block_rewards_1),
+            27116068_u64,
+            "mul_scalar truncates 27116068.55 to 27116068"
+        );
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(block_rewards_1),
+            27116069_u64,
+            "mul_scalar_bankers_round rounds 27116068.55 to 27116069 (matches R)"
+        );
+
+        // Validator: ExCHWgfeJyKRzpfryiQn4W6aYaWhbSAEnsoUnBGNqjWD
+        // block_rewards: 1829820030
+        // R calculation: 1829820030 * 0.05 = 91491001.5
+        // R rounds to: 91491002 (0.5 rounds up in R)
+        let block_rewards_2 = 1829820030_u64;
+        assert_eq!(
+            five_pct.mul_scalar(block_rewards_2),
+            91491001_u64,
+            "mul_scalar truncates 91491001.5 to 91491001"
+        );
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(block_rewards_2),
+            91491002_u64,
+            "mul_scalar_bankers_round rounds 91491001.5 to 91491002 (matches R)"
+        );
+
+        // Validator: JupmVLmA8RoyTUbTMMuTtoPWHEiNQobxgTeGTrPNkzT
+        // block_rewards: 266270926842
+        // R calculation: 266270926842 * 0.05 = 13313546342.1
+        // R rounds to: 13313546342 (fractional part < 0.5, rounds down)
+        let block_rewards_3 = 266270926842_u64;
+        assert_eq!(
+            five_pct.mul_scalar(block_rewards_3),
+            13313546342_u64,
+            "mul_scalar truncates 13313546342.1 to 13313546342"
+        );
+        assert_eq!(
+            five_pct.mul_scalar_bankers_round(block_rewards_3),
+            13313546342_u64,
+            "mul_scalar_bankers_round rounds 13313546342.1 to 13313546342 (matches R)"
+        );
+
+        // Summary: mul_scalar_bankers_round matches R's behavior exactly
+        // For the actual validator debt calculation, we should use mul_scalar_bankers_round
+        // to maintain consistency with the canonical R implementation.
+    }
+
+    #[test]
+    fn test_mul_scalar_bankers_round_edge_cases() {
         // Test with MIN and zero
-        assert_eq!(UnitShare16::MIN.mul_scalar_rounded(u64::MAX), 0_u64);
-        assert_eq!(UnitShare16::MIN.mul_scalar_rounded(0_u64), 0_u64);
+        assert_eq!(UnitShare16::MIN.mul_scalar_bankers_round(u64::MAX), 0_u64);
+        assert_eq!(UnitShare16::MIN.mul_scalar_bankers_round(0_u64), 0_u64);
 
         // Test with MAX - this should return the input value
         // But note: u64::MAX with rounding will saturate due to the +denominator/2
         // So we test with smaller but still large values
-        assert_eq!(UnitShare16::MAX.mul_scalar_rounded(100_u64), 100_u64);
+        assert_eq!(UnitShare16::MAX.mul_scalar_bankers_round(100_u64), 100_u64);
         assert_eq!(
-            UnitShare16::MAX.mul_scalar_rounded(1_000_000_u64),
+            UnitShare16::MAX.mul_scalar_bankers_round(1_000_000_u64),
             1_000_000_u64
         );
 
         // Test with 99% to avoid overflow issues with u64::MAX
         let ninety_nine_pct = UnitShare16(9_900); // 99%
-        assert_eq!(ninety_nine_pct.mul_scalar_rounded(100_u64), 99_u64);
-        assert_eq!(ninety_nine_pct.mul_scalar_rounded(1_000_u64), 990_u64);
+        assert_eq!(ninety_nine_pct.mul_scalar_bankers_round(100_u64), 99_u64);
+        assert_eq!(ninety_nine_pct.mul_scalar_bankers_round(1_000_u64), 990_u64);
 
         // Test boundary at 0.5 rounding
         let one_pct = UnitShare16(100); // 1%
-        assert_eq!(one_pct.mul_scalar_rounded(49_u64), 0_u64); // 0.49 rounds down
-        assert_eq!(one_pct.mul_scalar_rounded(50_u64), 1_u64); // 0.50 rounds up
-        assert_eq!(one_pct.mul_scalar_rounded(51_u64), 1_u64); // 0.51 rounds up
+        assert_eq!(one_pct.mul_scalar_bankers_round(49_u64), 0_u64); // 0.49 rounds down
+                                                                     // 1% of 50 = 0.5, banker's rounds to EVEN (0)
+        assert_eq!(one_pct.mul_scalar_bankers_round(50_u64), 0_u64);
+        assert_eq!(one_pct.mul_scalar_bankers_round(51_u64), 1_u64); // 0.51 rounds up
 
         // Test that rounding doesn't break on large realistic values
         let five_pct = UnitShare16(500); // 5%
         let large_reward = 10_000_000_000_000_u64; // 10,000 SOL in lamports
-        let result = five_pct.mul_scalar_rounded(large_reward);
+        let result = five_pct.mul_scalar_bankers_round(large_reward);
         assert_eq!(result, 500_000_000_000_u64); // 500 SOL
     }
 
@@ -736,7 +930,7 @@ mod tests {
 
         for (reward, expected) in scenarios {
             let truncated = five_pct.mul_scalar(reward);
-            let rounded = five_pct.mul_scalar_rounded(reward);
+            let rounded = five_pct.mul_scalar_bankers_round(reward);
 
             // For these exact multiples, both should match
             assert_eq!(truncated, expected);
@@ -746,7 +940,7 @@ mod tests {
         // Test odd amounts that would differ
         let odd_reward = 27_116_069_u64; // Creates fractional result
         let truncated = five_pct.mul_scalar(odd_reward);
-        let rounded = five_pct.mul_scalar_rounded(odd_reward);
+        let rounded = five_pct.mul_scalar_bankers_round(odd_reward);
 
         // Document that rounded is always >= truncated
         assert!(rounded >= truncated);
@@ -773,10 +967,10 @@ mod tests {
             + inflation_fee.mul_scalar(inflation_rewards);
 
         // Calculate total debt (rounded)
-        let total_rounded = base_fee.mul_scalar_rounded(base_rewards)
-            + priority_fee.mul_scalar_rounded(priority_rewards)
-            + jito_fee.mul_scalar_rounded(jito_rewards)
-            + inflation_fee.mul_scalar_rounded(inflation_rewards);
+        let total_rounded = base_fee.mul_scalar_bankers_round(base_rewards)
+            + priority_fee.mul_scalar_bankers_round(priority_rewards)
+            + jito_fee.mul_scalar_bankers_round(jito_rewards)
+            + inflation_fee.mul_scalar_bankers_round(inflation_rewards);
 
         // With multiple components, difference can accumulate (up to 4 lamports in this case)
         assert!(total_rounded >= total_truncated);
