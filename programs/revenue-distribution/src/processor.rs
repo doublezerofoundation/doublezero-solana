@@ -1819,14 +1819,15 @@ fn try_forgive_solana_validator_debt(
     // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
-    msg!("DZ epoch: {}", distribution.dz_epoch);
+    let dz_epoch = distribution.dz_epoch;
+    msg!("DZ epoch: {}", dz_epoch);
 
     // We cannot pay Solana validator debt until the accountant has finalized
     // the debt calculation.
     distribution
         .try_require_finalized_debt_calculation()
         .inspect_err(|_| {
-            msg!("Epoch {} has unfinalized debt", distribution.dz_epoch);
+            msg!("Epoch {} has unfinalized debt", dz_epoch);
         })?;
 
     // This merkle root will be used to verify the debt after we determine
@@ -1845,7 +1846,7 @@ fn try_forgive_solana_validator_debt(
     .inspect_err(|_| {
         msg!(
             "Solana validator debt already processed for epoch {}",
-            distribution.dz_epoch
+            dz_epoch
         );
     })?;
 
@@ -1857,36 +1858,40 @@ fn try_forgive_solana_validator_debt(
         return Err(ProgramError::InvalidInstructionData);
     }
 
+    // We should drop the reference to this account just in case the write-off
+    // distribution is the same as the distribution above.
+    drop(distribution);
+
     // Account 3 must be the distribution reflecting an epoch ahead of the
     // current distribution's epoch.
-    let mut next_distribution =
+    let mut write_off_distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
-    msg!("Next DZ epoch: {}", next_distribution.dz_epoch);
+    msg!("Write-off DZ epoch: {}", write_off_distribution.dz_epoch);
 
-    if next_distribution.dz_epoch <= distribution.dz_epoch {
-        msg!("Next distribution's epoch must be ahead of the current distribution's epoch");
+    if write_off_distribution.dz_epoch < dz_epoch {
+        msg!("Next distribution's epoch must be at least the epoch of the current distribution");
         return Err(ProgramError::InvalidAccountData);
     }
 
     // We cannot account for uncollectible debt if the next distribution has
     // already swept 2Z tokens.
-    next_distribution
+    write_off_distribution
         .try_require_has_not_swept_2z_tokens()
         .inspect_err(|_| {
             msg!(
                 "Next epoch {} has already swept 2Z tokens",
-                next_distribution.dz_epoch
+                write_off_distribution.dz_epoch
             );
         })?;
 
     // Out of paranoia, prevent accounting for uncollectible debt if the next
     // distribution is not finalized.
-    next_distribution
+    write_off_distribution
         .try_require_finalized_debt_calculation()
         .inspect_err(|_| {
             msg!(
                 "Next epoch {} has unfinalized debt",
-                next_distribution.dz_epoch
+                write_off_distribution.dz_epoch
             );
         })?;
 
@@ -1899,19 +1904,21 @@ fn try_forgive_solana_validator_debt(
     // By tracking the uncollectible debt here, the rewards paid to contributors
     // will be reduced for this distribution by the amount of SOL debt that was
     // forgiven.
-    next_distribution.uncollectible_sol_debt += debt.amount;
+    write_off_distribution.uncollectible_sol_debt += debt.amount;
 
     // Double-check that the uncollectible debt does not exceed the total debt
     // for this distribution.
-    next_distribution.checked_total_sol_debt().ok_or_else(|| {
-        msg!("Uncollectible SOL debt exceeds total debt");
-        ProgramError::ArithmeticOverflow
-    })?;
+    write_off_distribution
+        .checked_total_sol_debt()
+        .ok_or_else(|| {
+            msg!("Uncollectible SOL debt exceeds total debt");
+            ProgramError::ArithmeticOverflow
+        })?;
 
     msg!(
         "Updated uncollectible SOL debt to {} for distribution epoch {}",
-        next_distribution.uncollectible_sol_debt,
-        next_distribution.dz_epoch
+        write_off_distribution.uncollectible_sol_debt,
+        write_off_distribution.dz_epoch
     );
 
     Ok(())
