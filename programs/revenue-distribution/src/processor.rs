@@ -107,8 +107,8 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::PaySolanaValidatorDebt { amount, proof } => {
             try_pay_solana_validator_debt(accounts, amount, proof)
         }
-        RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt { debt, proof } => {
-            try_forgive_solana_validator_debt(accounts, debt, proof)
+        RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt { amount, proof } => {
+            try_write_off_solana_validator_debt(accounts, amount, proof)
         }
         RevenueDistributionInstructionData::InitializeSwapDestination => {
             try_initialize_swap_destination(accounts)
@@ -1783,12 +1783,12 @@ fn try_pay_solana_validator_debt(
     Ok(())
 }
 
-fn try_forgive_solana_validator_debt(
+fn try_write_off_solana_validator_debt(
     accounts: &[AccountInfo],
-    debt: SolanaValidatorDebt,
+    amount: u64,
     proof: MerkleProof,
 ) -> ProgramResult {
-    msg!("Forgive Solana validator debt");
+    msg!("Write off Solana validator debt");
 
     // Enforce that the merkle proof uses an indexed tree. This index will be
     // referenced later in this instruction processor.
@@ -1847,6 +1847,11 @@ fn try_forgive_solana_validator_debt(
         );
     })?;
 
+    let debt = SolanaValidatorDebt {
+        node_id: solana_validator_deposit.node_id,
+        amount,
+    };
+
     let computed_merkle_root =
         proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
 
@@ -1902,7 +1907,7 @@ fn try_forgive_solana_validator_debt(
     //
     // By tracking the uncollectible debt here, the rewards paid to contributors
     // will be reduced for this distribution by the amount of SOL debt that was
-    // forgiven.
+    // written off.
     write_off_distribution.uncollectible_sol_debt += debt.amount;
 
     // Double-check that the uncollectible debt does not exceed the total debt

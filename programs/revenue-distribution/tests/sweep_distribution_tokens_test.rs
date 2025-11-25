@@ -469,7 +469,7 @@ async fn test_sweep_distribution_tokens() {
     assert_eq!(distribution, expected_distribution);
     assert_eq!(remaining_distribution_data, vec![0b11111011, 0b0]);
 
-    // Forgive debt for the uncollectible validator.
+    // Write off debt for the uncollectible validator.
     let proof = MerkleProof::from_indexed_pod_leaves(
         &debt_data,
         uncollectible_index.try_into().unwrap(),
@@ -478,7 +478,7 @@ async fn test_sweep_distribution_tokens() {
     .unwrap();
 
     test_setup
-        .forgive_solana_validator_debt(
+        .write_off_solana_validator_debt(
             next_dz_epoch,
             and_another_dz_epoch,
             &debt_accountant_signer,

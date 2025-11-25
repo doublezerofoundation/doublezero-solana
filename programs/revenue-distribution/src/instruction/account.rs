@@ -649,7 +649,7 @@ impl From<PaySolanaValidatorDebtAccounts> for Vec<AccountMeta> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForgiveSolanaValidatorDebtAccounts {
+pub struct WriteOffSolanaValidatorDebtAccounts {
     pub program_config_key: Pubkey,
     pub debt_accountant_key: Pubkey,
     pub distribution_key: Pubkey,
@@ -657,7 +657,7 @@ pub struct ForgiveSolanaValidatorDebtAccounts {
     pub write_off_distribution_key: Pubkey,
 }
 
-impl ForgiveSolanaValidatorDebtAccounts {
+impl WriteOffSolanaValidatorDebtAccounts {
     pub fn new(
         debt_accountant_key: &Pubkey,
         dz_epoch: DoubleZeroEpoch,
@@ -674,9 +674,9 @@ impl ForgiveSolanaValidatorDebtAccounts {
     }
 }
 
-impl From<ForgiveSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
-    fn from(accounts: ForgiveSolanaValidatorDebtAccounts) -> Self {
-        let ForgiveSolanaValidatorDebtAccounts {
+impl From<WriteOffSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: WriteOffSolanaValidatorDebtAccounts) -> Self {
+        let WriteOffSolanaValidatorDebtAccounts {
             program_config_key,
             debt_accountant_key,
             distribution_key,

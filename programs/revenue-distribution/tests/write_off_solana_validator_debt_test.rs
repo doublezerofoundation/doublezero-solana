@@ -5,7 +5,7 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::ForgiveSolanaValidatorDebtAccounts, ProgramConfiguration,
+        account::WriteOffSolanaValidatorDebtAccounts, ProgramConfiguration,
         ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
@@ -22,11 +22,11 @@ use solana_sdk::{
 use svm_hash::merkle::{merkle_root_from_indexed_pod_leaves, MerkleProof};
 
 //
-// Forgive Solana validator debt.
+// Write off Solana validator debt.
 //
 
 #[tokio::test]
-async fn test_forgive_solana_validator_debt() {
+async fn test_write_off_solana_validator_debt() {
     let mut test_setup = common::start_test().await;
 
     let admin_signer = Keypair::new();
@@ -168,17 +168,17 @@ async fn test_forgive_solana_validator_debt() {
     )
     .unwrap();
 
-    // Cannot forgive debt for unfinalized distributions.
-    let forgive_solana_validator_debt_ix = try_build_instruction(
+    // Cannot write off debt for unfinalized distributions.
+    let write_off_solana_validator_debt_ix = try_build_instruction(
         &ID,
-        ForgiveSolanaValidatorDebtAccounts::new(
+        WriteOffSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             dz_epoch,
             &arbitrary_bad_debt.node_id,
             next_dz_epoch,
         ),
-        &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
-            debt: arbitrary_bad_debt,
+        &RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt {
+            amount: arbitrary_bad_debt.amount,
             proof: proof.clone(),
         },
     )
@@ -186,7 +186,7 @@ async fn test_forgive_solana_validator_debt() {
 
     let (tx_err, program_logs) = test_setup
         .unwrap_simulation_error(
-            std::slice::from_ref(&forgive_solana_validator_debt_ix),
+            std::slice::from_ref(&write_off_solana_validator_debt_ix),
             &[&debt_accountant_signer],
         )
         .await;
@@ -210,7 +210,7 @@ async fn test_forgive_solana_validator_debt() {
 
     let (tx_err, program_logs) = test_setup
         .unwrap_simulation_error(
-            &[forgive_solana_validator_debt_ix],
+            &[write_off_solana_validator_debt_ix],
             &[&debt_accountant_signer],
         )
         .await;
@@ -232,18 +232,18 @@ async fn test_forgive_solana_validator_debt() {
         .await
         .unwrap();
 
-    // Cannot forgive debt using an epoch that is not at least the current
-    // epoch we intend to forgive debt for.
-    let forgive_solana_validator_debt_ix = try_build_instruction(
+    // Cannot write off debt using an epoch that is not at least the current
+    // epoch we intend to write off debt for.
+    let write_off_solana_validator_debt_ix = try_build_instruction(
         &ID,
-        ForgiveSolanaValidatorDebtAccounts::new(
+        WriteOffSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             dz_epoch,
             &arbitrary_bad_debt.node_id,
             DoubleZeroEpoch::new(0),
         ),
-        &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
-            debt: arbitrary_bad_debt,
+        &RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt {
+            amount: arbitrary_bad_debt.amount,
             proof: proof.clone(),
         },
     )
@@ -251,7 +251,7 @@ async fn test_forgive_solana_validator_debt() {
 
     let (tx_err, program_logs) = test_setup
         .unwrap_simulation_error(
-            &[forgive_solana_validator_debt_ix],
+            &[write_off_solana_validator_debt_ix],
             &[&debt_accountant_signer],
         )
         .await;
@@ -285,7 +285,7 @@ async fn test_forgive_solana_validator_debt() {
         .await
         .unwrap();
 
-    // Forgive some debt at epoch 1.
+    // Write off some debt at epoch 1.
     for (i, debt) in debt_data.iter().enumerate().skip(split_write_off_index) {
         assert_ne!(i, arbitrary_bad_debt_index);
         assert_ne!(i, upstanding_citizen_index);
@@ -298,12 +298,18 @@ async fn test_forgive_solana_validator_debt() {
         .unwrap();
 
         test_setup
-            .forgive_solana_validator_debt(dz_epoch, dz_epoch, &debt_accountant_signer, debt, proof)
+            .write_off_solana_validator_debt(
+                dz_epoch,
+                dz_epoch,
+                &debt_accountant_signer,
+                debt,
+                proof,
+            )
             .await
             .unwrap();
     }
 
-    // Forgive debt for the rest at epoch 2.
+    // Write off debt for the rest at epoch 2.
     for (i, debt) in debt_data.iter().enumerate().take(split_write_off_index) {
         if i == upstanding_citizen_index {
             continue;
@@ -317,7 +323,7 @@ async fn test_forgive_solana_validator_debt() {
         .unwrap();
 
         test_setup
-            .forgive_solana_validator_debt(
+            .write_off_solana_validator_debt(
                 dz_epoch,
                 next_dz_epoch,
                 &debt_accountant_signer,
@@ -388,8 +394,8 @@ async fn test_forgive_solana_validator_debt() {
     let (_, journal, _) = test_setup.fetch_journal().await;
     assert_eq!(journal.total_sol_balance, paid_debt.amount);
 
-    // Cannot forgive debt again. This includes attempting to forgive debt for
-    // the upstanding citizen who paid.
+    // Cannot write off debt again. This includes attempting to write off debt
+    // for the upstanding citizen who paid.
     //
     // NOTE: This test also demonstrates that even though the debt was written
     // off at epoch 1, it cannot be written off using another epoch's
@@ -404,21 +410,24 @@ async fn test_forgive_solana_validator_debt() {
         )
         .unwrap();
 
-        let forgive_solana_validator_debt_ix = try_build_instruction(
+        let write_off_solana_validator_debt_ix = try_build_instruction(
             &ID,
-            ForgiveSolanaValidatorDebtAccounts::new(
+            WriteOffSolanaValidatorDebtAccounts::new(
                 &debt_accountant_signer.pubkey(),
                 dz_epoch,
                 &debt.node_id,
                 next_dz_epoch,
             ),
-            &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt { debt: *debt, proof },
+            &RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt {
+                amount: debt.amount,
+                proof,
+            },
         )
         .unwrap();
 
         let (tx_err, program_logs) = test_setup
             .unwrap_simulation_error(
-                &[forgive_solana_validator_debt_ix],
+                &[write_off_solana_validator_debt_ix],
                 &[&debt_accountant_signer],
             )
             .await;
