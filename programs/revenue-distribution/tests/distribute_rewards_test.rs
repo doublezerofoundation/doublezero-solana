@@ -215,7 +215,7 @@ async fn test_distribute_rewards() {
                 .pay_solana_validator_debt(next_dz_epoch, debt, proof.clone())
                 .await
                 .unwrap()
-                .forgive_solana_validator_debt(
+                .write_off_solana_validator_debt(
                     dz_epoch,
                     next_dz_epoch,
                     &debt_accountant_signer,

@@ -93,8 +93,8 @@ pub enum RevenueDistributionInstructionData {
         amount: u64,
         proof: MerkleProof,
     },
-    ForgiveSolanaValidatorDebt {
-        debt: SolanaValidatorDebt,
+    WriteOffSolanaValidatorDebt {
+        amount: u64,
         proof: MerkleProof,
     },
     InitializeSwapDestination,
@@ -137,8 +137,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_solana_validator_deposit");
     pub const PAY_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::pay_solana_validator_debt");
-    pub const FORGIVE_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::forgive_solana_validator_debt");
+    pub const WRITE_OFF_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::write_off_solana_validator_debt");
     pub const INITIALIZE_SWAP_DESTINATION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_swap_destination");
     pub const WITHDRAW_SOL: Discriminator<DISCRIMINATOR_LEN> =
@@ -222,11 +222,11 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
 
                 Ok(Self::PaySolanaValidatorDebt { amount, proof })
             }
-            Self::FORGIVE_SOLANA_VALIDATOR_DEBT => {
-                let debt = BorshDeserialize::deserialize_reader(reader)?;
+            Self::WRITE_OFF_SOLANA_VALIDATOR_DEBT => {
+                let amount = BorshDeserialize::deserialize_reader(reader)?;
                 let proof = BorshDeserialize::deserialize_reader(reader)?;
 
-                Ok(Self::ForgiveSolanaValidatorDebt { debt, proof })
+                Ok(Self::WriteOffSolanaValidatorDebt { amount, proof })
             }
             Self::INITIALIZE_SWAP_DESTINATION => Ok(Self::InitializeSwapDestination),
             Self::SWEEP_DISTRIBUTION_TOKENS_V1 => Ok(Self::SweepDistributionTokens),
@@ -314,9 +314,9 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 amount.serialize(writer)?;
                 proof.serialize(writer)
             }
-            Self::ForgiveSolanaValidatorDebt { debt, proof } => {
-                Self::FORGIVE_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
-                debt.serialize(writer)?;
+            Self::WriteOffSolanaValidatorDebt { amount, proof } => {
+                Self::WRITE_OFF_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
+                amount.serialize(writer)?;
                 proof.serialize(writer)
             }
             Self::InitializeSwapDestination => Self::INITIALIZE_SWAP_DESTINATION.serialize(writer),
