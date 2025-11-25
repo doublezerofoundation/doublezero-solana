@@ -1212,11 +1212,10 @@ fn try_distribute_rewards(
     // Bits indicating whether rewards have been distributed for specific leaf
     // indices are stored in the distribution's remaining data as a bitfield.
     // Each bit represents one leaf: 1 = distributed, 0 = not yet distributed.
-    let processed_start_index = distribution.processed_rewards_start_index as usize;
-    let processed_end_index = distribution.processed_rewards_end_index as usize;
+    let processed_bitmap_range = distribution.processed_rewards_bitmap_range();
 
     try_process_remaining_data_leaf_index(
-        &mut distribution.remaining_data[processed_start_index..processed_end_index],
+        &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
     )
     .inspect_err(|_| {
@@ -1717,15 +1716,6 @@ fn try_pay_solana_validator_debt(
     distribution.collected_solana_validator_payments += amount;
     distribution.solana_validator_payments_count += 1;
 
-    // This merkle root will be used to verify the debt after we determine
-    // the debt has not already been paid.
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    // Bits indicating whether debt has been paid for specific leaf indices are
-    // stored in the distribution's remaining data.
-    let processed_start_index = distribution.processed_solana_validator_debt_start_index as usize;
-    let processed_end_index = distribution.processed_solana_validator_debt_end_index as usize;
-
     // Account 2 must be the Solana validator deposit.
     let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
         &mut accounts_iter,
@@ -1733,8 +1723,12 @@ fn try_pay_solana_validator_debt(
     )?;
     msg!("Node ID: {}", solana_validator_deposit.node_id);
 
+    // Bits indicating whether debt has been paid for specific leaf indices are
+    // stored in the distribution's remaining data.
+    let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
+
     try_process_remaining_data_leaf_index(
-        &mut distribution.remaining_data[processed_start_index..processed_end_index],
+        &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
     )
     .inspect_err(|_| {
@@ -1748,6 +1742,10 @@ fn try_pay_solana_validator_debt(
 
     let computed_merkle_root =
         proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
+
+    // This merkle root will be used to verify the debt after we determine
+    // the debt has not already been paid.
+    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
 
     if computed_merkle_root != expected_merkle_root {
         msg!("Invalid computed merkle root: {}", computed_merkle_root);
@@ -1830,11 +1828,10 @@ fn try_forgive_solana_validator_debt(
 
     // Bits indicating whether debt has been paid for specific leaf indices are
     // stored in the distribution's remaining data.
-    let processed_start_index = distribution.processed_solana_validator_debt_start_index as usize;
-    let processed_end_index = distribution.processed_solana_validator_debt_end_index as usize;
+    let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
 
     try_process_remaining_data_leaf_index(
-        &mut distribution.remaining_data[processed_start_index..processed_end_index],
+        &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
     )
     .inspect_err(|_| {
