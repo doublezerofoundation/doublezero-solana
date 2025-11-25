@@ -1198,12 +1198,6 @@ fn try_distribute_rewards(
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
     msg!("DZ epoch: {}", distribution.dz_epoch);
 
-    // Make sure the distribution rewards calculation is finalized.
-    if !distribution.is_rewards_calculation_finalized() {
-        msg!("Distribution rewards have not been finalized");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
     // Make sure 2Z tokens have been swept.
     if !distribution.has_swept_2z_tokens() {
         msg!("Distribution has not swept 2Z tokens");
@@ -2033,8 +2027,11 @@ fn try_sweep_distribution_tokens(accounts: &[AccountInfo]) -> ProgramResult {
     distribution.try_require_has_not_swept_2z_tokens()?;
     distribution.set_has_swept_2z_tokens(true);
 
-    // Make sure the distribution debt calculation is finalized.
-    distribution.try_require_finalized_debt_calculation()?;
+    // Make sure the distribution rewards calculation is finalized.
+    if !distribution.is_rewards_calculation_finalized() {
+        msg!("Distribution rewards have not been finalized");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // Account 2 must be the journal.
     let mut journal =
