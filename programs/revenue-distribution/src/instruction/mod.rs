@@ -93,6 +93,7 @@ pub enum RevenueDistributionInstructionData {
         amount: u64,
         proof: MerkleProof,
     },
+    EnableSolanaValidatorDebtWriteOff,
     WriteOffSolanaValidatorDebt {
         amount: u64,
         proof: MerkleProof,
@@ -137,6 +138,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_solana_validator_deposit");
     pub const PAY_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::pay_solana_validator_debt");
+    pub const ENABLE_SOLANA_VALIDATOR_DEBT_WRITE_OFF: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::enable_solana_validator_debt_write_off");
     pub const WRITE_OFF_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::write_off_solana_validator_debt");
     pub const INITIALIZE_SWAP_DESTINATION: Discriminator<DISCRIMINATOR_LEN> =
@@ -221,6 +224,9 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 let proof = BorshDeserialize::deserialize_reader(reader)?;
 
                 Ok(Self::PaySolanaValidatorDebt { amount, proof })
+            }
+            Self::ENABLE_SOLANA_VALIDATOR_DEBT_WRITE_OFF => {
+                Ok(Self::EnableSolanaValidatorDebtWriteOff)
             }
             Self::WRITE_OFF_SOLANA_VALIDATOR_DEBT => {
                 let amount = BorshDeserialize::deserialize_reader(reader)?;
@@ -313,6 +319,9 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::PAY_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
                 amount.serialize(writer)?;
                 proof.serialize(writer)
+            }
+            Self::EnableSolanaValidatorDebtWriteOff => {
+                Self::ENABLE_SOLANA_VALIDATOR_DEBT_WRITE_OFF.serialize(writer)
             }
             Self::WriteOffSolanaValidatorDebt { amount, proof } => {
                 Self::WRITE_OFF_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
