@@ -367,7 +367,6 @@ async fn test_write_off_solana_validator_debt() {
         .unix_timestamp
         .saturating_sub(60) as u32;
     assert_eq!(distribution, expected_distribution);
-
     assert_eq!(
         remaining_distribution_data,
         vec![0b11111111, 0b11111111, 0b0, 0b0]
@@ -396,11 +395,23 @@ async fn test_write_off_solana_validator_debt() {
     expected_distribution.calculation_allowed_timestamp =
         test_setup.get_clock().await.unix_timestamp as u32;
     assert_eq!(distribution, expected_distribution);
-
     assert_eq!(remaining_distribution_data, vec![0, 0]);
 
     let (_, journal, _) = test_setup.fetch_journal().await;
     assert_eq!(journal.total_sol_balance, paid_debt.amount);
+
+    // Solana validator deposit accounts should have written off debt updated.
+    for (i, debt) in debt_data.iter().enumerate() {
+        let (_, solana_validator_deposit) = test_setup
+            .fetch_solana_validator_deposit(&debt.node_id)
+            .await;
+
+        if i == upstanding_citizen_index {
+            assert_eq!(solana_validator_deposit.written_off_sol_debt, 0);
+        } else {
+            assert_eq!(solana_validator_deposit.written_off_sol_debt, debt.amount);
+        }
+    }
 
     // Cannot write off debt again. This includes attempting to write off debt
     // for the upstanding citizen who paid.
