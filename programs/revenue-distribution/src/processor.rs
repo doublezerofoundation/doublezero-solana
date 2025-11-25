@@ -1905,13 +1905,13 @@ fn try_write_off_solana_validator_debt(
     )?;
     msg!("Node ID: {}", solana_validator_deposit.node_id);
 
-    // We cannot pay Solana validator debt until the accountant has finalized
-    // the debt calculation.
-    distribution
-        .try_require_finalized_debt_calculation()
-        .inspect_err(|_| {
-            msg!("Epoch {} has unfinalized debt", dz_epoch);
-        })?;
+    // We cannot write off Solana validator debt until write offs have been
+    // enabled. This check also ensures that the debt calculation has been
+    // finalized.
+    if !distribution.is_solana_validator_debt_write_off_enabled() {
+        msg!("Solana validator debt write off is not enabled yet");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // This merkle root will be used to verify the debt after we determine
     // the debt has not already been paid.
