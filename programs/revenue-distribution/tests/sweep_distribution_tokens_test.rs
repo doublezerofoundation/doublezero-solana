@@ -209,7 +209,7 @@ async fn test_sweep_distribution_tokens() {
             .transfer_lamports(&deposit_key, amount)
             .await
             .unwrap()
-            .pay_solana_validator_debt(next_dz_epoch, node_id, amount, proof)
+            .pay_solana_validator_debt(next_dz_epoch, debt, proof)
             .await
             .unwrap();
     }
@@ -356,7 +356,7 @@ async fn test_sweep_distribution_tokens() {
             .transfer_lamports(&deposit_key, amount)
             .await
             .unwrap()
-            .pay_solana_validator_debt(and_another_dz_epoch, node_id, amount, proof)
+            .pay_solana_validator_debt(and_another_dz_epoch, debt, proof)
             .await
             .unwrap();
     }

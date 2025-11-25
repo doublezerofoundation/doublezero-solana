@@ -259,7 +259,7 @@ async fn test_pay_solana_validator_debt() {
     for ((debt, balance_before), proof) in debt_data.iter().zip(balances_before).zip(proofs.clone())
     {
         test_setup
-            .pay_solana_validator_debt(dz_epoch, &debt.node_id, debt.amount, proof)
+            .pay_solana_validator_debt(dz_epoch, debt, proof)
             .await
             .unwrap();
 

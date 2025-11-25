@@ -770,16 +770,18 @@ impl ProgramTestWithOwner {
     pub async fn pay_solana_validator_debt(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        node_id: &Pubkey,
-        amount: u64,
+        debt: &SolanaValidatorDebt,
         proof: MerkleProof,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.context.payer;
 
         let pay_solana_validator_debt_ix = try_build_instruction(
             &ID,
-            PaySolanaValidatorDebtAccounts::new(dz_epoch, node_id),
-            &RevenueDistributionInstructionData::PaySolanaValidatorDebt { amount, proof },
+            PaySolanaValidatorDebtAccounts::new(dz_epoch, &debt.node_id),
+            &RevenueDistributionInstructionData::PaySolanaValidatorDebt {
+                amount: debt.amount,
+                proof,
+            },
         )
         .unwrap();
 
@@ -809,6 +811,7 @@ impl ProgramTestWithOwner {
             ForgiveSolanaValidatorDebtAccounts::new(
                 &debt_accountant_signer.pubkey(),
                 dz_epoch,
+                &debt.node_id,
                 next_dz_epoch,
             ),
             &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt { debt: *debt, proof },

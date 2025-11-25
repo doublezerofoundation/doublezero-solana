@@ -212,7 +212,7 @@ async fn test_distribute_rewards() {
                 .transfer_lamports(&deposit_key, amount)
                 .await
                 .unwrap()
-                .pay_solana_validator_debt(next_dz_epoch, node_id, amount, proof.clone())
+                .pay_solana_validator_debt(next_dz_epoch, debt, proof.clone())
                 .await
                 .unwrap()
                 .forgive_solana_validator_debt(
@@ -232,10 +232,10 @@ async fn test_distribute_rewards() {
                 .transfer_lamports(&deposit_key, 2 * amount)
                 .await
                 .unwrap()
-                .pay_solana_validator_debt(dz_epoch, node_id, amount, proof.clone())
+                .pay_solana_validator_debt(dz_epoch, debt, proof.clone())
                 .await
                 .unwrap()
-                .pay_solana_validator_debt(next_dz_epoch, node_id, amount, proof)
+                .pay_solana_validator_debt(next_dz_epoch, debt, proof)
                 .await
                 .unwrap();
         }
