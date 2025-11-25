@@ -654,7 +654,7 @@ pub struct ForgiveSolanaValidatorDebtAccounts {
     pub debt_accountant_key: Pubkey,
     pub distribution_key: Pubkey,
     pub solana_validator_deposit_key: Pubkey,
-    pub next_distribution_key: Pubkey,
+    pub write_off_distribution_key: Pubkey,
 }
 
 impl ForgiveSolanaValidatorDebtAccounts {
@@ -662,14 +662,14 @@ impl ForgiveSolanaValidatorDebtAccounts {
         debt_accountant_key: &Pubkey,
         dz_epoch: DoubleZeroEpoch,
         node_id: &Pubkey,
-        next_dz_epoch: DoubleZeroEpoch,
+        write_off_dz_epoch: DoubleZeroEpoch,
     ) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
             debt_accountant_key: *debt_accountant_key,
             distribution_key: Distribution::find_address(dz_epoch).0,
             solana_validator_deposit_key: SolanaValidatorDeposit::find_address(node_id).0,
-            next_distribution_key: Distribution::find_address(next_dz_epoch).0,
+            write_off_distribution_key: Distribution::find_address(write_off_dz_epoch).0,
         }
     }
 }
@@ -681,7 +681,7 @@ impl From<ForgiveSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
             debt_accountant_key,
             distribution_key,
             solana_validator_deposit_key,
-            next_distribution_key,
+            write_off_distribution_key,
         } = accounts;
 
         vec![
@@ -689,7 +689,7 @@ impl From<ForgiveSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
             AccountMeta::new_readonly(debt_accountant_key, true),
             AccountMeta::new(distribution_key, false),
             AccountMeta::new(solana_validator_deposit_key, false),
-            AccountMeta::new(next_distribution_key, false),
+            AccountMeta::new(write_off_distribution_key, false),
         ]
     }
 }
