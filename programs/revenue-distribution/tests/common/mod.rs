@@ -8,9 +8,10 @@ use doublezero_revenue_distribution::{
         account::{
             ConfigureContributorRewardsAccounts, ConfigureDistributionDebtAccounts,
             ConfigureDistributionRewardsAccounts, ConfigureProgramAccounts,
-            DistributeRewardsAccounts, FinalizeDistributionDebtAccounts,
-            FinalizeDistributionRewardsAccounts, InitializeContributorRewardsAccounts,
-            InitializeDistributionAccounts, InitializeJournalAccounts, InitializeProgramAccounts,
+            DistributeRewardsAccounts, EnableSolanaValidatorDebtWriteOffAccounts,
+            FinalizeDistributionDebtAccounts, FinalizeDistributionRewardsAccounts,
+            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
+            InitializeJournalAccounts, InitializeProgramAccounts,
             InitializeSolanaValidatorDepositAccounts, InitializeSwapDestinationAccounts,
             PaySolanaValidatorDebtAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
             SweepDistributionTokensAccounts, VerifyDistributionMerkleRootAccounts,
@@ -789,6 +790,30 @@ impl ProgramTestWithOwner {
             &mut self.context.banks_client,
             &self.context.last_blockhash,
             &[pay_solana_validator_debt_ix],
+            &[payer_signer],
+        )
+        .await?;
+
+        Ok(self)
+    }
+
+    pub async fn enable_solana_validator_debt_write_off(
+        &mut self,
+        dz_epoch: DoubleZeroEpoch,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.context.payer;
+
+        let enable_solana_validator_debt_write_off_ix = try_build_instruction(
+            &ID,
+            EnableSolanaValidatorDebtWriteOffAccounts::new(dz_epoch, &payer_signer.pubkey()),
+            &RevenueDistributionInstructionData::EnableSolanaValidatorDebtWriteOff,
+        )
+        .unwrap();
+
+        self.context.last_blockhash = process_instructions_for_test(
+            &mut self.context.banks_client,
+            &self.context.last_blockhash,
+            &[enable_solana_validator_debt_write_off_ix],
             &[payer_signer],
         )
         .await?;

@@ -105,6 +105,7 @@ impl Distribution {
     pub const FLAG_IS_DEBT_CALCULATION_FINALIZED_BIT: usize = 1;
     pub const FLAG_IS_REWARDS_CALCULATION_FINALIZED_BIT: usize = 2;
     pub const FLAG_HAS_SWEPT_2Z_TOKENS_BIT: usize = 3;
+    pub const FLAG_IS_SOLANA_VALIDATOR_DEBT_WRITE_OFF_ENABLED_BIT: usize = 4;
 
     pub fn find_address(dz_epoch: DoubleZeroEpoch) -> (Pubkey, u8) {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, &dz_epoch.as_seed()], &crate::ID)
@@ -132,6 +133,19 @@ impl Distribution {
         self.flags.set_bit(
             Self::FLAG_IS_REWARDS_CALCULATION_FINALIZED_BIT,
             should_finalize,
+        );
+    }
+
+    #[inline]
+    pub fn is_solana_validator_debt_write_off_enabled(&self) -> bool {
+        self.flags
+            .bit(Self::FLAG_IS_SOLANA_VALIDATOR_DEBT_WRITE_OFF_ENABLED_BIT)
+    }
+
+    pub fn set_is_solana_validator_debt_write_off_enabled(&mut self, should_enable: bool) {
+        self.flags.set_bit(
+            Self::FLAG_IS_SOLANA_VALIDATOR_DEBT_WRITE_OFF_ENABLED_BIT,
+            should_enable,
         );
     }
 
