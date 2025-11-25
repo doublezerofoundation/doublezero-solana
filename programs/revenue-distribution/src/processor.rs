@@ -1800,7 +1800,7 @@ fn try_forgive_solana_validator_debt(
     // - 0: Program config.
     // - 1: Debt accountant.
     // - 2: Distribution.
-    // - 3: Next distribution.
+    // - 3: Write-off distribution.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
@@ -1856,40 +1856,42 @@ fn try_forgive_solana_validator_debt(
     // distribution is the same as the distribution above.
     drop(distribution);
 
-    // Account 3 must be the distribution reflecting an epoch ahead of the
-    // current distribution's epoch.
+    // Account 3 must be the same distribution or a distribution reflecting an
+    // epoch ahead of the current distribution's epoch.
     let mut write_off_distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
     msg!("Write-off DZ epoch: {}", write_off_distribution.dz_epoch);
 
     if write_off_distribution.dz_epoch < dz_epoch {
-        msg!("Next distribution's epoch must be at least the epoch of the current distribution");
+        msg!(
+            "Write-off distribution's epoch must be at least the epoch of the current distribution"
+        );
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // We cannot account for uncollectible debt if the next distribution has
-    // already swept 2Z tokens.
+    // We cannot account for uncollectible debt if the write-off distribution
+    // has already swept 2Z tokens.
     write_off_distribution
         .try_require_has_not_swept_2z_tokens()
         .inspect_err(|_| {
             msg!(
-                "Next epoch {} has already swept 2Z tokens",
+                "Write-off epoch {} has already swept 2Z tokens",
                 write_off_distribution.dz_epoch
             );
         })?;
 
-    // Out of paranoia, prevent accounting for uncollectible debt if the next
-    // distribution is not finalized.
+    // Out of paranoia, prevent accounting for uncollectible debt if the
+    // write-off distribution is not finalized.
     write_off_distribution
         .try_require_finalized_debt_calculation()
         .inspect_err(|_| {
             msg!(
-                "Next epoch {} has unfinalized debt",
+                "Write-off epoch {} has unfinalized debt",
                 write_off_distribution.dz_epoch
             );
         })?;
 
-    // Update the uncollectible SOL debt amount of the next distribution.
+    // Update the uncollectible SOL debt amount of the write-off distribution.
     //
     // We make the assumption that with the existence of this distribution, the
     // last distribution may have swept 2Z tokens so rewards can be distributed
@@ -1905,7 +1907,7 @@ fn try_forgive_solana_validator_debt(
     write_off_distribution
         .checked_total_sol_debt()
         .ok_or_else(|| {
-            msg!("Uncollectible SOL debt exceeds total debt");
+            msg!("Uncollectible SOL debt exceeds total debt for write-off epoch");
             ProgramError::ArithmeticOverflow
         })?;
 

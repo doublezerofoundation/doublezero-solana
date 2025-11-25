@@ -215,7 +215,7 @@ async fn test_forgive_solana_validator_debt() {
     );
     assert_eq!(
         program_logs.get(5).unwrap(),
-        &format!("Program log: Next epoch {next_dz_epoch} has unfinalized debt")
+        &format!("Program log: Write-off epoch {next_dz_epoch} has unfinalized debt")
     );
 
     test_setup
@@ -251,7 +251,7 @@ async fn test_forgive_solana_validator_debt() {
     );
     assert_eq!(
         program_logs.get(4).unwrap(),
-        "Program log: Next distribution's epoch must be at least the epoch of the current distribution"
+        "Program log: Write-off distribution's epoch must be at least the epoch of the current distribution"
     );
 
     // Pay debt for one validator.
