@@ -150,12 +150,20 @@ async fn test_forgive_solana_validator_debt() {
         .await
         .unwrap();
 
+    // Initialize Solana validator deposit accounts.
+    for debt in debt_data.iter() {
+        test_setup
+            .initialize_solana_validator_deposit(&debt.node_id)
+            .await
+            .unwrap();
+    }
+
     // Pay debt for one validator.
-    let arbitrary_index = 2;
-    let debt = debt_data[arbitrary_index];
+    let arbitrary_bad_debt_index = 2;
+    let arbitrary_bad_debt = debt_data[arbitrary_bad_debt_index];
     let proof = MerkleProof::from_indexed_pod_leaves(
         &debt_data,
-        arbitrary_index.try_into().unwrap(),
+        arbitrary_bad_debt_index.try_into().unwrap(),
         Some(SolanaValidatorDebt::LEAF_PREFIX),
     )
     .unwrap();
@@ -166,10 +174,11 @@ async fn test_forgive_solana_validator_debt() {
         ForgiveSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             dz_epoch,
+            &arbitrary_bad_debt.node_id,
             next_dz_epoch,
         ),
         &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
-            debt,
+            debt: arbitrary_bad_debt,
             proof: proof.clone(),
         },
     )
@@ -186,11 +195,11 @@ async fn test_forgive_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(3).unwrap(),
+        program_logs.get(4).unwrap(),
         "Program log: Distribution debt calculation is not finalized yet"
     );
     assert_eq!(
-        program_logs.get(4).unwrap(),
+        program_logs.get(5).unwrap(),
         &format!("Program log: Epoch {dz_epoch} has unfinalized debt")
     );
 
@@ -210,11 +219,11 @@ async fn test_forgive_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(4).unwrap(),
+        program_logs.get(5).unwrap(),
         "Program log: Distribution debt calculation is not finalized yet"
     );
     assert_eq!(
-        program_logs.get(5).unwrap(),
+        program_logs.get(6).unwrap(),
         &format!("Program log: Write-off epoch {next_dz_epoch} has unfinalized debt")
     );
 
@@ -230,10 +239,11 @@ async fn test_forgive_solana_validator_debt() {
         ForgiveSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             dz_epoch,
+            &arbitrary_bad_debt.node_id,
             DoubleZeroEpoch::new(0),
         ),
         &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt {
-            debt,
+            debt: arbitrary_bad_debt,
             proof: proof.clone(),
         },
     )
@@ -250,7 +260,7 @@ async fn test_forgive_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(4).unwrap(),
+        program_logs.get(5).unwrap(),
         "Program log: Write-off distribution's epoch must be at least the epoch of the current distribution"
     );
 
@@ -265,21 +275,19 @@ async fn test_forgive_solana_validator_debt() {
     .unwrap();
 
     test_setup
-        .initialize_solana_validator_deposit(&paid_debt.node_id)
-        .await
-        .unwrap()
         .transfer_lamports(
             &SolanaValidatorDeposit::find_address(&paid_debt.node_id).0,
             paid_debt.amount,
         )
         .await
         .unwrap()
-        .pay_solana_validator_debt(dz_epoch, &paid_debt.node_id, paid_debt.amount, proof)
+        .pay_solana_validator_debt(dz_epoch, &paid_debt, proof)
         .await
         .unwrap();
 
     // Forgive some debt at epoch 1.
     for (i, debt) in debt_data.iter().enumerate().skip(split_write_off_index) {
+        assert_ne!(i, arbitrary_bad_debt_index);
         assert_ne!(i, upstanding_citizen_index);
 
         let proof = MerkleProof::from_indexed_pod_leaves(
@@ -401,6 +409,7 @@ async fn test_forgive_solana_validator_debt() {
             ForgiveSolanaValidatorDebtAccounts::new(
                 &debt_accountant_signer.pubkey(),
                 dz_epoch,
+                &debt.node_id,
                 next_dz_epoch,
             ),
             &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt { debt: *debt, proof },
@@ -419,11 +428,11 @@ async fn test_forgive_solana_validator_debt() {
         );
 
         assert_eq!(
-            program_logs.get(3).unwrap(),
+            program_logs.get(4).unwrap(),
             &format!("Program log: Merkle leaf index {leaf_index} has already been processed")
         );
         assert_eq!(
-            program_logs.get(4).unwrap(),
+            program_logs.get(5).unwrap(),
             &format!("Program log: Solana validator debt already processed for epoch {dz_epoch}")
         )
     }

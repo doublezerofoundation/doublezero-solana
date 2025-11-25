@@ -1814,6 +1814,12 @@ fn try_forgive_solana_validator_debt(
     let dz_epoch = distribution.dz_epoch;
     msg!("DZ epoch: {}", dz_epoch);
 
+    let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
+        &mut accounts_iter,
+        Some(&ID),
+    )?;
+    msg!("Node ID: {}", solana_validator_deposit.node_id);
+
     // We cannot pay Solana validator debt until the accountant has finalized
     // the debt calculation.
     distribution
