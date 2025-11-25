@@ -799,7 +799,7 @@ impl ProgramTestWithOwner {
     pub async fn forgive_solana_validator_debt(
         &mut self,
         dz_epoch: DoubleZeroEpoch,
-        next_dz_epoch: DoubleZeroEpoch,
+        write_off_dz_epoch: DoubleZeroEpoch,
         debt_accountant_signer: &Keypair,
         debt: &SolanaValidatorDebt,
         proof: MerkleProof,
@@ -812,7 +812,7 @@ impl ProgramTestWithOwner {
                 &debt_accountant_signer.pubkey(),
                 dz_epoch,
                 &debt.node_id,
-                next_dz_epoch,
+                write_off_dz_epoch,
             ),
             &RevenueDistributionInstructionData::ForgiveSolanaValidatorDebt { debt: *debt, proof },
         )
