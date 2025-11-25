@@ -1899,11 +1899,15 @@ fn try_write_off_solana_validator_debt(
     let dz_epoch = distribution.dz_epoch;
     msg!("DZ epoch: {}", dz_epoch);
 
-    let solana_validator_deposit = ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
-        &mut accounts_iter,
-        Some(&ID),
-    )?;
+    let mut solana_validator_deposit =
+        ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
+            &mut accounts_iter,
+            Some(&ID),
+        )?;
     msg!("Node ID: {}", solana_validator_deposit.node_id);
+
+    // Track the bad debt in the Solana validator deposit account.
+    solana_validator_deposit.written_off_sol_debt += amount;
 
     // We cannot write off Solana validator debt until write offs have been
     // enabled. This check also ensures that the debt calculation has been
