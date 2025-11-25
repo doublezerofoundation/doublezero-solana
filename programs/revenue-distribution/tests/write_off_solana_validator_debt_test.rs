@@ -168,7 +168,7 @@ async fn test_write_off_solana_validator_debt() {
     )
     .unwrap();
 
-    // Cannot write off debt for unfinalized distributions.
+    // Cannot write off debt for distribution without enabling write off.
     let write_off_solana_validator_debt_ix = try_build_instruction(
         &ID,
         WriteOffSolanaValidatorDebtAccounts::new(
@@ -196,18 +196,18 @@ async fn test_write_off_solana_validator_debt() {
     );
     assert_eq!(
         program_logs.get(4).unwrap(),
-        "Program log: Distribution debt calculation is not finalized yet"
-    );
-    assert_eq!(
-        program_logs.get(5).unwrap(),
-        &format!("Program log: Epoch {dz_epoch} has unfinalized debt")
+        "Program log: Solana validator debt write off is not enabled yet"
     );
 
     test_setup
         .finalize_distribution_debt(dz_epoch, &debt_accountant_signer)
         .await
+        .unwrap()
+        .enable_solana_validator_debt_write_off(dz_epoch)
+        .await
         .unwrap();
 
+    // Cannot write off debt for distribution with unfinalized debt.
     let (tx_err, program_logs) = test_setup
         .unwrap_simulation_error(
             &[write_off_solana_validator_debt_ix],
@@ -339,6 +339,7 @@ async fn test_write_off_solana_validator_debt() {
 
     let mut expected_distribution = Distribution::default();
     expected_distribution.set_is_debt_calculation_finalized(true);
+    expected_distribution.set_is_solana_validator_debt_write_off_enabled(true);
     expected_distribution.bump_seed = Distribution::find_address(dz_epoch).1;
     expected_distribution.token_2z_pda_bump_seed =
         state::find_2z_token_pda_address(&distribution_key).1;
@@ -355,6 +356,10 @@ async fn test_write_off_solana_validator_debt() {
     expected_distribution.uncollectible_sol_debt = debt_write_off_first;
     expected_distribution.collected_solana_validator_payments = paid_debt.amount;
     expected_distribution.processed_solana_validator_debt_end_index = total_solana_validators / 8;
+    expected_distribution.processed_solana_validator_debt_write_off_start_index =
+        total_solana_validators / 8;
+    expected_distribution.processed_solana_validator_debt_write_off_end_index =
+        2 * (total_solana_validators / 8);
     expected_distribution.distribute_rewards_relay_lamports = distribute_rewards_relay_lamports;
     expected_distribution.calculation_allowed_timestamp = test_setup
         .get_clock()
@@ -363,7 +368,10 @@ async fn test_write_off_solana_validator_debt() {
         .saturating_sub(60) as u32;
     assert_eq!(distribution, expected_distribution);
 
-    assert_eq!(remaining_distribution_data, vec![0b11111111, 0b11111111]);
+    assert_eq!(
+        remaining_distribution_data,
+        vec![0b11111111, 0b11111111, 0b0, 0b0]
+    );
 
     let (distribution_key, distribution, remaining_distribution_data, _, _) =
         test_setup.fetch_distribution(next_dz_epoch).await;
