@@ -280,7 +280,41 @@ async fn test_write_off_solana_validator_debt() {
             paid_debt.amount,
         )
         .await
-        .unwrap()
+        .unwrap();
+
+    // Cannot write off debt for a deposit account that has enough lamports to
+    // cover debt.
+    let write_off_solana_validator_debt_ix = try_build_instruction(
+        &ID,
+        WriteOffSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            dz_epoch,
+            &paid_debt.node_id,
+            dz_epoch,
+        ),
+        &RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt {
+            amount: paid_debt.amount,
+            proof: proof.clone(),
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            &[write_off_solana_validator_debt_ix],
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(4).unwrap(),
+        "Program log: Lamports balance in deposit account is enough to cover debt amount"
+    );
+
+    test_setup
         .pay_solana_validator_debt(dz_epoch, &paid_debt, proof)
         .await
         .unwrap();
