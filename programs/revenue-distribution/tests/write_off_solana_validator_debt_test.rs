@@ -367,10 +367,16 @@ async fn test_write_off_solana_validator_debt() {
         .unix_timestamp
         .saturating_sub(60) as u32;
     assert_eq!(distribution, expected_distribution);
-    assert_eq!(
-        remaining_distribution_data,
-        vec![0b11111111, 0b11111111, 0b0, 0b0]
-    );
+
+    // First two bytes reflect debt tracking.
+    let processed_bitmap =
+        &remaining_distribution_data[distribution.processed_solana_validator_debt_bitmap_range()];
+    assert_eq!(processed_bitmap, [0b11111111, 0b11111111]);
+
+    // Third and fourth bytes reflect write off tracking.
+    let write_off_bitmap = &remaining_distribution_data
+        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b11110111, 0b11111111]);
 
     let (distribution_key, distribution, remaining_distribution_data, _, _) =
         test_setup.fetch_distribution(next_dz_epoch).await;
@@ -395,7 +401,15 @@ async fn test_write_off_solana_validator_debt() {
     expected_distribution.calculation_allowed_timestamp =
         test_setup.get_clock().await.unix_timestamp as u32;
     assert_eq!(distribution, expected_distribution);
-    assert_eq!(remaining_distribution_data, vec![0, 0]);
+
+    // First two bytes reflect debt tracking.
+    let processed_bitmap =
+        &remaining_distribution_data[distribution.processed_solana_validator_debt_bitmap_range()];
+    assert_eq!(processed_bitmap, [0; 2]);
+
+    let write_off_bitmap = &remaining_distribution_data
+        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    assert!(write_off_bitmap.is_empty());
 
     let (_, journal, _) = test_setup.fetch_journal().await;
     assert_eq!(journal.total_sol_balance, paid_debt.amount);
@@ -459,9 +473,20 @@ async fn test_write_off_solana_validator_debt() {
             program_logs.get(4).unwrap(),
             &format!("Program log: Merkle leaf index {leaf_index} has already been processed")
         );
-        assert_eq!(
-            program_logs.get(5).unwrap(),
-            &format!("Program log: Solana validator debt already processed for epoch {dz_epoch}")
-        )
+        if i == upstanding_citizen_index {
+            assert_eq!(
+                program_logs.get(5).unwrap(),
+                &format!(
+                    "Program log: Solana validator debt already processed for epoch {dz_epoch}"
+                )
+            )
+        } else {
+            assert_eq!(
+                program_logs.get(5).unwrap(),
+                &format!(
+                    "Program log: Solana validator debt already written off for epoch {dz_epoch}"
+                )
+            )
+        }
     }
 }

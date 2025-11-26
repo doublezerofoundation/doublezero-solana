@@ -475,7 +475,21 @@ async fn test_sweep_distribution_tokens() {
         .unix_timestamp
         .saturating_sub(60) as u32;
     assert_eq!(distribution, expected_distribution);
-    assert_eq!(remaining_distribution_data, vec![0b11111011, 0b0, 0b0]);
+
+    // First byte reflects debt tracking.
+    let processed_debt_bitmap =
+        &remaining_distribution_data[distribution.processed_solana_validator_debt_bitmap_range()];
+    assert_eq!(processed_debt_bitmap, [0b11111011]);
+
+    // Second byte reflects write off tracking.
+    let write_off_bitmap = &remaining_distribution_data
+        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0]);
+
+    // Third byte reflects rewards tracking.
+    let rewards_bitmap =
+        &remaining_distribution_data[distribution.processed_rewards_bitmap_range()];
+    assert_eq!(rewards_bitmap, [0]);
 
     // Write off debt for the uncollectible validator.
     let proof = MerkleProof::from_indexed_pod_leaves(
@@ -533,7 +547,21 @@ async fn test_sweep_distribution_tokens() {
     let (_, distribution, remaining_distribution_data, _, _) =
         test_setup.fetch_distribution(next_dz_epoch).await;
     assert_eq!(distribution, expected_distribution);
-    assert_eq!(remaining_distribution_data, vec![0b11111111, 0b0, 0b0]);
+
+    // First byte reflects debt tracking.
+    let processed_debt_bitmap =
+        &remaining_distribution_data[distribution.processed_solana_validator_debt_bitmap_range()];
+    assert_eq!(processed_debt_bitmap, [0b11111111]);
+
+    // Second byte reflects write off tracking.
+    let write_off_bitmap = &remaining_distribution_data
+        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00000100]);
+
+    // Third byte reflects rewards tracking.
+    let rewards_bitmap =
+        &remaining_distribution_data[distribution.processed_rewards_bitmap_range()];
+    assert_eq!(rewards_bitmap, [0]);
 
     let (
         distribution_key,
@@ -573,5 +601,14 @@ async fn test_sweep_distribution_tokens() {
     expected_distribution.calculation_allowed_timestamp =
         test_setup.get_clock().await.unix_timestamp as u32;
     assert_eq!(distribution, expected_distribution);
-    assert_eq!(remaining_distribution_data, vec![0b11111111, 0b0]);
+
+    // First byte reflects debt tracking.
+    let processed_debt_bitmap =
+        &remaining_distribution_data[distribution.processed_solana_validator_debt_bitmap_range()];
+    assert_eq!(processed_debt_bitmap, [0b11111111]);
+
+    // Second byte reflects rewards tracking.
+    let rewards_bitmap =
+        &remaining_distribution_data[distribution.processed_rewards_bitmap_range()];
+    assert_eq!(rewards_bitmap, [0]);
 }

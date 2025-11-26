@@ -1917,12 +1917,25 @@ fn try_write_off_solana_validator_debt(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // This merkle root will be used to verify the debt after we determine
-    // the debt has not already been paid.
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
+    // Bits indicating whether debt has been written off for specific leaf
+    // indices are stored in the distribution's remaining data.
+    let write_off_bitmap_range =
+        distribution.processed_solana_validator_debt_write_off_bitmap_range();
 
-    // Bits indicating whether debt has been paid for specific leaf indices are
-    // stored in the distribution's remaining data.
+    try_process_remaining_data_leaf_index(
+        &mut distribution.remaining_data[write_off_bitmap_range],
+        leaf_index,
+    )
+    .inspect_err(|_| {
+        msg!(
+            "Solana validator debt already written off for epoch {}",
+            dz_epoch
+        );
+    })?;
+
+    // Bits indicating whether debt has been processed for specific leaf indices
+    // are stored in the distribution's remaining data. Any debt (written off or
+    // not) must be marked as processed.
     let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
 
     try_process_remaining_data_leaf_index(
@@ -1943,6 +1956,10 @@ fn try_write_off_solana_validator_debt(
 
     let computed_merkle_root =
         proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
+
+    // This merkle root will be used to verify the debt after we determine
+    // the debt has not already been processed.
+    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
 
     if computed_merkle_root != expected_merkle_root {
         msg!("Invalid computed merkle root: {}", computed_merkle_root);
