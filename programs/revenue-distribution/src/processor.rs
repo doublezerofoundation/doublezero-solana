@@ -1904,10 +1904,26 @@ fn try_write_off_solana_validator_debt(
             &mut accounts_iter,
             Some(&ID),
         )?;
-    msg!("Node ID: {}", solana_validator_deposit.node_id);
+    let node_id = solana_validator_deposit.node_id;
+    msg!("Node ID: {}", node_id);
 
     // Track the bad debt in the Solana validator deposit account.
     solana_validator_deposit.written_off_sol_debt += amount;
+
+    let solana_validator_deposit_info = solana_validator_deposit.info;
+    drop(solana_validator_deposit);
+
+    // If there are enough lamports to pay debt, revert.
+    let deposit_lamports = solana_validator_deposit_info.lamports();
+    let rent_sysvar = Rent::get().unwrap();
+    let rent_exemption_lamports =
+        rent_sysvar.minimum_balance(solana_validator_deposit_info.data_len());
+    let excess_lamports = deposit_lamports.saturating_sub(rent_exemption_lamports);
+
+    if excess_lamports >= amount {
+        msg!("Lamports balance in deposit account is enough to cover debt amount");
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // We cannot write off Solana validator debt until write offs have been
     // enabled. This check also ensures that the debt calculation has been
@@ -1949,11 +1965,7 @@ fn try_write_off_solana_validator_debt(
         );
     })?;
 
-    let debt = SolanaValidatorDebt {
-        node_id: solana_validator_deposit.node_id,
-        amount,
-    };
-
+    let debt = SolanaValidatorDebt { node_id, amount };
     let computed_merkle_root =
         proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
 
