@@ -13,7 +13,7 @@ edition = "2021"
 homepage = "https://doublezero.xyz"
 license = "Apache-2.0"
 repository = ""
-rust-version = "1.84"
+rust-version = "1.84.1"
 version = "0.0.0"
 
 [workspace.dependencies]
