@@ -36,7 +36,7 @@ solana-pubkey = ">=2,<=3"
 solana-system-interface = { version = ">=1,<=3", features = ["bincode"] }
 solana-sysvar = ">=2,<=3"
 spl-associated-token-account-interface = ">=1,<=2"
-spl-token = { version = ">=8,<=9", features = ["no-entrypoint"] }
+spl-token-interface = ">=1,<=2"
 svm-hash = ">=0.1,<=0.2"
 
 ### Please keep these packages pinned for now.
