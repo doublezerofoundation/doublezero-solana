@@ -8,7 +8,7 @@
 - update dependencies ([#92])
 - track debt write-offs in state ([#93])
 - update Solana crates to v3 ([#94])
-- uptick version to 0.2.0 (pending)
+- uptick version to 0.2.0 ([#95])
 
 ## [v0.1.1]
 
@@ -96,5 +96,6 @@
 [#92]: https://github.com/doublezerofoundation/doublezero-solana/pull/92
 [#93]: https://github.com/doublezerofoundation/doublezero-solana/pull/93
 [#94]: https://github.com/doublezerofoundation/doublezero-solana/pull/94
+[#95]: https://github.com/doublezerofoundation/doublezero-solana/pull/95
 [v0.1.0]: https://github.com/doublezerofoundation/doublezero-solana/tree/revenue-distribution/v0.1.0
 [v0.1.1]: https://github.com/doublezerofoundation/doublezero-solana/tree/revenue-distribution/v0.1.1
