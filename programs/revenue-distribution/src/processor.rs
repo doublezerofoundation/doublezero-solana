@@ -27,8 +27,8 @@ use svm_hash::{merkle::MerkleProof, sha2::Hash};
 use crate::{
     instruction::{
         account::DequeueFillsCpiAccounts, ContributorRewardsConfiguration,
-        DistributionMerkleRootKind, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        DistributionMerkleRootKind, ProgramConfiguration, ProgramFeatureConfiguration,
+        ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
@@ -541,6 +541,25 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
             program_config
                 .distribution_parameters
                 .initialization_grace_period_minutes = grace_period_minutes;
+        }
+        ProgramConfiguration::FeatureActivation {
+            feature,
+            activation_epoch,
+        } => {
+            if activation_epoch == 0 {
+                msg!("Cannot activate feature at epoch zero");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            match feature {
+                ProgramFeatureConfiguration::SolanaValidatorDebtWriteOff => {
+                    msg!(
+                        "Set Solana validator debt write-off feature activation epoch: {}",
+                        activation_epoch
+                    );
+                    program_config.debt_write_off_feature_activation_epoch = activation_epoch;
+                }
+            }
         }
     }
 
@@ -1800,6 +1819,22 @@ fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> Progr
 
     // Make sure the program is not paused.
     program_config.try_require_unpaused()?;
+
+    // Cannot enable write-offs before the activation epoch.
+    if !program_config.is_debt_write_off_feature_activated() {
+        let activation_epoch = program_config.debt_write_off_feature_activation_epoch;
+
+        if activation_epoch == 0 {
+            msg!("Debt write-off feature activation epoch not configured");
+        } else {
+            msg!(
+                "Debt write-off feature activates at epoch {}",
+                activation_epoch
+            );
+        }
+
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     // Account 1 must be the distribution.
     let mut distribution =

@@ -5,8 +5,8 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::SweepDistributionTokensAccounts, ProgramConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        account::SweepDistributionTokensAccounts, ProgramConfiguration,
+        ProgramFeatureConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, find_2z_token_pda_address, find_swap_authority_address, Distribution,
@@ -135,6 +135,10 @@ async fn test_sweep_distribution_tokens() {
                     minimum_epoch_duration_to_finalize_rewards,
                 ),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
+                ProgramConfiguration::FeatureActivation {
+                    feature: ProgramFeatureConfiguration::SolanaValidatorDebtWriteOff,
+                    activation_epoch: DoubleZeroEpoch::new(1),
+                },
             ],
         )
         .await

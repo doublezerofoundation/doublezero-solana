@@ -8,7 +8,7 @@ use doublezero_program_tools::zero_copy;
 use doublezero_revenue_distribution::{
     instruction::{
         ContributorRewardsConfiguration, DistributionMerkleRootKind, ProgramConfiguration,
-        ProgramFlagConfiguration,
+        ProgramFeatureConfiguration, ProgramFlagConfiguration,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
     types::{BurnRate, DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, ValidatorFee},
@@ -131,6 +131,10 @@ async fn test_distribute_rewards() {
                 ProgramConfiguration::CalculationGracePeriodMinutes(1),
                 ProgramConfiguration::DistributionInitializationGracePeriodMinutes(1),
                 ProgramConfiguration::Flag(ProgramFlagConfiguration::IsPaused(false)),
+                ProgramConfiguration::FeatureActivation {
+                    feature: ProgramFeatureConfiguration::SolanaValidatorDebtWriteOff,
+                    activation_epoch: dz_epoch,
+                },
             ],
         )
         .await
