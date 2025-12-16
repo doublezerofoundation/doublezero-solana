@@ -124,7 +124,10 @@ async fn test_enable_solana_validator_debt_write_off() {
 
     // Cannot enable write-offs before the feature is activated.
     let (tx_err, program_logs) = test_setup
-        .unwrap_simulation_error(&[enable_solana_validator_debt_write_off_ix.clone()], &[])
+        .unwrap_simulation_error(
+            std::slice::from_ref(&enable_solana_validator_debt_write_off_ix),
+            &[],
+        )
         .await;
 
     assert_eq!(
@@ -152,7 +155,10 @@ async fn test_enable_solana_validator_debt_write_off() {
     assert!(!program_config.is_debt_write_off_feature_activated());
 
     let (tx_err, program_logs) = test_setup
-        .unwrap_simulation_error(&[enable_solana_validator_debt_write_off_ix.clone()], &[])
+        .unwrap_simulation_error(
+            std::slice::from_ref(&enable_solana_validator_debt_write_off_ix),
+            &[],
+        )
         .await;
 
     assert_eq!(
