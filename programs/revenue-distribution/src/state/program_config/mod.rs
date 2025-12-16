@@ -208,8 +208,8 @@ impl ProgramConfig {
         }
     }
 
-    pub fn current_completed_dz_epoch(&self) -> DoubleZeroEpoch {
-        self.next_completed_dz_epoch.saturating_sub_duration(1)
+    pub fn last_completed_epoch(&self) -> Option<DoubleZeroEpoch> {
+        self.next_completed_dz_epoch.checked_sub_duration(1)
     }
 
     pub fn is_debt_write_off_feature_activated(&self) -> bool {
@@ -364,6 +364,28 @@ mod tests {
     }
 
     #[test]
+    fn test_last_completed_epoch() {
+        let mut program_config = ProgramConfig::default();
+        assert!(program_config.last_completed_epoch().is_none());
+
+        program_config.next_completed_dz_epoch = program_config
+            .next_completed_dz_epoch
+            .saturating_add_duration(1);
+        assert_eq!(
+            program_config.last_completed_epoch().unwrap(),
+            DoubleZeroEpoch::new(0)
+        );
+
+        program_config.next_completed_dz_epoch = program_config
+            .next_completed_dz_epoch
+            .saturating_add_duration(1);
+        assert_eq!(
+            program_config.last_completed_epoch().unwrap(),
+            DoubleZeroEpoch::new(1)
+        );
+    }
+
+    #[test]
     fn test_is_debt_write_off_feature_activated() {
         let mut program_config = ProgramConfig {
             next_completed_dz_epoch: DoubleZeroEpoch::new(1),
@@ -374,11 +396,14 @@ mod tests {
         program_config.debt_write_off_feature_activation_epoch = DoubleZeroEpoch::new(2);
         assert!(!program_config.is_debt_write_off_feature_activated());
 
-        let next_completed_dz_epoch = &mut program_config.next_completed_dz_epoch;
-        *next_completed_dz_epoch = program_config.debt_write_off_feature_activation_epoch;
+        program_config.next_completed_dz_epoch = program_config
+            .next_completed_dz_epoch
+            .saturating_add_duration(1);
         assert!(program_config.is_debt_write_off_feature_activated());
 
-        program_config.next_completed_dz_epoch = DoubleZeroEpoch::new(3);
+        program_config.next_completed_dz_epoch = program_config
+            .next_completed_dz_epoch
+            .saturating_add_duration(1);
         assert!(program_config.is_debt_write_off_feature_activated());
     }
 }
