@@ -404,6 +404,7 @@ async fn test_write_off_solana_validator_debt() {
         .await
         .unix_timestamp
         .saturating_sub(60) as u32;
+    expected_distribution.solana_validator_write_off_count = total_solana_validators - 1;
     assert_eq!(distribution, expected_distribution);
 
     // First two bytes reflect debt tracking.

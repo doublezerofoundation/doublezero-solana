@@ -1218,14 +1218,14 @@ fn try_distribute_rewards(
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
     msg!("DZ epoch: {}", distribution.dz_epoch);
 
-    // Make sure 2Z tokens have been swept.
-    if !distribution.has_swept_2z_tokens() {
-        msg!("Distribution has not swept 2Z tokens");
+    if distribution.are_all_rewards_distributed() {
+        msg!("All rewards have already been distributed");
         return Err(ProgramError::InvalidAccountData);
     }
 
-    if distribution.distributed_rewards_count == distribution.total_contributors {
-        msg!("All rewards have already been distributed");
+    // Make sure 2Z tokens have been swept.
+    if !distribution.has_swept_2z_tokens() {
+        msg!("Distribution has not swept 2Z tokens");
         return Err(ProgramError::InvalidAccountData);
     }
 
@@ -1967,6 +1967,8 @@ fn try_write_off_solana_validator_debt(
         msg!("Solana validator debt write off is not enabled yet");
         return Err(ProgramError::InvalidAccountData);
     }
+
+    distribution.solana_validator_write_off_count += 1;
 
     // Bits indicating whether debt has been written off for specific leaf
     // indices are stored in the distribution's remaining data.
