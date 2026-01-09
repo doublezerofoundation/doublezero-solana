@@ -44,7 +44,7 @@ debt recovery, these projections will more accurately reflect the
 creditworthiness of users on the network.
 
 Once rewards have been distributed for a given distribution, there is nothing
-left to do with that distribution. 2Z tokens swept into that distributions
+left to do with that distribution. 2Z tokens swept into those distributions
 effectively finalize the amount of rewards that will be distributed to network
 contributors and burned. Because the distribution has reached the end of its
 lifecycle, recovered debt will act as a windfall for a future distribution. A
@@ -157,8 +157,8 @@ the debt accountant because he will determine which distributions to prioritize
 for debt recovery. It may be possible to make this instruction permissionless in
 the future. This instruction requires the following accounts:
 
-1. Program config. The instruction will check whether the program is paused,
-which should force the instruction to revert.
+1. Program config. The instruction will check whether the program is paused. If
+it is, force the instruction to revert.
 2. Debt accountant. This account’s key will be checked against the debt
 accountant key encoded in the program config. This account must be a signer,
 which enforces that the debt accountant is calling this instruction. If the
@@ -192,8 +192,8 @@ to configure a Solana validator deposit account in the future, where additional
 configuration options can be added to the above enum. This instruction requires
 the following accounts:
 
-1. Program config. The instruction will check whether the program is paused,
-which should force the instruction to revert.
+1. Program config. The instruction will check whether the program is paused. If
+it is, force the instruction to revert.
 2. Debt accountant. This account’s key will be checked against the debt
 accountant key encoded in the program config. This account must be a signer,
 which enforces that the debt accountant is calling this instruction.
