@@ -107,6 +107,7 @@ pub enum RevenueDistributionInstructionData {
         amount: u64,
         proof: MerkleProof,
     },
+    EnableErroneousSolanaValidatorDebt,
     InitializeSwapDestination,
     SweepDistributionTokens,
     WithdrawSol(u64),
@@ -151,6 +152,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::enable_solana_validator_debt_write_off");
     pub const WRITE_OFF_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::write_off_solana_validator_debt");
+    pub const ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::enable_erroneous_solana_validator_debt");
     pub const INITIALIZE_SWAP_DESTINATION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_swap_destination");
     pub const WITHDRAW_SOL: Discriminator<DISCRIMINATOR_LEN> =
@@ -242,6 +245,9 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
                 let proof = BorshDeserialize::deserialize_reader(reader)?;
 
                 Ok(Self::WriteOffSolanaValidatorDebt { amount, proof })
+            }
+            Self::ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT => {
+                Ok(Self::EnableErroneousSolanaValidatorDebt)
             }
             Self::INITIALIZE_SWAP_DESTINATION => Ok(Self::InitializeSwapDestination),
             Self::SWEEP_DISTRIBUTION_TOKENS_V1 => Ok(Self::SweepDistributionTokens),
@@ -336,6 +342,9 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::WRITE_OFF_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
                 amount.serialize(writer)?;
                 proof.serialize(writer)
+            }
+            Self::EnableErroneousSolanaValidatorDebt => {
+                Self::ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT.serialize(writer)
             }
             Self::InitializeSwapDestination => Self::INITIALIZE_SWAP_DESTINATION.serialize(writer),
             Self::SweepDistributionTokens => Self::SWEEP_DISTRIBUTION_TOKENS_V1.serialize(writer),

@@ -87,10 +87,12 @@ pub struct Distribution {
     pub distributed_2z_amount: u64,
     pub burned_2z_amount: u64,
 
-    pub processed_solana_validator_debt_write_off_start_index: u32,
-    pub processed_solana_validator_debt_write_off_end_index: u32,
+    pub written_off_solana_validator_debt_start_index: u32,
+    pub written_off_solana_validator_debt_end_index: u32,
 
     pub solana_validator_write_off_count: u32,
+
+    // TODO: Add recovery count?
     _padding_1: [u8; 4],
 
     /// The amount of SOL that was accrued from a past distribution, but was
@@ -261,8 +263,8 @@ impl Distribution {
 
     #[inline]
     pub fn written_off_solana_validator_debt_bitmap_range(&self) -> Range<usize> {
-        self.processed_solana_validator_debt_write_off_start_index as usize
-            ..self.processed_solana_validator_debt_write_off_end_index as usize
+        self.written_off_solana_validator_debt_start_index as usize
+            ..self.written_off_solana_validator_debt_end_index as usize
     }
 
     pub fn checked_written_off_solana_validator_debt_bitmap_range(&self) -> Option<Range<usize>> {
@@ -571,7 +573,7 @@ mod tests {
     #[test]
     fn test_processed_solana_validator_debt_write_off_bitmap_range() {
         let mut distribution = Distribution {
-            processed_solana_validator_debt_write_off_end_index: 5,
+            written_off_solana_validator_debt_end_index: 5,
             ..Default::default()
         };
         assert!(distribution
@@ -591,8 +593,8 @@ mod tests {
             0..5
         );
 
-        distribution.processed_solana_validator_debt_write_off_start_index = 1;
-        distribution.processed_solana_validator_debt_write_off_end_index = 2;
+        distribution.written_off_solana_validator_debt_start_index = 1;
+        distribution.written_off_solana_validator_debt_end_index = 2;
         assert_eq!(
             distribution.written_off_solana_validator_debt_bitmap_range(),
             1..2
