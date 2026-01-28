@@ -1972,8 +1972,7 @@ fn try_write_off_solana_validator_debt(
 
     // Bits indicating whether debt has been written off for specific leaf
     // indices are stored in the distribution's remaining data.
-    let write_off_bitmap_range =
-        distribution.processed_solana_validator_debt_write_off_bitmap_range();
+    let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
 
     try_process_remaining_data_leaf_index(
         &mut distribution.remaining_data[write_off_bitmap_range],

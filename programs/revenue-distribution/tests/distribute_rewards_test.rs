@@ -599,8 +599,8 @@ async fn test_distribute_rewards() {
     assert_eq!(processed_debt_bitmap, [0b11111111]);
 
     // Second byte reflects write off tracking.
-    let write_off_bitmap = &remaining_distribution_data
-        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    let write_off_bitmap =
+        &remaining_distribution_data[distribution.written_off_solana_validator_debt_bitmap_range()];
     assert_eq!(write_off_bitmap, [0b00000100]);
 
     // Third and fourth bytes reflect rewards tracking.
