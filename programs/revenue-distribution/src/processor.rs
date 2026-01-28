@@ -113,6 +113,9 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt { amount, proof } => {
             try_write_off_solana_validator_debt(accounts, amount, proof)
         }
+        RevenueDistributionInstructionData::EnableErroneousSolanaValidatorDebt => {
+            try_enable_erroneous_solana_validator_debt(accounts)
+        }
         RevenueDistributionInstructionData::InitializeSwapDestination => {
             try_initialize_swap_destination(accounts)
         }
@@ -1862,10 +1865,10 @@ fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> Progr
 
     // Set the index of where to find the bits to indicate which Solana
     // validator debt has been written off.
-    distribution.processed_solana_validator_debt_write_off_start_index =
+    distribution.written_off_solana_validator_debt_start_index =
         distribution.remaining_data.len() as u32;
-    distribution.processed_solana_validator_debt_write_off_end_index = distribution
-        .processed_solana_validator_debt_write_off_start_index
+    distribution.written_off_solana_validator_debt_end_index = distribution
+        .written_off_solana_validator_debt_start_index
         .saturating_add(additional_data_len);
 
     // Avoid borrowing while in mutable borrow state.
@@ -1963,10 +1966,7 @@ fn try_write_off_solana_validator_debt(
     // We cannot write off Solana validator debt until write offs have been
     // enabled. This check also ensures that the debt calculation has been
     // finalized.
-    if !distribution.is_solana_validator_debt_write_off_enabled() {
-        msg!("Solana validator debt write off is not enabled yet");
-        return Err(ProgramError::InvalidAccountData);
-    }
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
 
     distribution.solana_validator_write_off_count += 1;
 
@@ -2077,6 +2077,90 @@ fn try_write_off_solana_validator_debt(
         "Updated uncollectible SOL debt to {} for distribution epoch {}",
         write_off_distribution.uncollectible_sol_debt,
         write_off_distribution.dz_epoch
+    );
+
+    Ok(())
+}
+
+fn try_enable_erroneous_solana_validator_debt(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Enable erroneous Solana validator debt");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Distribution.
+    // - 2: Payer.
+    // - 3: System program.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
+
+    // Account 1 must be the distribution.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
+
+    if distribution.is_erroneous_solana_validator_debt_enabled() {
+        msg!("Erroneous Solana validator debt is already enabled");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    distribution.set_is_erroneous_solana_validator_debt_enabled(true);
+
+    // Debt calculation must have write-offs enabled before erroneous debt can
+    // be enabled.
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
+
+    // We need to realloc the distribution account to add the number of bits
+    // needed to store whether a Solana validator has written off debt.
+    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
+        distribution.total_solana_validators / 8
+    } else {
+        distribution.total_solana_validators / 8 + 1
+    };
+
+    // Set the index of where to find the bits to indicate which Solana
+    // validator debt has been written off.
+    distribution.erroneous_solana_validator_debt_start_index =
+        distribution.remaining_data.len() as u32;
+    distribution.erroneous_solana_validator_debt_end_index = distribution
+        .erroneous_solana_validator_debt_start_index
+        .saturating_add(additional_data_len);
+
+    // Avoid borrowing while in mutable borrow state.
+    let distribution_info = distribution.info;
+    drop(distribution);
+
+    let new_data_len = distribution_info
+        .data_len()
+        .saturating_add(additional_data_len as usize);
+    distribution_info.resize(new_data_len)?;
+
+    let additional_lamports_for_resize = Rent::get()
+        .unwrap()
+        .minimum_balance(new_data_len)
+        .saturating_sub(distribution_info.lamports());
+
+    // Account 2 must be the payer. In order to transfer lamports from the payer
+    // to the distribution, this account must be writable.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    let transfer_ix = system_instruction::transfer(
+        payer_info.key,
+        distribution_info.key,
+        additional_lamports_for_resize,
+    );
+
+    invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
+
+    msg!(
+        "Increase distribution account size by {} byte{}",
+        additional_data_len,
+        if additional_data_len == 1 { "" } else { "s" }
     );
 
     Ok(())
@@ -2771,6 +2855,16 @@ impl Distribution {
     fn try_require_finalized_debt_calculation(&self) -> ProgramResult {
         if !self.is_debt_calculation_finalized() {
             msg!("Distribution debt calculation is not finalized yet");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn try_require_solana_validator_debt_write_offs_enabled(&self) -> ProgramResult {
+        if !self.is_solana_validator_debt_write_off_enabled() {
+            msg!("Solana validator debt write off is not enabled yet");
             return Err(ProgramError::InvalidAccountData);
         }
 

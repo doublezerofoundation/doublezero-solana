@@ -729,6 +729,40 @@ impl From<WriteOffSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnableErroneousSolanaValidatorDebtAccounts {
+    pub program_config_key: Pubkey,
+    pub distribution_key: Pubkey,
+    pub payer_key: Pubkey,
+}
+
+impl EnableErroneousSolanaValidatorDebtAccounts {
+    pub fn new(dz_epoch: DoubleZeroEpoch, payer_key: &Pubkey) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            distribution_key: Distribution::find_address(dz_epoch).0,
+            payer_key: *payer_key,
+        }
+    }
+}
+
+impl From<EnableErroneousSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: EnableErroneousSolanaValidatorDebtAccounts) -> Self {
+        let EnableErroneousSolanaValidatorDebtAccounts {
+            program_config_key,
+            distribution_key,
+            payer_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new(distribution_key, false),
+            AccountMeta::new(payer_key, true),
+            AccountMeta::new_readonly(system_program::ID, false),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitializeSwapDestinationAccounts {
     pub program_config_key: Pubkey,
     pub payer_key: Pubkey,

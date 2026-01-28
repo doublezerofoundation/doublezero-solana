@@ -573,9 +573,9 @@ async fn test_distribute_rewards() {
     expected_distribution.distributed_2z_amount = 6_210_000_000;
     expected_distribution.burned_2z_amount = 690_000_000;
     expected_distribution.processed_solana_validator_debt_end_index = total_solana_validators / 8;
-    expected_distribution.processed_solana_validator_debt_write_off_start_index =
+    expected_distribution.written_off_solana_validator_debt_start_index =
         total_solana_validators / 8;
-    expected_distribution.processed_solana_validator_debt_write_off_end_index =
+    expected_distribution.written_off_solana_validator_debt_end_index =
         2 * (total_solana_validators / 8);
     expected_distribution.processed_rewards_start_index = 2 * (total_solana_validators / 8);
     expected_distribution.processed_rewards_end_index =
