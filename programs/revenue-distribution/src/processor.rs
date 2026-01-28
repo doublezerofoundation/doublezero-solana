@@ -966,11 +966,7 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a Solana validator has paid.
-    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
-        distribution.total_solana_validators / 8
-    } else {
-        distribution.total_solana_validators / 8 + 1
-    };
+    let additional_data_len = distribution.total_solana_validators.div_ceil(8);
 
     // Set the index of where to find the bits to indicate which Solana
     // validator debt has been processed.
@@ -1119,15 +1115,8 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a contributor has distributed rewards.
-    // Each bit represents one contributor, so we need ceil(contributors/8)
-    // bytes.
     let total_contributors = distribution.total_contributors;
-    let additional_data_len = if total_contributors % 8 == 0 {
-        total_contributors / 8
-    } else {
-        // Round up for partial byte.
-        total_contributors / 8 + 1
-    };
+    let additional_data_len = total_contributors.div_ceil(8);
 
     // Set the index of where to find the bits start to indicate which rewards
     // have been distributed.
@@ -1857,11 +1846,7 @@ fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> Progr
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a Solana validator has written off debt.
-    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
-        distribution.total_solana_validators / 8
-    } else {
-        distribution.total_solana_validators / 8 + 1
-    };
+    let additional_data_len = distribution.total_solana_validators.div_ceil(8);
 
     // Set the index of where to find the bits to indicate which Solana
     // validator debt has been written off.
@@ -2116,15 +2101,11 @@ fn try_enable_erroneous_solana_validator_debt(accounts: &[AccountInfo]) -> Progr
     distribution.try_require_solana_validator_debt_write_offs_enabled()?;
 
     // We need to realloc the distribution account to add the number of bits
-    // needed to store whether a Solana validator has written off debt.
-    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
-        distribution.total_solana_validators / 8
-    } else {
-        distribution.total_solana_validators / 8 + 1
-    };
+    // needed to store whether a Solana validator has erroneous debt.
+    let additional_data_len = distribution.total_solana_validators.div_ceil(8);
 
     // Set the index of where to find the bits to indicate which Solana
-    // validator debt has been written off.
+    // validator debt is erroneous.
     distribution.erroneous_solana_validator_debt_start_index =
         distribution.remaining_data.len() as u32;
     distribution.erroneous_solana_validator_debt_end_index = distribution
