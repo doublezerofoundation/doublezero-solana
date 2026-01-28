@@ -487,7 +487,7 @@ async fn test_sweep_distribution_tokens() {
 
     // Second byte reflects write off tracking.
     let write_off_bitmap = &remaining_distribution_data
-        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+        [distribution.written_off_solana_validator_debt_bitmap_range()];
     assert_eq!(write_off_bitmap, [0]);
 
     // Third byte reflects rewards tracking.
@@ -561,7 +561,7 @@ async fn test_sweep_distribution_tokens() {
 
     // Second byte reflects write off tracking.
     let write_off_bitmap = &remaining_distribution_data
-        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+        [distribution.written_off_solana_validator_debt_bitmap_range()];
     assert_eq!(write_off_bitmap, [0b00000100]);
 
     // Third byte reflects rewards tracking.
