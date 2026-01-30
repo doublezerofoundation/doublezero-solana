@@ -66,6 +66,14 @@ pub enum DistributionMerkleRootKind {
     RewardShare(RewardShare),
 }
 
+#[derive(Debug, Default, BorshDeserialize, BorshSerialize, Clone, Copy, PartialEq, Eq)]
+pub enum BadSolanaValidatorDebtResolution {
+    #[default]
+    Recover,
+    ReclassifyUnpaid,
+    ReclassifyErroneous,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RevenueDistributionInstructionData {
     InitializeProgram,
@@ -108,6 +116,11 @@ pub enum RevenueDistributionInstructionData {
         proof: MerkleProof,
     },
     EnableErroneousSolanaValidatorDebt,
+    ResolveBadSolanaValidatorDebt {
+        amount: u64,
+        proof: MerkleProof,
+        resolution: BadSolanaValidatorDebtResolution,
+    },
     InitializeSwapDestination,
     SweepDistributionTokens,
     WithdrawSol(u64),
@@ -154,6 +167,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::write_off_solana_validator_debt");
     pub const ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::enable_erroneous_solana_validator_debt");
+    pub const RESOLVE_BAD_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::resolve_bad_solana_validator_debt");
     pub const INITIALIZE_SWAP_DESTINATION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_swap_destination");
     pub const WITHDRAW_SOL: Discriminator<DISCRIMINATOR_LEN> =
@@ -248,6 +263,17 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             }
             Self::ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT => {
                 Ok(Self::EnableErroneousSolanaValidatorDebt)
+            }
+            Self::RESOLVE_BAD_SOLANA_VALIDATOR_DEBT => {
+                let amount = BorshDeserialize::deserialize_reader(reader)?;
+                let proof = BorshDeserialize::deserialize_reader(reader)?;
+                let resolution = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::ResolveBadSolanaValidatorDebt {
+                    amount,
+                    proof,
+                    resolution,
+                })
             }
             Self::INITIALIZE_SWAP_DESTINATION => Ok(Self::InitializeSwapDestination),
             Self::SWEEP_DISTRIBUTION_TOKENS_V1 => Ok(Self::SweepDistributionTokens),
@@ -345,6 +371,16 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::EnableErroneousSolanaValidatorDebt => {
                 Self::ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT.serialize(writer)
+            }
+            Self::ResolveBadSolanaValidatorDebt {
+                amount,
+                proof,
+                resolution,
+            } => {
+                Self::RESOLVE_BAD_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
+                amount.serialize(writer)?;
+                proof.serialize(writer)?;
+                resolution.serialize(writer)
             }
             Self::InitializeSwapDestination => Self::INITIALIZE_SWAP_DESTINATION.serialize(writer),
             Self::SweepDistributionTokens => Self::SWEEP_DISTRIBUTION_TOKENS_V1.serialize(writer),

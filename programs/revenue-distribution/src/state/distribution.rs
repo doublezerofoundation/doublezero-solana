@@ -100,10 +100,13 @@ pub struct Distribution {
     /// distribution and acts as a windfall for network contributors.
     pub recovered_sol_debt: u64,
 
+    pub erroneous_sol_debt: u64,
+
     pub erroneous_solana_validator_debt_start_index: u32,
     pub erroneous_solana_validator_debt_end_index: u32,
 
-    _storage_gap: StorageGap<6>,
+    _padding_2: [u8; 24],
+    _storage_gap: StorageGap<5>,
 }
 
 impl PrecomputedDiscriminator for Distribution {
