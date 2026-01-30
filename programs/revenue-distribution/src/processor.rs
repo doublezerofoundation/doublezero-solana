@@ -990,10 +990,8 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     // Account 3 must be the payer. In order to transfer lamports from the payer
     // to the distribution, this account must be writable.
@@ -1141,10 +1139,8 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     msg!(
         "Increase distribution account size by {} byte{}",
@@ -1771,35 +1767,14 @@ fn try_pay_solana_validator_debt(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    // Finally, move lamports from the Solana validator deposit to the
-    // Journal. The journal's lamports will be withdrawn from the registered
-    // swap program in exchange for 2Z tokens.
-    let mut solana_validator_deposit_lamports = solana_validator_deposit.info.lamports.borrow_mut();
-
-    // We cannot remove more lamports than the rent exemption.
-    let rent_exemption_lamports = Rent::get()
-        .unwrap()
-        .minimum_balance(zero_copy::data_end::<SolanaValidatorDeposit>());
-
-    if solana_validator_deposit_lamports.saturating_sub(rent_exemption_lamports) < amount {
-        msg!("Insufficient funds in Solana validator deposit to pay debt");
-        return Err(ProgramError::InvalidAccountData);
-    }
-
     // Account 3 must be the journal.
     let mut journal =
         ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    **solana_validator_deposit_lamports -= amount;
-    **journal.info.lamports.borrow_mut() += amount;
-
-    journal.total_sol_balance += amount;
-    msg!(
-        "Updated journal's SOL balance to {}",
-        journal.total_sol_balance
-    );
-
-    Ok(())
+    // Finally, move lamports from the Solana validator deposit to the
+    // Journal. The journal's lamports will be withdrawn from the registered
+    // swap program in exchange for 2Z tokens.
+    try_drop_solana_validator_deposit_to_pay_debt(solana_validator_deposit, &mut journal, amount)
 }
 
 fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> ProgramResult {
@@ -1872,10 +1847,8 @@ fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> Progr
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     // Account 2 must be the payer. In order to transfer lamports from the payer
     // to the distribution, this account must be writable.
@@ -2130,10 +2103,8 @@ fn try_enable_erroneous_solana_validator_debt(accounts: &[AccountInfo]) -> Progr
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     // Account 2 must be the payer. In order to transfer lamports from the payer
     // to the distribution, this account must be writable.
@@ -2256,35 +2227,15 @@ fn try_resolve_bad_solana_validator_debt(
             // Update deposit account tracking.
             solana_validator_deposit.recovered_sol_debt += amount;
 
-            let solana_validator_deposit_info = solana_validator_deposit.info;
-            drop(solana_validator_deposit);
-
-            // Transfer lamports from deposit account to journal.
-            let mut solana_validator_deposit_lamports =
-                solana_validator_deposit_info.lamports.borrow_mut();
-            let rent_exemption_lamports = Rent::get()
-                .unwrap()
-                .minimum_balance(zero_copy::data_end::<SolanaValidatorDeposit>());
-
-            if solana_validator_deposit_lamports.saturating_sub(rent_exemption_lamports) < amount {
-                msg!("Insufficient funds in Solana validator deposit to recover debt");
-                return Err(ProgramError::InvalidAccountData);
-            }
-
             // Account 4 must be the journal.
             let mut journal =
                 ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-            **solana_validator_deposit_lamports -= amount;
-            **journal.info.lamports.borrow_mut() += amount;
-
-            journal.total_sol_balance += amount;
-            msg!(
-                "Updated journal's SOL balance to {}",
-                journal.total_sol_balance
-            );
-
-            drop(distribution);
+            try_drop_solana_validator_deposit_to_pay_debt(
+                solana_validator_deposit,
+                &mut journal,
+                amount,
+            )?;
 
             // Account 5 must be the windfall distribution.
             let mut windfall_distribution = ZeroCopyMutAccount::<Distribution>::try_next_accounts(
@@ -3031,6 +2982,43 @@ fn try_leaf_index(proof: &MerkleProof) -> Result<u32, ProgramError> {
         msg!("Merkle proof must use an indexed tree");
         ProgramError::InvalidInstructionData
     })
+}
+
+#[inline(always)]
+fn try_drop_solana_validator_deposit_to_pay_debt(
+    solana_validator_deposit: ZeroCopyMutAccount<SolanaValidatorDeposit>,
+    journal: &mut ZeroCopyMutAccount<Journal>,
+    amount: u64,
+) -> ProgramResult {
+    let solana_validator_deposit_info = solana_validator_deposit.info;
+    drop(solana_validator_deposit);
+
+    let solana_validator_deposit_data_len = solana_validator_deposit_info.data_len();
+    let mut solana_validator_deposit_lamports = solana_validator_deposit_info.lamports.borrow_mut();
+
+    let rent_exemption_lamports =
+        compute_rent_exemption_lamports(solana_validator_deposit_data_len);
+
+    if solana_validator_deposit_lamports.saturating_sub(rent_exemption_lamports) < amount {
+        msg!("Insufficient funds in Solana validator deposit to pay debt");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    **solana_validator_deposit_lamports -= amount;
+    **journal.info.lamports.borrow_mut() += amount;
+
+    journal.total_sol_balance += amount;
+    msg!(
+        "Updated journal's SOL balance to {}",
+        journal.total_sol_balance
+    );
+
+    Ok(())
+}
+
+#[inline(always)]
+fn compute_rent_exemption_lamports(data_len: usize) -> u64 {
+    Rent::get().unwrap().minimum_balance(data_len)
 }
 
 impl ProgramConfig {
