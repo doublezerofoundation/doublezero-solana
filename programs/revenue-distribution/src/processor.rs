@@ -26,9 +26,9 @@ use svm_hash::{merkle::MerkleProof, sha2::Hash};
 
 use crate::{
     instruction::{
-        account::DequeueFillsCpiAccounts, ContributorRewardsConfiguration,
-        DistributionMerkleRootKind, ProgramConfiguration, ProgramFeatureConfiguration,
-        ProgramFlagConfiguration, RevenueDistributionInstructionData,
+        account::DequeueFillsCpiAccounts, BadSolanaValidatorDebtResolution,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind, ProgramConfiguration,
+        ProgramFeatureConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::{
         self, CommunityBurnRateParameters, ContributorRewards, Distribution, Journal,
@@ -116,6 +116,11 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::EnableErroneousSolanaValidatorDebt => {
             try_enable_erroneous_solana_validator_debt(accounts)
         }
+        RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount,
+            proof,
+            resolution,
+        } => try_resolve_bad_solana_validator_debt(accounts, amount, proof, resolution),
         RevenueDistributionInstructionData::InitializeSwapDestination => {
             try_initialize_swap_destination(accounts)
         }
@@ -1226,9 +1231,10 @@ fn try_distribute_rewards(
     // Each bit represents one leaf: 1 = distributed, 0 = not yet distributed.
     let processed_bitmap_range = distribution.processed_rewards_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!("Rewards already distributed");
@@ -1739,9 +1745,10 @@ fn try_pay_solana_validator_debt(
     // stored in the distribution's remaining data.
     let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!("Solana validator debt already processed");
@@ -1959,9 +1966,10 @@ fn try_write_off_solana_validator_debt(
     // indices are stored in the distribution's remaining data.
     let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[write_off_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!(
@@ -1975,9 +1983,10 @@ fn try_write_off_solana_validator_debt(
     // not) must be marked as processed.
     let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!(
@@ -2143,6 +2152,221 @@ fn try_enable_erroneous_solana_validator_debt(accounts: &[AccountInfo]) -> Progr
         additional_data_len,
         if additional_data_len == 1 { "" } else { "s" }
     );
+
+    Ok(())
+}
+
+fn try_resolve_bad_solana_validator_debt(
+    accounts: &[AccountInfo],
+    amount: u64,
+    proof: MerkleProof,
+    resolution: BadSolanaValidatorDebtResolution,
+) -> ProgramResult {
+    msg!("Resolve bad Solana validator debt");
+
+    // Enforce that the merkle proof uses an indexed tree. This index will be
+    // referenced later in this instruction processor.
+    let leaf_index = try_leaf_index(&proof)?;
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Debt accountant.
+    // - 2: Distribution with bad debt.
+    // - 3: Solana validator deposit.
+    // - 4: Journal (required for debt recovery).
+    // - 5: Windfall distribution (required for recovery).
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
+
+    // Make sure the program is not paused.
+    authorized_use.program_config.try_require_unpaused()?;
+
+    // Account 2 must be the distribution with bad debt.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    let dz_epoch = distribution.dz_epoch;
+    msg!("DZ epoch: {}", dz_epoch);
+
+    // Write-offs must be enabled on this distribution since this is the only
+    // kind of debt that can be resolved.
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
+
+    // Account 3 must be the Solana validator deposit.
+    let mut solana_validator_deposit =
+        ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
+            &mut accounts_iter,
+            Some(&ID),
+        )?;
+    let node_id = solana_validator_deposit.node_id;
+    msg!("Node ID: {}", node_id);
+
+    // Verify the merkle proof.
+    let debt = SolanaValidatorDebt { node_id, amount };
+    let computed_merkle_root =
+        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
+    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
+
+    if computed_merkle_root != expected_merkle_root {
+        msg!("Invalid computed merkle root: {}", computed_merkle_root);
+        return Err(ProgramError::InvalidInstructionData);
+    }
+
+    let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
+
+    // Debt resolution can only be done with written off debt.
+    if !is_leaf_bit_set(
+        &distribution.remaining_data[write_off_bitmap_range.clone()],
+        leaf_index,
+    )? {
+        msg!(
+            "Solana validator debt was not written off for epoch {}",
+            dz_epoch
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    match resolution {
+        BadSolanaValidatorDebtResolution::Recover => {
+            msg!("Recover");
+
+            // Ensure debt is not marked as erroneous. If erroneous debt was not
+            // enabled yet, we are safe to recover the debt.
+            if let Some(erroneous_bitmap_range) =
+                distribution.checked_erroneous_solana_validator_debt_bitmap_range()
+            {
+                if is_leaf_bit_set(
+                    &distribution.remaining_data[erroneous_bitmap_range],
+                    leaf_index,
+                )? {
+                    msg!("Cannot recover erroneous debt for epoch {}", dz_epoch);
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            }
+
+            // Clear the write-off bitmap bit.
+            try_set_leaf_bit(
+                &mut distribution.remaining_data[write_off_bitmap_range],
+                leaf_index,
+                false,
+            )?;
+
+            // Update deposit account tracking.
+            solana_validator_deposit.recovered_sol_debt += amount;
+
+            let solana_validator_deposit_info = solana_validator_deposit.info;
+            drop(solana_validator_deposit);
+
+            // Transfer lamports from deposit account to journal.
+            let mut solana_validator_deposit_lamports =
+                solana_validator_deposit_info.lamports.borrow_mut();
+            let rent_exemption_lamports = Rent::get()
+                .unwrap()
+                .minimum_balance(zero_copy::data_end::<SolanaValidatorDeposit>());
+
+            if solana_validator_deposit_lamports.saturating_sub(rent_exemption_lamports) < amount {
+                msg!("Insufficient funds in Solana validator deposit to recover debt");
+                return Err(ProgramError::InvalidAccountData);
+            }
+
+            // Account 4 must be the journal.
+            let mut journal =
+                ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+            **solana_validator_deposit_lamports -= amount;
+            **journal.info.lamports.borrow_mut() += amount;
+
+            journal.total_sol_balance += amount;
+            msg!(
+                "Updated journal's SOL balance to {}",
+                journal.total_sol_balance
+            );
+
+            drop(distribution);
+
+            // Account 5 must be the windfall distribution.
+            let mut windfall_distribution = ZeroCopyMutAccount::<Distribution>::try_next_accounts(
+                &mut accounts_iter,
+                Some(&ID),
+            )?;
+            let windfall_dz_epoch = windfall_distribution.dz_epoch;
+            msg!("Windfall DZ epoch: {}", windfall_dz_epoch);
+
+            if windfall_dz_epoch <= dz_epoch {
+                msg!("Windfall distribution's epoch must be greater than the epoch of the bad debt distribution");
+                return Err(ProgramError::InvalidAccountData);
+            }
+
+            // Windfall distribution must have not swept 2Z tokens, which means
+            // the total SOL debt has not been accounted for.
+            windfall_distribution
+                .try_require_has_not_swept_2z_tokens()
+                .inspect_err(|_| {
+                    msg!(
+                        "Windfall epoch {} has already swept 2Z tokens",
+                        windfall_dz_epoch
+                    );
+                })?;
+
+            windfall_distribution.recovered_sol_debt += amount;
+            msg!(
+                "Updated recovered SOL debt to {} for windfall epoch {}",
+                windfall_distribution.recovered_sol_debt,
+                windfall_dz_epoch,
+            );
+        }
+        BadSolanaValidatorDebtResolution::ReclassifyErroneous
+        | BadSolanaValidatorDebtResolution::ReclassifyUnpaid => {
+            let should_reclassify_erroneous =
+                resolution == BadSolanaValidatorDebtResolution::ReclassifyErroneous;
+            let classification_label = if should_reclassify_erroneous {
+                "erroneous"
+            } else {
+                "unpaid"
+            };
+            msg!("Reclassify {} debt", classification_label);
+
+            let erroneous_bitmap_range = distribution
+                .checked_erroneous_solana_validator_debt_bitmap_range()
+                .ok_or_else(|| {
+                    msg!("Erroneous Solana validator debt is not enabled yet");
+                    ProgramError::InvalidAccountData
+                })?;
+
+            // Set the erroneous debt bit and update erroneous SOL debt
+            // accounting.
+            match try_set_leaf_bit(
+                &mut distribution.remaining_data[erroneous_bitmap_range],
+                leaf_index,
+                should_reclassify_erroneous,
+            ) {
+                Ok(_) => {
+                    if should_reclassify_erroneous {
+                        distribution.erroneous_sol_debt += amount;
+                        solana_validator_deposit.erroneous_sol_debt += amount;
+                    } else {
+                        distribution.erroneous_sol_debt -= amount;
+                        solana_validator_deposit.erroneous_sol_debt -= amount;
+                    }
+                    msg!(
+                        "Updated erroneous SOL debt to {} for node {}",
+                        solana_validator_deposit.erroneous_sol_debt,
+                        node_id,
+                    );
+                }
+                Err(_) => {
+                    msg!(
+                        "Solana validator debt already marked as {} for epoch {}",
+                        classification_label,
+                        dz_epoch,
+                    );
+                    return Err(ProgramError::InvalidAccountData);
+                }
+            };
+        }
+    }
 
     Ok(())
 }
@@ -2889,46 +3113,41 @@ impl Distribution {
     }
 }
 
-/// Marks a merkle leaf as processed by setting its corresponding bit in a byte
-/// array. This prevents double-processing of rewards or other merkle-verified
-/// operations.
+/// Returns whether a leaf bit is set in the bitmap.
+fn is_leaf_bit_set(processed_leaf_data: &[u8], leaf_index: u32) -> Result<bool, ProgramError> {
+    let leaf_byte_index = leaf_index as usize / 8;
+    let leaf_byte = processed_leaf_data.get(leaf_byte_index).ok_or_else(|| {
+        msg!("Invalid leaf index");
+        ProgramError::InvalidInstructionData
+    })?;
+    Ok(ByteFlags::new(*leaf_byte).bit(leaf_index as usize % 8))
+}
+
+/// Updates a merkle leaf's bit in a byte array bitmap.
 ///
 /// The leaf indices are stored as a bitfield where each bit represents whether
 /// a leaf at that index has been processed (1 = processed, 0 = not processed).
-fn try_process_remaining_data_leaf_index(
+///
+/// - new_bit == true: Sets bit to 1 and errors if already set.
+/// - new_bit == false: Sets bit to 0 and errors if not set.
+fn try_set_leaf_bit(
     processed_leaf_data: &mut [u8],
     leaf_index: u32,
+    new_bit: bool,
 ) -> ProgramResult {
-    // Calculate which byte contains the bit for this leaf index
-    // (8 bits per byte, so divide by 8)
-    let leaf_byte_index = leaf_index as usize / 8;
-
-    // First, we have to grab the relevant byte from the processed data.
-    let leaf_byte_ref = processed_leaf_data
-        .get_mut(leaf_byte_index)
-        .ok_or_else(|| {
-            msg!("Invalid leaf index");
-            ProgramError::InvalidInstructionData
-        })?;
-
-    // Create ByteFlags from the byte value to check the bit.
-    let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
-
-    // Calculate which bit within the byte corresponds to this leaf
-    // (modulo 8 gives us the bit position within the byte: 0-7)
-    let leaf_bit = leaf_index as usize % 8;
-
-    if leaf_byte.bit(leaf_bit) {
+    if is_leaf_bit_set(processed_leaf_data, leaf_index)? == new_bit {
         msg!(
-            "Merkle leaf index {} has already been processed",
-            leaf_index
+            "Merkle leaf index {} has {} been processed",
+            leaf_index,
+            if new_bit { "already" } else { "not" }
         );
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Set the bit to true to indicate that the leaf has been processed.
-    // This prevents replay attacks using the same merkle proof.
-    leaf_byte.set_bit(leaf_bit, true);
+    let leaf_byte_index = leaf_index as usize / 8;
+    let leaf_byte_ref = &mut processed_leaf_data[leaf_byte_index];
+    let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
+    leaf_byte.set_bit(leaf_index as usize % 8, new_bit);
     *leaf_byte_ref = leaf_byte.into();
 
     Ok(())
