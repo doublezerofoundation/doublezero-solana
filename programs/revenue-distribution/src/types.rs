@@ -22,15 +22,15 @@ use solana_pubkey::Pubkey;
 pub struct DoubleZeroEpoch(u64);
 
 impl DoubleZeroEpoch {
-    pub fn new(epoch: u64) -> Self {
+    pub const fn new(epoch: u64) -> Self {
         Self(epoch)
     }
 
-    pub fn value(&self) -> u64 {
+    pub const fn value(&self) -> u64 {
         self.0
     }
 
-    pub fn as_seed(&self) -> [u8; 8] {
+    pub const fn as_seed(&self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 
@@ -41,6 +41,12 @@ impl DoubleZeroEpoch {
     pub fn checked_sub_duration(&self, epoch_duration: EpochDuration) -> Option<Self> {
         let value = self.0.checked_sub(epoch_duration.into())?;
         Some(Self(value))
+    }
+}
+
+impl From<DoubleZeroEpoch> for u64 {
+    fn from(value: DoubleZeroEpoch) -> Self {
+        value.0
     }
 }
 
@@ -80,6 +86,7 @@ macro_rules! impl_unit_share {
         impl $name {
             pub const MIN: Self = Self(0);
             pub const MAX: Self = Self($max_value);
+            pub const SCALE: $inner_type = $max_value;
 
             pub const fn new(value: $inner_type) -> Option<Self> {
                 if value <= Self::MAX.0 {
@@ -87,6 +94,10 @@ macro_rules! impl_unit_share {
                 } else {
                     None
                 }
+            }
+
+            pub const fn value(&self) -> $inner_type {
+                self.0
             }
 
             pub fn mul_scalar<T>(&self, x: T) -> T
