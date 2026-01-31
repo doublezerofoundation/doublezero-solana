@@ -36,11 +36,22 @@ impl SolanaValidatorDeposit {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, node_id.as_ref()], &crate::ID)
     }
 
-    pub fn checked_bad_sol_debt(&self) -> Option<u64> {
-        // TODO: checked_sub -> saturating_sub?
+    /// Returns the net bad SOL debt for this validator.
+    ///
+    /// This is the written-off debt minus any amounts that have been
+    /// recovered or reclassified as erroneous.
+    ///
+    /// # Invariants
+    ///
+    /// The protocol guarantees:
+    /// `recovered_sol_debt + erroneous_sol_debt <= written_off_sol_debt`
+    ///
+    /// Debt can only be recovered or reclassified after being written off,
+    /// and bitmap tracking prevents double-counting.
+    pub fn bad_sol_debt(&self) -> u64 {
         self.written_off_sol_debt
             .saturating_sub(self.recovered_sol_debt)
-            .checked_sub(self.erroneous_sol_debt)
+            .saturating_sub(self.erroneous_sol_debt)
     }
 }
 

@@ -551,7 +551,7 @@ async fn test_sweep_distribution_tokens() {
     let (_, distribution, remaining_distribution_data, _, _) =
         test_setup.fetch_distribution(next_dz_epoch).await;
 
-    expected_distribution.solana_validator_write_off_count = 1;
+    expected_distribution.solana_validator_debt_write_off_count = 1;
     assert_eq!(distribution, expected_distribution);
 
     // First byte reflects debt tracking.

@@ -310,7 +310,7 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     let mut expected_distribution = build_expected_distribution(&distribution_after, &init);
     expected_distribution.uncollectible_sol_debt = bad_debt.amount;
-    expected_distribution.solana_validator_write_off_count = 1;
+    expected_distribution.solana_validator_debt_write_off_count = 1;
     expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount;
     expected_distribution.erroneous_sol_debt = bad_debt.amount;
     assert_eq!(distribution_after, expected_distribution);
@@ -357,7 +357,7 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     let mut expected_distribution = build_expected_distribution(&distribution_after_unpaid, &init);
     expected_distribution.uncollectible_sol_debt = bad_debt.amount;
-    expected_distribution.solana_validator_write_off_count = 1;
+    expected_distribution.solana_validator_debt_write_off_count = 1;
     expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount;
     expected_distribution.erroneous_sol_debt = 0;
     assert_eq!(distribution_after_unpaid, expected_distribution);
@@ -436,7 +436,8 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     let mut expected_distribution = build_expected_distribution(&distribution_after_recover, &init);
     expected_distribution.uncollectible_sol_debt = bad_debt.amount;
-    expected_distribution.solana_validator_write_off_count = 1;
+    expected_distribution.solana_validator_debt_write_off_count = 1;
+    expected_distribution.solana_validator_debt_recovery_count = 1;
     expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount;
     assert_eq!(distribution_after_recover, expected_distribution);
 

@@ -90,10 +90,8 @@ pub struct Distribution {
     pub written_off_solana_validator_debt_start_index: u32,
     pub written_off_solana_validator_debt_end_index: u32,
 
-    pub solana_validator_write_off_count: u32,
-
-    // TODO: Add recovery count?
-    _padding_1: [u8; 4],
+    pub solana_validator_debt_write_off_count: u32,
+    pub solana_validator_debt_recovery_count: u32,
 
     /// The amount of SOL that was accrued from a past distribution, but was
     /// written off. This amount is added to the total debt for this
@@ -296,7 +294,7 @@ impl Distribution {
     pub fn is_all_solana_validator_debt_processed(&self) -> bool {
         self.total_solana_validators
             .saturating_sub(self.solana_validator_payments_count)
-            .saturating_sub(self.solana_validator_write_off_count)
+            .saturating_sub(self.solana_validator_debt_write_off_count)
             == 0
     }
 
@@ -654,22 +652,22 @@ mod tests {
 
         distribution.total_solana_validators = 10;
         distribution.solana_validator_payments_count = 7;
-        distribution.solana_validator_write_off_count = 3;
+        distribution.solana_validator_debt_write_off_count = 3;
 
         assert!(distribution.is_all_solana_validator_debt_processed());
 
         // 10 - 7 - 2 = 1, not all processed.
-        distribution.solana_validator_write_off_count = 2;
+        distribution.solana_validator_debt_write_off_count = 2;
         assert!(!distribution.is_all_solana_validator_debt_processed());
 
         distribution.solana_validator_payments_count = 8;
-        distribution.solana_validator_write_off_count = 2;
+        distribution.solana_validator_debt_write_off_count = 2;
         assert!(distribution.is_all_solana_validator_debt_processed());
 
         // Test with overflow protection.
         distribution.total_solana_validators = 5;
         distribution.solana_validator_payments_count = 10;
-        distribution.solana_validator_write_off_count = 10;
+        distribution.solana_validator_debt_write_off_count = 10;
         assert!(distribution.is_all_solana_validator_debt_processed());
     }
 }
