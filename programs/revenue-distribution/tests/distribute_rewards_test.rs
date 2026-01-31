@@ -586,7 +586,7 @@ async fn test_distribute_rewards() {
         .await
         .unix_timestamp
         .saturating_sub(60) as u32;
-    expected_distribution.solana_validator_write_off_count = 1;
+    expected_distribution.solana_validator_debt_write_off_count = 1;
     assert_eq!(distribution, expected_distribution);
     assert_eq!(
         distribution.distributed_2z_amount + distribution.burned_2z_amount,

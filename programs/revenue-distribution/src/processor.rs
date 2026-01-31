@@ -1933,7 +1933,7 @@ fn try_write_off_solana_validator_debt(
     // finalized.
     distribution.try_require_solana_validator_debt_write_offs_enabled()?;
 
-    distribution.solana_validator_write_off_count += 1;
+    distribution.solana_validator_debt_write_off_count += 1;
 
     // Bits indicating whether debt has been written off for specific leaf
     // indices are stored in the distribution's remaining data.
@@ -2226,6 +2226,7 @@ fn try_resolve_bad_solana_validator_debt(
 
             // Update deposit account tracking.
             solana_validator_deposit.recovered_sol_debt += amount;
+            distribution.solana_validator_debt_recovery_count += 1;
 
             // Account 4 must be the journal.
             let mut journal =
