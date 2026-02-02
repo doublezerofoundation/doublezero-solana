@@ -9,8 +9,8 @@ use doublezero_revenue_distribution::{
         ProgramConfiguration, ProgramFeatureConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
-    state::{self, Distribution, SolanaValidatorDeposit},
-    types::{BurnRate, DoubleZeroEpoch, SolanaValidatorDebt, ValidatorFee},
+    state::SolanaValidatorDeposit,
+    types::{DoubleZeroEpoch, SolanaValidatorDebt},
     DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_program_test::tokio;
@@ -52,6 +52,7 @@ async fn test_resolve_bad_solana_validator_debt() {
     let distribute_rewards_relay_lamports = 10_000;
 
     // Distribution debt - create 8 validators with debt.
+    // debt_1 (index 2) and debt_2 (index 5) will be written off.
     let debt_data = (0..8)
         .map(|i| SolanaValidatorDebt {
             node_id: Pubkey::new_unique(),
@@ -65,9 +66,11 @@ async fn test_resolve_bad_solana_validator_debt() {
         merkle_root_from_indexed_pod_leaves(&debt_data, Some(SolanaValidatorDebt::LEAF_PREFIX))
             .unwrap();
 
-    // Index of the validator whose debt will be written off and reclassified.
-    let bad_debt_index = 2;
-    let bad_debt = debt_data[bad_debt_index];
+    // Indices of the validators whose debt will be written off and resolved.
+    let debt_1_index = 2;
+    let debt_2_index = 5;
+    let debt_1 = debt_data[debt_1_index];
+    let debt_2 = debt_data[debt_2_index];
 
     let expected_swept_2z_amount = 420 * u64::pow(10, 8);
 
@@ -76,8 +79,10 @@ async fn test_resolve_bad_solana_validator_debt() {
     let rewards_merkle_root = Hash::new_unique();
 
     // Target epochs.
-    let dz_epoch = DoubleZeroEpoch::new(0);
-    let bad_debt_dz_epoch = dz_epoch.saturating_add_duration(1);
+    // Epoch 0 is skipped (feature cannot be activated at epoch 0).
+    // bad_debt_dz_epoch = 1, windfall_dz_epoch = 2.
+    let bad_debt_dz_epoch = DoubleZeroEpoch::new(1);
+    let windfall_dz_epoch = bad_debt_dz_epoch.saturating_add_duration(1);
 
     // Initialize program and set up distribution.
     test_setup
@@ -124,17 +129,20 @@ async fn test_resolve_bad_solana_validator_debt() {
                     feature: ProgramFeatureConfiguration::SolanaValidatorDebtWriteOff,
                     activation_epoch: DoubleZeroEpoch::new(1),
                 },
-                // Start with a high value so recovery will initially fail.
-                ProgramConfiguration::MinimumEpochDurationToRecoverDebt(10),
+                // Low value so recovery can succeed immediately.
+                ProgramConfiguration::MinimumEpochDurationToRecoverDebt(1),
             ],
         )
         .await
         .unwrap()
-        // Initialize epoch 0.
+        // Initialize epoch 0 (skipped epoch, just for feature activation).
         .initialize_distribution(&debt_accountant_signer)
         .await
         .unwrap()
         .warp_timestamp_by(60)
+        .await
+        .unwrap()
+        .finalize_distribution_debt(DoubleZeroEpoch::new(0), &debt_accountant_signer)
         .await
         .unwrap()
         // Initialize epoch 1 (bad_debt_dz_epoch).
@@ -156,12 +164,6 @@ async fn test_resolve_bad_solana_validator_debt() {
         .finalize_distribution_debt(bad_debt_dz_epoch, &debt_accountant_signer)
         .await
         .unwrap()
-        .enable_solana_validator_debt_write_off(bad_debt_dz_epoch)
-        .await
-        .unwrap()
-        .enable_erroneous_solana_validator_debt(bad_debt_dz_epoch)
-        .await
-        .unwrap()
         .configure_distribution_rewards(
             bad_debt_dz_epoch,
             &rewards_accountant_signer,
@@ -175,13 +177,13 @@ async fn test_resolve_bad_solana_validator_debt() {
         .unwrap();
 
     // Initialize deposit accounts and pay debt for all validators except the
-    // bad debt validator.
+    // bad debt validators.
     for (i, debt) in debt_data.iter().enumerate() {
         let node_id = &debt.node_id;
 
-        // Just initialize the bad debt validator's deposit account (without
+        // Just initialize the bad debt validators' deposit accounts (without
         // paying debt).
-        if i == bad_debt_index {
+        if i == debt_1_index || i == debt_2_index {
             test_setup
                 .initialize_solana_validator_deposit(node_id)
                 .await
@@ -210,179 +212,315 @@ async fn test_resolve_bad_solana_validator_debt() {
             .unwrap();
     }
 
-    // Finalize epoch 0 so we can sweep.
-    test_setup
-        .finalize_distribution_debt(dz_epoch, &debt_accountant_signer)
-        .await
-        .unwrap()
-        .finalize_distribution_rewards(dz_epoch)
-        .await
-        .unwrap()
-        .finalize_distribution_rewards(bad_debt_dz_epoch)
-        .await
-        .unwrap();
-
-    // Write off the bad debt before sweeping.
-    let bad_debt_proof = MerkleProof::from_indexed_pod_leaves(
+    // Write off first and second debts.
+    let debt_1_proof = MerkleProof::from_indexed_pod_leaves(
         &debt_data,
-        bad_debt_index.try_into().unwrap(),
+        debt_1_index.try_into().unwrap(),
+        Some(SolanaValidatorDebt::LEAF_PREFIX),
+    )
+    .unwrap();
+    let debt_2_proof = MerkleProof::from_indexed_pod_leaves(
+        &debt_data,
+        debt_2_index.try_into().unwrap(),
         Some(SolanaValidatorDebt::LEAF_PREFIX),
     )
     .unwrap();
 
+    // Attempt to resolve with unauthorized signer (should fail).
+    let unauthorized_signer = Keypair::new();
+    let resolve_unauthorized_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &unauthorized_signer.pubkey(),
+            &debt_1.node_id,
+            bad_debt_dz_epoch,
+            None,
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_1.amount,
+            proof: debt_1_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&resolve_unauthorized_ix),
+            &[&unauthorized_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(2).unwrap(),
+        "Program log: Unauthorized debt accountant (account 1)"
+    );
+
+    // Attempt to resolve before write-offs are enabled (should fail).
+    let resolve_before_writeoff_enabled_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &debt_1.node_id,
+            bad_debt_dz_epoch,
+            None,
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_1.amount,
+            proof: debt_1_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&resolve_before_writeoff_enabled_ix),
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(3).unwrap(),
+        "Program log: Solana validator debt write off is not enabled yet"
+    );
+
+    // Enable write-offs.
+    test_setup
+        .enable_solana_validator_debt_write_off(bad_debt_dz_epoch)
+        .await
+        .unwrap();
+
+    // Attempt to resolve debt that hasn't been written off yet (should fail).
+    let resolve_before_writeoff_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &debt_1.node_id,
+            bad_debt_dz_epoch,
+            None,
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_1.amount,
+            proof: debt_1_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&resolve_before_writeoff_ix),
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(4).unwrap(),
+        &format!(
+            "Program log: Solana validator debt was not written off for epoch {}",
+            bad_debt_dz_epoch
+        )
+    );
+
+    // Write off first and second debts.
     test_setup
         .write_off_solana_validator_debt(
             bad_debt_dz_epoch,
             bad_debt_dz_epoch,
             &debt_accountant_signer,
-            &bad_debt,
-            bad_debt_proof.clone(),
+            &debt_1,
+            debt_1_proof.clone(),
         )
-        .await
-        .unwrap();
-
-    // Swap SOL for 2Z tokens - only need enough for collected debt (excluding
-    // written-off).
-    let sol_destination_key = Pubkey::new_unique();
-    test_setup
-        .mock_buy_sol(
-            &src_token_account_key,
-            &transfer_authority_signer,
-            &sol_destination_key,
-            expected_swept_2z_amount,
-            total_solana_validator_debt - bad_debt.amount,
-        )
-        .await
-        .unwrap();
-
-    // Sweep epoch 0 first, then epoch 1.
-    test_setup
-        .sweep_distribution_tokens(dz_epoch)
         .await
         .unwrap()
-        .sweep_distribution_tokens(bad_debt_dz_epoch)
+        .write_off_solana_validator_debt(
+            bad_debt_dz_epoch,
+            bad_debt_dz_epoch,
+            &debt_accountant_signer,
+            &debt_2,
+            debt_2_proof.clone(),
+        )
+        .await
+        .unwrap()
+        // Must sweep epoch 0 first (sequential sweeping required).
+        .finalize_distribution_rewards(DoubleZeroEpoch::new(0))
+        .await
+        .unwrap()
+        .sweep_distribution_tokens(DoubleZeroEpoch::new(0))
         .await
         .unwrap();
 
-    // Verify state before reclassification.
-    let (distribution_key, distribution_before, remaining_data_before, _, _) =
+    // Verify write-off bitmap after both write-offs.
+    let (_, distribution, remaining_data, _, _) =
         test_setup.fetch_distribution(bad_debt_dz_epoch).await;
 
-    let write_off_bitmap = &remaining_data_before
-        [distribution_before.written_off_solana_validator_debt_bitmap_range()];
-    assert_eq!(write_off_bitmap, [0b00000100]);
+    let write_off_bitmap =
+        &remaining_data[distribution.written_off_solana_validator_debt_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00100100]);
 
-    let (_, deposit_before) = test_setup
-        .fetch_solana_validator_deposit(&bad_debt.node_id)
+    // Attempt to resolve debt with wrong merkle proof (use debt_2_proof for
+    // debt_1).
+    let resolve_wrong_proof_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &debt_1.node_id,
+            bad_debt_dz_epoch,
+            None,
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_1.amount,
+            proof: debt_2_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&resolve_wrong_proof_ix),
+            &[&debt_accountant_signer],
+        )
         .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidInstructionData)
+    );
+    // The computed merkle root will be wrong because we used debt_2's proof with
+    // debt_1's node_id and amount.
+    let computed_merkle_root = debt_2_proof.root_from_pod_leaf(
+        &SolanaValidatorDebt {
+            node_id: debt_1.node_id,
+            amount: debt_1.amount,
+        },
+        Some(SolanaValidatorDebt::LEAF_PREFIX),
+    );
+    assert_eq!(
+        program_logs.get(4).unwrap(),
+        &format!(
+            "Program log: Invalid computed merkle root: {}",
+            computed_merkle_root
+        )
+    );
 
-    let mut expected_deposit = SolanaValidatorDeposit::default();
-    expected_deposit.node_id = bad_debt.node_id;
-    expected_deposit.written_off_sol_debt = bad_debt.amount;
-    assert_eq!(deposit_before, expected_deposit);
+    // Attempt to reclassify as erroneous before erroneous debt is enabled (should
+    // fail).
+    let reclassify_before_erroneous_enabled_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &debt_1.node_id,
+            bad_debt_dz_epoch,
+            None,
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_1.amount,
+            proof: debt_1_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        },
+    )
+    .unwrap();
 
-    // Reclassify the written-off debt as erroneous.
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&reclassify_before_erroneous_enabled_ix),
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(5).unwrap(),
+        "Program log: Erroneous Solana validator debt is not enabled yet"
+    );
+
+    // Enable erroneous debt.
+    test_setup
+        .enable_erroneous_solana_validator_debt(bad_debt_dz_epoch)
+        .await
+        .unwrap();
+
+    // Reclassify first debt as erroneous.
     test_setup
         .resolve_bad_solana_validator_debt(
             bad_debt_dz_epoch,
             None, // windfall_dz_epoch
             &debt_accountant_signer,
-            &bad_debt,
-            bad_debt_proof,
+            &debt_1,
+            debt_1_proof.clone(),
             BadSolanaValidatorDebtResolution::ReclassifyErroneous,
         )
         .await
         .unwrap();
 
-    // Verify state after ReclassifyErroneous.
+    // Verify state after erroneous reclassification.
     let (_, distribution_after, remaining_data_after, _, _) =
         test_setup.fetch_distribution(bad_debt_dz_epoch).await;
 
+    // Write-off bitmap is unchanged.
+    let write_off_bitmap =
+        &remaining_data_after[distribution_after.written_off_solana_validator_debt_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00100100]);
+
     let erroneous_bitmap_range = distribution_after
         .checked_erroneous_solana_validator_debt_bitmap_range()
-        .expect("Erroneous bitmap should exist");
+        .unwrap();
     let erroneous_bitmap = &remaining_data_after[erroneous_bitmap_range];
     assert_eq!(erroneous_bitmap, [0b00000100]);
-
-    let init = ExpectedDistributionInitializer {
-        dz_epoch: bad_debt_dz_epoch,
-        distribution_key,
-        initial_cbr,
-        distribute_rewards_relay_lamports,
-        total_solana_validators,
-        total_solana_validator_debt,
-        solana_validator_debt_merkle_root,
-        total_contributors,
-        rewards_merkle_root,
-    };
-
-    let mut expected_distribution = build_expected_distribution(&distribution_after, &init);
-    expected_distribution.uncollectible_sol_debt = bad_debt.amount;
-    expected_distribution.solana_validator_debt_write_off_count = 1;
-    expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount;
-    expected_distribution.erroneous_sol_debt = bad_debt.amount;
-    assert_eq!(distribution_after, expected_distribution);
+    assert_eq!(distribution_after.erroneous_sol_debt, debt_1.amount);
 
     let (_, deposit_after) = test_setup
-        .fetch_solana_validator_deposit(&bad_debt.node_id)
+        .fetch_solana_validator_deposit(&debt_1.node_id)
         .await;
+    assert_eq!(deposit_after.erroneous_sol_debt, debt_1.amount);
 
-    let mut expected_deposit = SolanaValidatorDeposit::default();
-    expected_deposit.node_id = bad_debt.node_id;
-    expected_deposit.written_off_sol_debt = bad_debt.amount;
-    expected_deposit.erroneous_sol_debt = bad_debt.amount;
-    assert_eq!(deposit_after, expected_deposit);
-
-    // Reclassify as unpaid (undo the erroneous classification).
-    let bad_debt_proof = MerkleProof::from_indexed_pod_leaves(
-        &debt_data,
-        bad_debt_index.try_into().unwrap(),
-        Some(SolanaValidatorDebt::LEAF_PREFIX),
-    )
-    .unwrap();
-
+    // Reclassify first debt as unpaid (undo erroneous classification).
     test_setup
         .resolve_bad_solana_validator_debt(
             bad_debt_dz_epoch,
             None, // windfall_dz_epoch
             &debt_accountant_signer,
-            &bad_debt,
-            bad_debt_proof,
+            &debt_1,
+            debt_1_proof.clone(),
             BadSolanaValidatorDebtResolution::ReclassifyUnpaid,
         )
         .await
         .unwrap();
 
-    // Verify state after ReclassifyUnpaid.
+    // Verify state after unpaid reclassification.
     let (_, distribution_after_unpaid, remaining_data_after_unpaid, _, _) =
         test_setup.fetch_distribution(bad_debt_dz_epoch).await;
 
+    // Write-off bitmap is unchanged.
+    let write_off_bitmap = &remaining_data_after_unpaid
+        [distribution_after_unpaid.written_off_solana_validator_debt_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00100100]);
+
     let erroneous_bitmap_range = distribution_after_unpaid
         .checked_erroneous_solana_validator_debt_bitmap_range()
-        .expect("Erroneous bitmap should exist");
+        .unwrap();
     let erroneous_bitmap = &remaining_data_after_unpaid[erroneous_bitmap_range];
     assert_eq!(erroneous_bitmap, [0b00000000]);
-
-    let mut expected_distribution = build_expected_distribution(&distribution_after_unpaid, &init);
-    expected_distribution.uncollectible_sol_debt = bad_debt.amount;
-    expected_distribution.solana_validator_debt_write_off_count = 1;
-    expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount;
-    expected_distribution.erroneous_sol_debt = 0;
-    assert_eq!(distribution_after_unpaid, expected_distribution);
+    assert_eq!(distribution_after_unpaid.erroneous_sol_debt, 0);
 
     let (_, deposit_after_unpaid) = test_setup
-        .fetch_solana_validator_deposit(&bad_debt.node_id)
+        .fetch_solana_validator_deposit(&debt_1.node_id)
         .await;
+    assert_eq!(deposit_after_unpaid.erroneous_sol_debt, 0);
 
-    let mut expected_deposit = SolanaValidatorDeposit::default();
-    expected_deposit.node_id = bad_debt.node_id;
-    expected_deposit.written_off_sol_debt = bad_debt.amount;
-    expected_deposit.erroneous_sol_debt = 0;
-    assert_eq!(deposit_after_unpaid, expected_deposit);
-
-    // Resolve with recover, which requires a windfall distribution.
-    let windfall_dz_epoch = bad_debt_dz_epoch.saturating_add_duration(1);
-
+    // Setup windfall distribution (do not sweep tokens).
     test_setup
         .initialize_distribution(&debt_accountant_signer)
         .await
@@ -390,48 +528,204 @@ async fn test_resolve_bad_solana_validator_debt() {
         .warp_timestamp_by(60)
         .await
         .unwrap()
-        .configure_distribution_debt(
-            windfall_dz_epoch,
-            &debt_accountant_signer,
-            0, // No validators needed for windfall
-            0,
-            Hash::default(),
-        )
-        .await
-        .unwrap()
         .finalize_distribution_debt(windfall_dz_epoch, &debt_accountant_signer)
         .await
         .unwrap();
 
-    // Transfer lamports to the validator deposit so it can pay the recovered
-    // debt.
-    let (deposit_key, _) = SolanaValidatorDeposit::find_address(&bad_debt.node_id);
+    // Transfer lamports to the first debt validator deposit so it can pay the
+    // recovered debt.
+    let (deposit_1_key, _) = SolanaValidatorDeposit::find_address(&debt_1.node_id);
     test_setup
-        .transfer_lamports(&deposit_key, bad_debt.amount)
+        .transfer_lamports(&deposit_1_key, debt_1.amount)
         .await
         .unwrap();
 
-    // Build the merkle proof once for use in both the failure and success cases.
-    let bad_debt_proof = MerkleProof::from_indexed_pod_leaves(
-        &debt_data,
-        bad_debt_index.try_into().unwrap(),
-        Some(SolanaValidatorDebt::LEAF_PREFIX),
-    )
-    .unwrap();
+    // Get journal state before recovery.
+    let (_, journal_before, _) = test_setup.fetch_journal().await;
 
-    // Attempt recovery with the high minimum epoch duration (10) - should fail
-    // because not enough epochs have passed since the distribution was created.
-    let resolve_bad_debt_ix = try_build_instruction(
+    // Recover first debt (before bad debt epoch is swept).
+    test_setup
+        .resolve_bad_solana_validator_debt(
+            bad_debt_dz_epoch,
+            Some(windfall_dz_epoch),
+            &debt_accountant_signer,
+            &debt_1,
+            debt_1_proof.clone(),
+            BadSolanaValidatorDebtResolution::Recover,
+        )
+        .await
+        .unwrap();
+
+    // Verify bad debt distribution state after recovery.
+    let (_, distribution_after_recover, remaining_data_after_recover, _, _) =
+        test_setup.fetch_distribution(bad_debt_dz_epoch).await;
+
+    let write_off_bitmap = &remaining_data_after_recover
+        [distribution_after_recover.written_off_solana_validator_debt_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00100000]);
+    assert_eq!(
+        distribution_after_recover.solana_validator_debt_recovery_count,
+        1
+    );
+
+    // Verify deposit state after recovery.
+    let (_, deposit_after_recover) = test_setup
+        .fetch_solana_validator_deposit(&debt_1.node_id)
+        .await;
+    assert_eq!(deposit_after_recover.recovered_sol_debt, debt_1.amount);
+
+    // Verify journal received the lamports.
+    let (_, journal_after, _) = test_setup.fetch_journal().await;
+    assert_eq!(
+        journal_after.total_sol_balance,
+        journal_before.total_sol_balance + debt_1.amount
+    );
+
+    // Verify windfall distribution's recovered_sol_debt is updated.
+    let (_, windfall_after, _, _, _) = test_setup.fetch_distribution(windfall_dz_epoch).await;
+    assert_eq!(windfall_after.recovered_sol_debt, debt_1.amount);
+
+    // Attempt to recover the same debt again (should fail because already
+    // recovered).
+    let recover_again_ix = try_build_instruction(
         &ID,
         ResolveBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
-            &bad_debt.node_id,
+            &debt_1.node_id,
             bad_debt_dz_epoch,
             Some(windfall_dz_epoch),
         ),
         &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
-            amount: bad_debt.amount,
-            proof: bad_debt_proof.clone(),
+            amount: debt_1.amount,
+            proof: debt_1_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::Recover,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&recover_again_ix),
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(4).unwrap(),
+        &format!(
+            "Program log: Solana validator debt was not written off for epoch {}",
+            bad_debt_dz_epoch
+        )
+    );
+
+    // Attempt to reclassify recovered debt as erroneous (should fail because no
+    // longer written off).
+    let reclassify_recovered_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &debt_1.node_id,
+            bad_debt_dz_epoch,
+            None,
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_1.amount,
+            proof: debt_1_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&reclassify_recovered_ix),
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(4).unwrap(),
+        &format!(
+            "Program log: Solana validator debt was not written off for epoch {}",
+            bad_debt_dz_epoch
+        )
+    );
+
+    // Sweep skipped epoch 0 and bad debt epoch 1.
+    let sol_destination_key = Pubkey::new_unique();
+    let paid_debt = total_solana_validator_debt - debt_1.amount - debt_2.amount;
+
+    test_setup
+        .mock_buy_sol(
+            &src_token_account_key,
+            &transfer_authority_signer,
+            &sol_destination_key,
+            expected_swept_2z_amount,
+            paid_debt,
+        )
+        .await
+        .unwrap()
+        // Now sweep epoch 1.
+        .finalize_distribution_rewards(bad_debt_dz_epoch)
+        .await
+        .unwrap()
+        .sweep_distribution_tokens(bad_debt_dz_epoch)
+        .await
+        .unwrap();
+
+    // Reclassify second debt as erroneous (after bad debt epoch is swept).
+    test_setup
+        .resolve_bad_solana_validator_debt(
+            bad_debt_dz_epoch,
+            None, // windfall_dz_epoch
+            &debt_accountant_signer,
+            &debt_2,
+            debt_2_proof.clone(),
+            BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+        )
+        .await
+        .unwrap();
+
+    let (_, distribution_after_err, remaining_data_after_err, _, _) =
+        test_setup.fetch_distribution(bad_debt_dz_epoch).await;
+
+    // Write-off bitmap is unchanged.
+    let write_off_bitmap = &remaining_data_after_err
+        [distribution_after_err.written_off_solana_validator_debt_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00100000]);
+
+    // Verify second debt is marked erroneous.
+    let erroneous_bitmap_range = distribution_after_err
+        .checked_erroneous_solana_validator_debt_bitmap_range()
+        .unwrap();
+    let erroneous_bitmap = &remaining_data_after_err[erroneous_bitmap_range];
+    assert_eq!(erroneous_bitmap, [0b00100000]);
+    assert_eq!(distribution_after_err.erroneous_sol_debt, debt_2.amount);
+
+    // Attempt to recover second debt (should fail because it is erroneous).
+    let (deposit_2_key, _) = SolanaValidatorDeposit::find_address(&debt_2.node_id);
+    test_setup
+        .transfer_lamports(&deposit_2_key, debt_2.amount)
+        .await
+        .unwrap();
+
+    let resolve_bad_debt_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &debt_2.node_id,
+            bad_debt_dz_epoch,
+            Some(windfall_dz_epoch),
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: debt_2.amount,
+            proof: debt_2_proof.clone(),
             resolution: BadSolanaValidatorDebtResolution::Recover,
         },
     )
@@ -447,127 +741,87 @@ async fn test_resolve_bad_solana_validator_debt() {
         tx_err,
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
-    // Verify the error message indicates not enough epochs have passed.
-    // minimum_dz_epoch_to_recover = bad_debt_dz_epoch + 10 = 1 + 10 = 11
-    // next_completed_dz_epoch = 3 (after initializing epoch 0, 1, and 2)
     assert_eq!(
         program_logs.get(5).unwrap(),
-        "Program log: DZ epoch must be at least 11 (currently 3) to recover debt"
+        &format!(
+            "Program log: Cannot recover erroneous debt for epoch {}",
+            bad_debt_dz_epoch
+        )
     );
 
-    // Reconfigure to allow recovery after just 1 epoch.
+    // Reclassify second debt as unpaid.
     test_setup
-        .configure_program(
-            &admin_signer,
-            [ProgramConfiguration::MinimumEpochDurationToRecoverDebt(1)],
+        .resolve_bad_solana_validator_debt(
+            bad_debt_dz_epoch,
+            None, // windfall_dz_epoch
+            &debt_accountant_signer,
+            &debt_2,
+            debt_2_proof.clone(),
+            BadSolanaValidatorDebtResolution::ReclassifyUnpaid,
         )
         .await
         .unwrap();
 
-    // Get journal state before recovery.
-    let (_, journal_before, _) = test_setup.fetch_journal().await;
+    let (_, distribution_after_unpaid_2, remaining_data_after_unpaid_2, _, _) =
+        test_setup.fetch_distribution(bad_debt_dz_epoch).await;
 
-    // Recover the bad debt - should now succeed after reconfiguration.
+    // Write-off bitmap is unchanged.
+    let write_off_bitmap = &remaining_data_after_unpaid_2
+        [distribution_after_unpaid_2.written_off_solana_validator_debt_bitmap_range()];
+    assert_eq!(write_off_bitmap, [0b00100000]);
+
+    // Verify erroneous flag is cleared.
+    let erroneous_bitmap_range = distribution_after_unpaid_2
+        .checked_erroneous_solana_validator_debt_bitmap_range()
+        .unwrap();
+    let erroneous_bitmap = &remaining_data_after_unpaid_2[erroneous_bitmap_range];
+    assert_eq!(erroneous_bitmap, [0b00000000]);
+    assert_eq!(distribution_after_unpaid_2.erroneous_sol_debt, 0);
+
+    // Recover second debt (after bad debt epoch is swept).
+    let (_, journal_before_2, _) = test_setup.fetch_journal().await;
+
     test_setup
         .resolve_bad_solana_validator_debt(
             bad_debt_dz_epoch,
             Some(windfall_dz_epoch),
             &debt_accountant_signer,
-            &bad_debt,
-            bad_debt_proof,
+            &debt_2,
+            debt_2_proof.clone(),
             BadSolanaValidatorDebtResolution::Recover,
         )
         .await
         .unwrap();
 
-    // Verify bad debt distribution state after Recover.
-    let (_, distribution_after_recover, remaining_data_after_recover, _, _) =
+    // Verify bad debt distribution state after recovery.
+    let (_, distribution_after_recover_2, remaining_data_after_recover_2, _, _) =
         test_setup.fetch_distribution(bad_debt_dz_epoch).await;
 
-    let write_off_bitmap = &remaining_data_after_recover
-        [distribution_after_recover.written_off_solana_validator_debt_bitmap_range()];
+    let write_off_bitmap = &remaining_data_after_recover_2
+        [distribution_after_recover_2.written_off_solana_validator_debt_bitmap_range()];
     assert_eq!(write_off_bitmap, [0b00000000]);
+    assert_eq!(
+        distribution_after_recover_2.solana_validator_debt_recovery_count,
+        2
+    );
 
-    let mut expected_distribution = build_expected_distribution(&distribution_after_recover, &init);
-    expected_distribution.uncollectible_sol_debt = bad_debt.amount;
-    expected_distribution.solana_validator_debt_write_off_count = 1;
-    expected_distribution.solana_validator_debt_recovery_count = 1;
-    expected_distribution.collected_2z_converted_from_sol = expected_swept_2z_amount;
-    assert_eq!(distribution_after_recover, expected_distribution);
-
-    // Verify deposit state after Recover.
-    let (_, deposit_after_recover) = test_setup
-        .fetch_solana_validator_deposit(&bad_debt.node_id)
+    // Verify deposit state after recovery.
+    let (_, deposit_after_recover_2) = test_setup
+        .fetch_solana_validator_deposit(&debt_2.node_id)
         .await;
-
-    let mut expected_deposit = SolanaValidatorDeposit::default();
-    expected_deposit.node_id = bad_debt.node_id;
-    expected_deposit.written_off_sol_debt = bad_debt.amount;
-    expected_deposit.recovered_sol_debt = bad_debt.amount;
-    assert_eq!(deposit_after_recover, expected_deposit);
+    assert_eq!(deposit_after_recover_2.recovered_sol_debt, debt_2.amount);
 
     // Verify journal received the lamports.
-    let (_, journal_after, _) = test_setup.fetch_journal().await;
+    let (_, journal_after_2, _) = test_setup.fetch_journal().await;
     assert_eq!(
-        journal_after.total_sol_balance,
-        journal_before.total_sol_balance + bad_debt.amount
+        journal_after_2.total_sol_balance,
+        journal_before_2.total_sol_balance + debt_2.amount
     );
 
     // Verify windfall distribution's recovered_sol_debt is updated.
-    let (_, windfall_after, _, _, _) = test_setup.fetch_distribution(windfall_dz_epoch).await;
-    assert_eq!(windfall_after.recovered_sol_debt, bad_debt.amount);
-}
-
-struct ExpectedDistributionInitializer {
-    dz_epoch: DoubleZeroEpoch,
-    distribution_key: Pubkey,
-    initial_cbr: u32,
-    distribute_rewards_relay_lamports: u32,
-    total_solana_validators: u32,
-    total_solana_validator_debt: u64,
-    solana_validator_debt_merkle_root: Hash,
-    total_contributors: u32,
-    rewards_merkle_root: Hash,
-}
-
-fn build_expected_distribution(
-    actual: &Distribution,
-    init: &ExpectedDistributionInitializer,
-) -> Distribution {
-    let debt_bitmap_bytes = init.total_solana_validators.div_ceil(8);
-    let rewards_bitmap_bytes = init.total_contributors.div_ceil(8);
-
-    let mut expected = Distribution::default();
-    expected.set_is_debt_calculation_finalized(true);
-    expected.set_is_rewards_calculation_finalized(true);
-    expected.set_has_swept_2z_tokens(true);
-    expected.set_is_solana_validator_debt_write_off_enabled(true);
-    expected.set_is_erroneous_solana_validator_debt_enabled(true);
-    expected.bump_seed = Distribution::find_address(init.dz_epoch).1;
-    expected.token_2z_pda_bump_seed = state::find_2z_token_pda_address(&init.distribution_key).1;
-    expected.dz_epoch = init.dz_epoch;
-    expected.community_burn_rate = BurnRate::new(init.initial_cbr).unwrap();
-    expected
-        .solana_validator_fee_parameters
-        .base_block_rewards_pct = ValidatorFee::new(500).unwrap();
-    expected.total_solana_validators = init.total_solana_validators;
-    expected.solana_validator_payments_count = init.total_solana_validators - 1;
-    expected.total_solana_validator_debt = init.total_solana_validator_debt;
-    expected.collected_solana_validator_payments =
-        init.total_solana_validator_debt - 30_000_000_000; // bad_debt.amount
-    expected.solana_validator_debt_merkle_root = init.solana_validator_debt_merkle_root;
-    expected.total_contributors = init.total_contributors;
-    expected.rewards_merkle_root = init.rewards_merkle_root;
-    // Bitmap layout: processed_debt | write_off | erroneous | processed_rewards
-    expected.processed_solana_validator_debt_end_index = debt_bitmap_bytes;
-    expected.written_off_solana_validator_debt_start_index = debt_bitmap_bytes;
-    expected.written_off_solana_validator_debt_end_index = 2 * debt_bitmap_bytes;
-    expected.erroneous_solana_validator_debt_start_index = 2 * debt_bitmap_bytes;
-    expected.erroneous_solana_validator_debt_end_index = 3 * debt_bitmap_bytes;
-    expected.processed_rewards_start_index = 3 * debt_bitmap_bytes;
-    expected.processed_rewards_end_index = 3 * debt_bitmap_bytes + rewards_bitmap_bytes;
-    expected.distribute_rewards_relay_lamports = init.distribute_rewards_relay_lamports;
-    // Copy from actual since this depends on when distribution was initialized.
-    expected.calculation_allowed_timestamp = actual.calculation_allowed_timestamp;
-    expected
+    let (_, windfall_after_2, _, _, _) = test_setup.fetch_distribution(windfall_dz_epoch).await;
+    assert_eq!(
+        windfall_after_2.recovered_sol_debt,
+        debt_1.amount + debt_2.amount
+    );
 }
