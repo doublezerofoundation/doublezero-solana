@@ -569,6 +569,21 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 }
             }
         }
+        ProgramConfiguration::MinimumEpochDurationToRecoverDebt(epoch_duration) => {
+            // If the epoch duration is zero, we treat this as unset.
+            if epoch_duration == 0 {
+                msg!("Minimum epoch duration to recover debt is zero");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            msg!(
+                "Set distribution_parameters.minimum_epoch_duration_to_recover_debt: {}",
+                epoch_duration
+            );
+            program_config
+                .distribution_parameters
+                .minimum_epoch_duration_to_recover_debt = epoch_duration;
+        }
     }
 
     Ok(())
@@ -2215,6 +2230,27 @@ fn try_resolve_bad_solana_validator_debt(
                     msg!("Cannot recover erroneous debt for epoch {}", dz_epoch);
                     return Err(ProgramError::InvalidAccountData);
                 }
+            }
+
+            // Ensure enough epochs have passed since the distribution was
+            // created before allowing debt recovery.
+            let min_duration_to_recover = authorized_use
+                .program_config
+                .checked_minimum_epoch_duration_to_recover_debt()
+                .ok_or_else(|| {
+                    msg!("Minimum epoch duration to recover debt is not configured");
+                    ProgramError::InvalidAccountData
+                })?;
+            let minimum_dz_epoch_to_recover =
+                dz_epoch.saturating_add_duration(min_duration_to_recover);
+
+            if minimum_dz_epoch_to_recover > authorized_use.program_config.next_completed_dz_epoch {
+                msg!(
+                    "DZ epoch must be at least {} (currently {}) to recover debt",
+                    minimum_dz_epoch_to_recover,
+                    authorized_use.program_config.next_completed_dz_epoch
+                );
+                return Err(ProgramError::InvalidAccountData);
             }
 
             // Clear the write-off bitmap bit.

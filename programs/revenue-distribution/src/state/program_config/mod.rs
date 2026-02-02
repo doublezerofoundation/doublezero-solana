@@ -184,6 +184,18 @@ impl ProgramConfig {
         }
     }
 
+    pub fn checked_minimum_epoch_duration_to_recover_debt(&self) -> Option<EpochDuration> {
+        let duration = self
+            .distribution_parameters
+            .minimum_epoch_duration_to_recover_debt;
+
+        if duration == 0 {
+            None
+        } else {
+            Some(duration.into())
+        }
+    }
+
     pub fn checked_calculation_grace_period_seconds(&self) -> Option<u32> {
         let grace_period = self
             .distribution_parameters
@@ -320,6 +332,26 @@ mod tests {
                 .checked_minimum_epoch_duration_to_finalize_rewards()
                 .unwrap(),
             MINIMUM_EPOCH_DURATION_TO_FINALIZE_REWARDS.into()
+        );
+    }
+
+    #[test]
+    fn test_checked_minimum_epoch_duration_to_recover_debt() {
+        const MINIMUM_EPOCH_DURATION_TO_RECOVER_DEBT: u8 = 42;
+
+        let mut program_config = ProgramConfig::default();
+        assert!(program_config
+            .checked_minimum_epoch_duration_to_recover_debt()
+            .is_none());
+
+        program_config
+            .distribution_parameters
+            .minimum_epoch_duration_to_recover_debt = MINIMUM_EPOCH_DURATION_TO_RECOVER_DEBT;
+        assert_eq!(
+            program_config
+                .checked_minimum_epoch_duration_to_recover_debt()
+                .unwrap(),
+            MINIMUM_EPOCH_DURATION_TO_RECOVER_DEBT.into()
         );
     }
 

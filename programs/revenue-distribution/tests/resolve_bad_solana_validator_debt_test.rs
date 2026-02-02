@@ -2,18 +2,24 @@ mod common;
 
 //
 
+use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        BadSolanaValidatorDebtResolution, ProgramConfiguration, ProgramFeatureConfiguration,
-        ProgramFlagConfiguration,
+        account::ResolveBadSolanaValidatorDebtAccounts, BadSolanaValidatorDebtResolution,
+        ProgramConfiguration, ProgramFeatureConfiguration, ProgramFlagConfiguration,
+        RevenueDistributionInstructionData,
     },
     state::{self, Distribution, SolanaValidatorDeposit},
     types::{BurnRate, DoubleZeroEpoch, SolanaValidatorDebt, ValidatorFee},
-    DOUBLEZERO_MINT_KEY,
+    DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signer};
+use solana_sdk::{
+    instruction::InstructionError,
+    signature::{Keypair, Signer},
+    transaction::TransactionError,
+};
 use svm_hash::{
     merkle::{merkle_root_from_indexed_pod_leaves, MerkleProof},
     sha2::Hash,
@@ -118,6 +124,8 @@ async fn test_resolve_bad_solana_validator_debt() {
                     feature: ProgramFeatureConfiguration::SolanaValidatorDebtWriteOff,
                     activation_epoch: DoubleZeroEpoch::new(1),
                 },
+                // Start with a high value so recovery will initially fail.
+                ProgramConfiguration::MinimumEpochDurationToRecoverDebt(10),
             ],
         )
         .await
@@ -403,10 +411,7 @@ async fn test_resolve_bad_solana_validator_debt() {
         .await
         .unwrap();
 
-    // Get journal state before recovery.
-    let (_, journal_before, _) = test_setup.fetch_journal().await;
-
-    // Recover the bad debt.
+    // Build the merkle proof once for use in both the failure and success cases.
     let bad_debt_proof = MerkleProof::from_indexed_pod_leaves(
         &debt_data,
         bad_debt_index.try_into().unwrap(),
@@ -414,6 +419,55 @@ async fn test_resolve_bad_solana_validator_debt() {
     )
     .unwrap();
 
+    // Attempt recovery with the high minimum epoch duration (10) - should fail
+    // because not enough epochs have passed since the distribution was created.
+    let resolve_bad_debt_ix = try_build_instruction(
+        &ID,
+        ResolveBadSolanaValidatorDebtAccounts::new(
+            &debt_accountant_signer.pubkey(),
+            &bad_debt.node_id,
+            bad_debt_dz_epoch,
+            Some(windfall_dz_epoch),
+        ),
+        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            amount: bad_debt.amount,
+            proof: bad_debt_proof.clone(),
+            resolution: BadSolanaValidatorDebtResolution::Recover,
+        },
+    )
+    .unwrap();
+
+    let (tx_err, program_logs) = test_setup
+        .unwrap_simulation_error(
+            std::slice::from_ref(&resolve_bad_debt_ix),
+            &[&debt_accountant_signer],
+        )
+        .await;
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    // Verify the error message indicates not enough epochs have passed.
+    // minimum_dz_epoch_to_recover = bad_debt_dz_epoch + 10 = 1 + 10 = 11
+    // next_completed_dz_epoch = 3 (after initializing epoch 0, 1, and 2)
+    assert_eq!(
+        program_logs.get(5).unwrap(),
+        "Program log: DZ epoch must be at least 11 (currently 3) to recover debt"
+    );
+
+    // Reconfigure to allow recovery after just 1 epoch.
+    test_setup
+        .configure_program(
+            &admin_signer,
+            [ProgramConfiguration::MinimumEpochDurationToRecoverDebt(1)],
+        )
+        .await
+        .unwrap();
+
+    // Get journal state before recovery.
+    let (_, journal_before, _) = test_setup.fetch_journal().await;
+
+    // Recover the bad debt - should now succeed after reconfiguration.
     test_setup
         .resolve_bad_solana_validator_debt(
             bad_debt_dz_epoch,

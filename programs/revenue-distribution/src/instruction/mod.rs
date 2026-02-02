@@ -42,6 +42,7 @@ pub enum ProgramConfiguration {
         feature: ProgramFeatureConfiguration,
         activation_epoch: DoubleZeroEpoch,
     },
+    MinimumEpochDurationToRecoverDebt(u8),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
