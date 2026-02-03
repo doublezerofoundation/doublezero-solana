@@ -1933,9 +1933,8 @@ fn try_write_off_solana_validator_debt(
 
     // If there are enough lamports to pay debt, revert.
     let deposit_lamports = solana_validator_deposit_info.lamports();
-    let rent_sysvar = Rent::get().unwrap();
     let rent_exemption_lamports =
-        rent_sysvar.minimum_balance(solana_validator_deposit_info.data_len());
+        compute_rent_exemption_lamports(solana_validator_deposit_info.data_len());
     let excess_lamports = deposit_lamports.saturating_sub(rent_exemption_lamports);
 
     if excess_lamports >= amount {
@@ -2159,16 +2158,17 @@ fn try_resolve_bad_solana_validator_debt(
     // - 1: Debt accountant.
     // - 2: Distribution with bad debt.
     // - 3: Solana validator deposit.
-    // - 4: Journal (required for debt recovery).
+    // - 4: Journal (required for recovery).
     // - 5: Windfall distribution (required for recovery).
     let mut accounts_iter = accounts.iter().enumerate();
 
-    // Account 0 must be the program config.
+    // Accounts 0 and 1 must be the program config and debt accountant.
     let authorized_use =
         VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
+    let program_config = authorized_use.program_config;
 
     // Make sure the program is not paused.
-    authorized_use.program_config.try_require_unpaused()?;
+    program_config.try_require_unpaused()?;
 
     // Account 2 must be the distribution with bad debt.
     let mut distribution =
@@ -2234,8 +2234,7 @@ fn try_resolve_bad_solana_validator_debt(
 
             // Ensure enough epochs have passed since the distribution was
             // created before allowing debt recovery.
-            let min_duration_to_recover = authorized_use
-                .program_config
+            let min_duration_to_recover = program_config
                 .checked_minimum_epoch_duration_to_recover_debt()
                 .ok_or_else(|| {
                     msg!("Minimum epoch duration to recover debt is not configured");
@@ -2244,11 +2243,11 @@ fn try_resolve_bad_solana_validator_debt(
             let minimum_dz_epoch_to_recover =
                 dz_epoch.saturating_add_duration(min_duration_to_recover);
 
-            if minimum_dz_epoch_to_recover > authorized_use.program_config.next_completed_dz_epoch {
+            if minimum_dz_epoch_to_recover > program_config.next_completed_dz_epoch {
                 msg!(
                     "DZ epoch must be at least {} (currently {}) to recover debt",
                     minimum_dz_epoch_to_recover,
-                    authorized_use.program_config.next_completed_dz_epoch
+                    program_config.next_completed_dz_epoch
                 );
                 return Err(ProgramError::InvalidAccountData);
             }
@@ -2335,6 +2334,8 @@ fn try_resolve_bad_solana_validator_debt(
                         distribution.erroneous_sol_debt += amount;
                         solana_validator_deposit.erroneous_sol_debt += amount;
                     } else {
+                        // Amount was previously added by reclassifying as
+                        // erroneous debt, so no need for checked subtraction.
                         distribution.erroneous_sol_debt -= amount;
                         solana_validator_deposit.erroneous_sol_debt -= amount;
                     }
