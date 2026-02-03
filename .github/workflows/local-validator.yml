@@ -6,7 +6,7 @@ on:
     branches: [ main ]
 
 env:
-  SOLANA_CLI: v3.0.12
+  SOLANA_CLI: v3.1.8
   DOUBLEZERO_OFFCHAIN_GIT_INSTALL: --git https://github.com/doublezerofoundation/doublezero-offchain.git --locked
 
 jobs:
