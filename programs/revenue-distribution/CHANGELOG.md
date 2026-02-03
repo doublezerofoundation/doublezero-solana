@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## Unreleased (v0.3.0)
+
+- add debt recovery for written off debt ([#103])
+
+## [v0.2.1]
 
 - debt write off activation ([#99])
 - uptick version to 0.2.1 ([#101])
@@ -104,6 +108,8 @@
 [#95]: https://github.com/doublezerofoundation/doublezero-solana/pull/95
 [#99]: https://github.com/doublezerofoundation/doublezero-solana/pull/99
 [#101]: https://github.com/doublezerofoundation/doublezero-solana/pull/101
+[#103]: https://github.com/doublezerofoundation/doublezero-solana/pull/103
 [v0.1.0]: https://github.com/doublezerofoundation/doublezero-solana/tree/revenue-distribution/v0.1.0
 [v0.1.1]: https://github.com/doublezerofoundation/doublezero-solana/tree/revenue-distribution/v0.1.1
 [v0.2.0]: https://github.com/doublezerofoundation/doublezero-solana/tree/revenue-distribution/v0.2.0
+[v0.2.1]: https://github.com/doublezerofoundation/doublezero-solana/tree/revenue-distribution/v0.2.1
