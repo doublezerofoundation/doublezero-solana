@@ -13,12 +13,13 @@ use doublezero_revenue_distribution::{
             FinalizeDistributionRewardsAccounts, InitializeContributorRewardsAccounts,
             InitializeDistributionAccounts, InitializeJournalAccounts, InitializeProgramAccounts,
             InitializeSolanaValidatorDepositAccounts, InitializeSwapDestinationAccounts,
-            PaySolanaValidatorDebtAccounts, ResolveBadSolanaValidatorDebtAccounts,
-            SetAdminAccounts, SetRewardsManagerAccounts, SweepDistributionTokensAccounts,
-            VerifyDistributionMerkleRootAccounts, WriteOffSolanaValidatorDebtAccounts,
+            PaySolanaValidatorDebtAccounts, ReclassifyBadSolanaValidatorDebtAccounts,
+            RecoverBadSolanaValidatorDebtAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
+            SweepDistributionTokensAccounts, VerifyDistributionMerkleRootAccounts,
+            WriteOffSolanaValidatorDebtAccounts,
         },
-        BadSolanaValidatorDebtResolution, ContributorRewardsConfiguration,
-        DistributionMerkleRootKind, ProgramConfiguration, RevenueDistributionInstructionData,
+        ContributorRewardsConfiguration, DistributionMerkleRootKind, ProgramConfiguration,
+        RevenueDistributionInstructionData,
     },
     state::{
         self, ContributorRewards, Distribution, Journal, ProgramConfig, SolanaValidatorDeposit,
@@ -844,29 +845,27 @@ impl ProgramTestWithOwner {
         Ok(self)
     }
 
-    pub async fn resolve_bad_solana_validator_debt(
+    pub async fn reclassify_bad_solana_validator_debt(
         &mut self,
         bad_debt_dz_epoch: DoubleZeroEpoch,
-        windfall_dz_epoch: Option<DoubleZeroEpoch>,
         debt_accountant_signer: &Keypair,
         debt: &SolanaValidatorDebt,
         proof: MerkleProof,
-        resolution: BadSolanaValidatorDebtResolution,
+        should_classify_erroneous: bool,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.context.payer;
 
-        let resolve_bad_solana_validator_debt_ix = try_build_instruction(
+        let reclassify_bad_solana_validator_debt_ix = try_build_instruction(
             &ID,
-            ResolveBadSolanaValidatorDebtAccounts::new(
+            ReclassifyBadSolanaValidatorDebtAccounts::new(
                 &debt_accountant_signer.pubkey(),
                 &debt.node_id,
                 bad_debt_dz_epoch,
-                windfall_dz_epoch,
             ),
-            &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+            &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
                 amount: debt.amount,
                 proof,
-                resolution,
+                classify_erroneous: should_classify_erroneous,
             },
         )
         .unwrap();
@@ -874,7 +873,43 @@ impl ProgramTestWithOwner {
         self.context.last_blockhash = process_instructions_for_test(
             &mut self.context.banks_client,
             &self.context.last_blockhash,
-            &[resolve_bad_solana_validator_debt_ix],
+            &[reclassify_bad_solana_validator_debt_ix],
+            &[payer_signer, debt_accountant_signer],
+        )
+        .await?;
+
+        Ok(self)
+    }
+
+    pub async fn recover_bad_solana_validator_debt(
+        &mut self,
+        bad_debt_dz_epoch: DoubleZeroEpoch,
+        windfall_dz_epoch: DoubleZeroEpoch,
+        debt_accountant_signer: &Keypair,
+        debt: &SolanaValidatorDebt,
+        proof: MerkleProof,
+    ) -> Result<&mut Self, BanksClientError> {
+        let payer_signer = &self.context.payer;
+
+        let recover_bad_solana_validator_debt_ix = try_build_instruction(
+            &ID,
+            RecoverBadSolanaValidatorDebtAccounts::new(
+                &debt_accountant_signer.pubkey(),
+                &debt.node_id,
+                bad_debt_dz_epoch,
+                windfall_dz_epoch,
+            ),
+            &RevenueDistributionInstructionData::RecoverBadSolanaValidatorDebt {
+                amount: debt.amount,
+                proof,
+            },
+        )
+        .unwrap();
+
+        self.context.last_blockhash = process_instructions_for_test(
+            &mut self.context.banks_client,
+            &self.context.last_blockhash,
+            &[recover_bad_solana_validator_debt_ix],
             &[payer_signer, debt_accountant_signer],
         )
         .await?;
