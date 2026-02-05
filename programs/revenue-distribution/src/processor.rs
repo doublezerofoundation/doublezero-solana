@@ -2195,37 +2195,33 @@ fn try_reclassify_bad_solana_validator_debt(
             ProgramError::InvalidAccountData
         })?;
 
-    // Set the erroneous debt bit and update erroneous SOL debt
-    // accounting.
-    match try_set_leaf_bit(
+    // Set the erroneous debt bit and update erroneous SOL debt accounting.
+    try_set_leaf_bit(
         &mut distribution.remaining_data[erroneous_bitmap_range],
         leaf_index,
         should_classify_erroneous,
-    ) {
-        Ok(_) => {
-            if should_classify_erroneous {
-                distribution.erroneous_sol_debt += amount;
-                solana_validator_deposit.erroneous_sol_debt += amount;
-            } else {
-                // Amount was previously added by reclassifying as
-                // erroneous debt, so no need for checked subtraction.
-                distribution.erroneous_sol_debt -= amount;
-                solana_validator_deposit.erroneous_sol_debt -= amount;
-            }
-            msg!("Reclassified debt as {}", classification_label);
-            msg!(
-                "Updated erroneous SOL debt to {} for node {}",
-                solana_validator_deposit.erroneous_sol_debt,
-                node_id,
-            );
+    )
+    .inspect_err(|_| {
+        msg!("Debt already marked as {}", classification_label);
+    })?;
 
-            Ok(())
-        }
-        Err(_) => {
-            msg!("Debt already marked as {}", classification_label);
-            Err(ProgramError::InvalidAccountData)
-        }
+    if should_classify_erroneous {
+        distribution.erroneous_sol_debt += amount;
+        solana_validator_deposit.erroneous_sol_debt += amount;
+    } else {
+        // Amount was previously added by reclassifying as erroneous debt, so no
+        // need for checked subtraction.
+        distribution.erroneous_sol_debt -= amount;
+        solana_validator_deposit.erroneous_sol_debt -= amount;
     }
+    msg!("Reclassified debt as {}", classification_label);
+    msg!(
+        "Updated erroneous SOL debt to {} for node {}",
+        solana_validator_deposit.erroneous_sol_debt,
+        node_id,
+    );
+
+    Ok(())
 }
 
 fn try_recover_bad_solana_validator_debt(
@@ -2244,8 +2240,8 @@ fn try_recover_bad_solana_validator_debt(
     // - 1: Debt accountant.
     // - 2: Distribution with bad debt.
     // - 3: Solana validator deposit.
-    // - 4: Journal (required for recovery).
-    // - 5: Windfall distribution (required for recovery).
+    // - 4: Journal.
+    // - 5: Windfall distribution.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Accounts 0 and 1 must be the program config and debt accountant.
@@ -2305,8 +2301,8 @@ fn try_recover_bad_solana_validator_debt(
         }
     }
 
-    // Ensure enough epochs have passed since the distribution was
-    // created before allowing debt recovery.
+    // Ensure enough epochs have passed since the distribution was created
+    // before allowing debt recovery.
     let min_duration_to_recover = program_config
         .checked_minimum_epoch_duration_to_recover_debt()
         .ok_or_else(|| {
@@ -2352,8 +2348,8 @@ fn try_recover_bad_solana_validator_debt(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Windfall distribution must have not swept 2Z tokens, which means
-    // the total SOL debt has not been accounted for.
+    // Windfall distribution must have not swept 2Z tokens, which means the
+    // total SOL debt has not been accounted for.
     windfall_distribution
         .try_require_has_not_swept_2z_tokens()
         .inspect_err(|_| {
