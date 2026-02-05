@@ -5,7 +5,9 @@ mod common;
 use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
-        account::ResolveBadSolanaValidatorDebtAccounts, BadSolanaValidatorDebtResolution,
+        account::{
+            ReclassifyBadSolanaValidatorDebtAccounts, RecoverBadSolanaValidatorDebtAccounts,
+        },
         ProgramConfiguration, ProgramFeatureConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
@@ -230,16 +232,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     let unauthorized_signer = Keypair::new();
     let resolve_unauthorized_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        ReclassifyBadSolanaValidatorDebtAccounts::new(
             &unauthorized_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            None,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_1_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            classify_erroneous: true,
         },
     )
     .unwrap();
@@ -262,16 +263,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     // Attempt to resolve before write-offs are enabled (should fail).
     let resolve_before_writeoff_enabled_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        ReclassifyBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            None,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_1_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            classify_erroneous: true,
         },
     )
     .unwrap();
@@ -300,16 +300,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     // Attempt to resolve debt that hasn't been written off yet (should fail).
     let resolve_before_writeoff_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        ReclassifyBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            None,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_1_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            classify_erroneous: true,
         },
     )
     .unwrap();
@@ -372,16 +371,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     // debt_1).
     let resolve_wrong_proof_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        ReclassifyBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            None,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_2_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            classify_erroneous: true,
         },
     )
     .unwrap();
@@ -417,16 +415,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     // fail).
     let reclassify_before_erroneous_enabled_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        ReclassifyBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            None,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_1_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            classify_erroneous: true,
         },
     )
     .unwrap();
@@ -442,7 +439,7 @@ async fn test_resolve_bad_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(5).unwrap(),
+        program_logs.get(4).unwrap(),
         "Program log: Erroneous Solana validator debt is not enabled yet"
     );
 
@@ -454,13 +451,12 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     // Reclassify first debt as erroneous.
     test_setup
-        .resolve_bad_solana_validator_debt(
+        .reclassify_bad_solana_validator_debt(
             bad_debt_dz_epoch,
-            None, // windfall_dz_epoch
             &debt_accountant_signer,
             &debt_1,
             debt_1_proof.clone(),
-            BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            true,
         )
         .await
         .unwrap();
@@ -488,13 +484,12 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     // Reclassify first debt as unpaid (undo erroneous classification).
     test_setup
-        .resolve_bad_solana_validator_debt(
+        .reclassify_bad_solana_validator_debt(
             bad_debt_dz_epoch,
-            None, // windfall_dz_epoch
             &debt_accountant_signer,
             &debt_1,
             debt_1_proof.clone(),
-            BadSolanaValidatorDebtResolution::ReclassifyUnpaid,
+            false,
         )
         .await
         .unwrap();
@@ -545,13 +540,12 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     // Recover first debt (before bad debt epoch is swept).
     test_setup
-        .resolve_bad_solana_validator_debt(
+        .recover_bad_solana_validator_debt(
             bad_debt_dz_epoch,
-            Some(windfall_dz_epoch),
+            windfall_dz_epoch,
             &debt_accountant_signer,
             &debt_1,
             debt_1_proof.clone(),
-            BadSolanaValidatorDebtResolution::Recover,
         )
         .await
         .unwrap();
@@ -589,16 +583,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     // recovered).
     let recover_again_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        RecoverBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            Some(windfall_dz_epoch),
+            windfall_dz_epoch,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::RecoverBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_1_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::Recover,
         },
     )
     .unwrap();
@@ -625,16 +618,15 @@ async fn test_resolve_bad_solana_validator_debt() {
     // longer written off).
     let reclassify_recovered_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        ReclassifyBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_1.node_id,
             bad_debt_dz_epoch,
-            None,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
             amount: debt_1.amount,
             proof: debt_1_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            classify_erroneous: true,
         },
     )
     .unwrap();
@@ -681,13 +673,12 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     // Reclassify second debt as erroneous (after bad debt epoch is swept).
     test_setup
-        .resolve_bad_solana_validator_debt(
+        .reclassify_bad_solana_validator_debt(
             bad_debt_dz_epoch,
-            None, // windfall_dz_epoch
             &debt_accountant_signer,
             &debt_2,
             debt_2_proof.clone(),
-            BadSolanaValidatorDebtResolution::ReclassifyErroneous,
+            true,
         )
         .await
         .unwrap();
@@ -717,16 +708,15 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     let resolve_bad_debt_ix = try_build_instruction(
         &ID,
-        ResolveBadSolanaValidatorDebtAccounts::new(
+        RecoverBadSolanaValidatorDebtAccounts::new(
             &debt_accountant_signer.pubkey(),
             &debt_2.node_id,
             bad_debt_dz_epoch,
-            Some(windfall_dz_epoch),
+            windfall_dz_epoch,
         ),
-        &RevenueDistributionInstructionData::ResolveBadSolanaValidatorDebt {
+        &RevenueDistributionInstructionData::RecoverBadSolanaValidatorDebt {
             amount: debt_2.amount,
             proof: debt_2_proof.clone(),
-            resolution: BadSolanaValidatorDebtResolution::Recover,
         },
     )
     .unwrap();
@@ -742,7 +732,7 @@ async fn test_resolve_bad_solana_validator_debt() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(5).unwrap(),
+        program_logs.get(4).unwrap(),
         &format!(
             "Program log: Cannot recover erroneous debt for epoch {}",
             bad_debt_dz_epoch
@@ -751,13 +741,12 @@ async fn test_resolve_bad_solana_validator_debt() {
 
     // Reclassify second debt as unpaid.
     test_setup
-        .resolve_bad_solana_validator_debt(
+        .reclassify_bad_solana_validator_debt(
             bad_debt_dz_epoch,
-            None, // windfall_dz_epoch
             &debt_accountant_signer,
             &debt_2,
             debt_2_proof.clone(),
-            BadSolanaValidatorDebtResolution::ReclassifyUnpaid,
+            false,
         )
         .await
         .unwrap();
@@ -782,13 +771,12 @@ async fn test_resolve_bad_solana_validator_debt() {
     let (_, journal_before_2, _) = test_setup.fetch_journal().await;
 
     test_setup
-        .resolve_bad_solana_validator_debt(
+        .recover_bad_solana_validator_debt(
             bad_debt_dz_epoch,
-            Some(windfall_dz_epoch),
+            windfall_dz_epoch,
             &debt_accountant_signer,
             &debt_2,
             debt_2_proof.clone(),
-            BadSolanaValidatorDebtResolution::Recover,
         )
         .await
         .unwrap();

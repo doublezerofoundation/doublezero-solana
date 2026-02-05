@@ -763,68 +763,93 @@ impl From<EnableErroneousSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolveBadSolanaValidatorDebtRecoverAccounts {
-    pub journal_key: Pubkey,
-    pub windfall_distribution_key: Pubkey,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolveBadSolanaValidatorDebtAccounts {
+pub struct ReclassifyBadSolanaValidatorDebtAccounts {
     pub program_config_key: Pubkey,
     pub debt_accountant_key: Pubkey,
     pub distribution_key: Pubkey,
     pub solana_validator_deposit_key: Pubkey,
-    pub recover_accounts: Option<ResolveBadSolanaValidatorDebtRecoverAccounts>,
 }
 
-impl ResolveBadSolanaValidatorDebtAccounts {
+impl ReclassifyBadSolanaValidatorDebtAccounts {
     pub fn new(
         debt_accountant_key: &Pubkey,
         node_id: &Pubkey,
         bad_debt_dz_epoch: DoubleZeroEpoch,
-        windfall_dz_epoch: Option<DoubleZeroEpoch>,
     ) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
             debt_accountant_key: *debt_accountant_key,
             distribution_key: Distribution::find_address(bad_debt_dz_epoch).0,
             solana_validator_deposit_key: SolanaValidatorDeposit::find_address(node_id).0,
-            recover_accounts: windfall_dz_epoch.map(|dz_epoch| {
-                ResolveBadSolanaValidatorDebtRecoverAccounts {
-                    journal_key: Journal::find_address().0,
-                    windfall_distribution_key: Distribution::find_address(dz_epoch).0,
-                }
-            }),
         }
     }
 }
 
-impl From<ResolveBadSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
-    fn from(accounts: ResolveBadSolanaValidatorDebtAccounts) -> Self {
-        let ResolveBadSolanaValidatorDebtAccounts {
+impl From<ReclassifyBadSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: ReclassifyBadSolanaValidatorDebtAccounts) -> Self {
+        let ReclassifyBadSolanaValidatorDebtAccounts {
             program_config_key,
             debt_accountant_key,
             distribution_key,
             solana_validator_deposit_key,
-            recover_accounts,
         } = accounts;
 
-        let mut accounts = vec![
+        vec![
             AccountMeta::new_readonly(program_config_key, false),
             AccountMeta::new_readonly(debt_accountant_key, true),
             AccountMeta::new(distribution_key, false),
             AccountMeta::new(solana_validator_deposit_key, false),
-        ];
+        ]
+    }
+}
 
-        if let Some(windfall_accounts) = recover_accounts {
-            accounts.push(AccountMeta::new(windfall_accounts.journal_key, false));
-            accounts.push(AccountMeta::new(
-                windfall_accounts.windfall_distribution_key,
-                false,
-            ));
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoverBadSolanaValidatorDebtAccounts {
+    pub program_config_key: Pubkey,
+    pub debt_accountant_key: Pubkey,
+    pub distribution_key: Pubkey,
+    pub solana_validator_deposit_key: Pubkey,
+    pub journal_key: Pubkey,
+    pub windfall_distribution_key: Pubkey,
+}
+
+impl RecoverBadSolanaValidatorDebtAccounts {
+    pub fn new(
+        debt_accountant_key: &Pubkey,
+        node_id: &Pubkey,
+        bad_debt_dz_epoch: DoubleZeroEpoch,
+        windfall_dz_epoch: DoubleZeroEpoch,
+    ) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            debt_accountant_key: *debt_accountant_key,
+            distribution_key: Distribution::find_address(bad_debt_dz_epoch).0,
+            solana_validator_deposit_key: SolanaValidatorDeposit::find_address(node_id).0,
+            journal_key: Journal::find_address().0,
+            windfall_distribution_key: Distribution::find_address(windfall_dz_epoch).0,
         }
+    }
+}
 
-        accounts
+impl From<RecoverBadSolanaValidatorDebtAccounts> for Vec<AccountMeta> {
+    fn from(accounts: RecoverBadSolanaValidatorDebtAccounts) -> Self {
+        let RecoverBadSolanaValidatorDebtAccounts {
+            program_config_key,
+            debt_accountant_key,
+            distribution_key,
+            solana_validator_deposit_key,
+            journal_key,
+            windfall_distribution_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new_readonly(debt_accountant_key, true),
+            AccountMeta::new(distribution_key, false),
+            AccountMeta::new(solana_validator_deposit_key, false),
+            AccountMeta::new(journal_key, false),
+            AccountMeta::new(windfall_distribution_key, false),
+        ]
     }
 }
 
