@@ -6,8 +6,7 @@ use doublezero_program_tools::instruction::try_build_instruction;
 use doublezero_revenue_distribution::{
     instruction::{
         account::ReclassifyBadSolanaValidatorDebtAccounts, ProgramConfiguration,
-        ProgramFeatureConfiguration, ProgramFlagConfiguration,
-        RevenueDistributionInstructionData,
+        ProgramFeatureConfiguration, ProgramFlagConfiguration, RevenueDistributionInstructionData,
     },
     state::SolanaValidatorDeposit,
     types::{DoubleZeroEpoch, SolanaValidatorDebt},
