@@ -1600,13 +1600,11 @@ fn try_verify_distribution_merkle_root(
         DistributionMerkleRootKind::SolanaValidatorDebt(debt) => {
             msg!("Solana validator debt {}", leaf_index);
 
-            let computed_merkle_root =
-                proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-
-            if computed_merkle_root != distribution.solana_validator_debt_merkle_root {
-                msg!("Invalid computed merkle root: {}", computed_merkle_root);
-                return Err(ProgramError::InvalidInstructionData);
-            }
+            distribution.try_verify_solana_validator_debt_merkle_proof(
+                &proof,
+                debt.node_id,
+                debt.amount,
+            )?;
 
             msg!("  node_id: {}", debt.node_id);
             msg!("  amount: {}", debt.amount);
@@ -1768,22 +1766,11 @@ fn try_pay_solana_validator_debt(
         msg!("Solana validator debt already processed");
     })?;
 
-    let debt = SolanaValidatorDebt {
-        node_id: solana_validator_deposit.node_id,
+    distribution.try_verify_solana_validator_debt_merkle_proof(
+        &proof,
+        solana_validator_deposit.node_id,
         amount,
-    };
-
-    let computed_merkle_root =
-        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-
-    // This merkle root will be used to verify the debt after we determine
-    // the debt has not already been paid.
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    if computed_merkle_root != expected_merkle_root {
-        msg!("Invalid computed merkle root: {}", computed_merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    )?;
 
     // Account 3 must be the journal.
     let mut journal =
@@ -1985,18 +1972,7 @@ fn try_write_off_solana_validator_debt(
         );
     })?;
 
-    let debt = SolanaValidatorDebt { node_id, amount };
-    let computed_merkle_root =
-        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-
-    // This merkle root will be used to verify the debt after we determine
-    // the debt has not already been processed.
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    if computed_merkle_root != expected_merkle_root {
-        msg!("Invalid computed merkle root: {}", computed_merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
 
     // We should drop the reference to this account just in case the write-off
     // distribution is the same as the distribution above.
@@ -2046,7 +2022,7 @@ fn try_write_off_solana_validator_debt(
     // By tracking the uncollectible debt here, the rewards paid to contributors
     // will be reduced for this distribution by the amount of SOL debt that was
     // written off.
-    write_off_distribution.uncollectible_sol_debt += debt.amount;
+    write_off_distribution.uncollectible_sol_debt += amount;
 
     // Double-check that the uncollectible debt does not exceed the total debt
     // for this distribution.
@@ -2191,15 +2167,8 @@ fn try_reclassify_bad_solana_validator_debt(
     msg!("Node ID: {}", node_id);
 
     // Verify the merkle proof.
-    let debt = SolanaValidatorDebt { node_id, amount };
-    let computed_merkle_root =
-        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    if computed_merkle_root != expected_merkle_root {
-        msg!("Invalid computed merkle root: {}", computed_merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    // Verify the merkle proof.
+    distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
 
     let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
 
@@ -2309,15 +2278,7 @@ fn try_recover_bad_solana_validator_debt(
     msg!("Node ID: {}", node_id);
 
     // Verify the merkle proof.
-    let debt = SolanaValidatorDebt { node_id, amount };
-    let computed_merkle_root =
-        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    if computed_merkle_root != expected_merkle_root {
-        msg!("Invalid computed merkle root: {}", computed_merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
 
     let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
 
@@ -3127,6 +3088,25 @@ impl ProgramConfig {
 }
 
 impl Distribution {
+    #[inline(always)]
+    fn try_verify_solana_validator_debt_merkle_proof(
+        &self,
+        proof: &MerkleProof,
+        node_id: Pubkey,
+        amount: u64,
+    ) -> ProgramResult {
+        let debt = SolanaValidatorDebt { node_id, amount };
+        let computed_merkle_root =
+            proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
+
+        if computed_merkle_root != self.solana_validator_debt_merkle_root {
+            msg!("Invalid computed merkle root: {}", computed_merkle_root);
+            return Err(ProgramError::InvalidInstructionData);
+        }
+
+        Ok(())
+    }
+
     #[inline(always)]
     fn try_require_unfinalized_debt_calculation(&self) -> ProgramResult {
         if self.is_debt_calculation_finalized() {
