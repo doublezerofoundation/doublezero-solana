@@ -2166,8 +2166,6 @@ fn try_reclassify_bad_solana_validator_debt(
     let node_id = solana_validator_deposit.node_id;
     msg!("Node ID: {}", node_id);
 
-    // Verify the merkle proof.
-    // Verify the merkle proof.
     distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
 
     let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
@@ -2277,7 +2275,6 @@ fn try_recover_bad_solana_validator_debt(
     let node_id = solana_validator_deposit.node_id;
     msg!("Node ID: {}", node_id);
 
-    // Verify the merkle proof.
     distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
 
     let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
