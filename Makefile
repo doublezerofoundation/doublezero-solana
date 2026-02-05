@@ -62,3 +62,9 @@ doc:
 write-checksums:
 	shasum -a 256 artifacts-mainnet-beta/*.so > programs/sha256sums_mainnet_beta.txt
 	shasum -a 256 artifacts-development/*.so > programs/sha256sums_development.txt
+
+.PHONY: clean-write-checksums
+clean-write-checksums: clean
+	$(MAKE) NETWORK=development build-artifacts
+	$(MAKE) NETWORK=mainnet-beta build-artifacts
+	$(MAKE) write-checksums
