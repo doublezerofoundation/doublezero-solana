@@ -1,4 +1,4 @@
-# [DRAFT] Allow Direct 2Z Payments for Network Resources
+# Allow Direct 2Z Payments for Network Resources
 
 ---
 
