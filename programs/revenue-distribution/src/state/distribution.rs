@@ -87,13 +87,24 @@ pub struct Distribution {
     pub distributed_2z_amount: u64,
     pub burned_2z_amount: u64,
 
-    pub processed_solana_validator_debt_write_off_start_index: u32,
-    pub processed_solana_validator_debt_write_off_end_index: u32,
+    pub written_off_solana_validator_debt_start_index: u32,
+    pub written_off_solana_validator_debt_end_index: u32,
 
-    pub solana_validator_write_off_count: u32,
-    _padding_1: [u8; 20],
+    pub solana_validator_debt_write_off_count: u32,
+    pub solana_validator_debt_recovery_count: u32,
 
-    _storage_gap: StorageGap<6>,
+    /// The amount of SOL that was accrued from a past distribution, but was
+    /// written off. This amount is added to the total debt for this
+    /// distribution and acts as a windfall for network contributors.
+    pub recovered_sol_debt: u64,
+
+    pub erroneous_sol_debt: u64,
+
+    pub erroneous_solana_validator_debt_start_index: u32,
+    pub erroneous_solana_validator_debt_end_index: u32,
+
+    _padding_2: [u8; 24],
+    _storage_gap: StorageGap<5>,
 }
 
 impl PrecomputedDiscriminator for Distribution {
@@ -108,6 +119,7 @@ impl Distribution {
     pub const FLAG_IS_REWARDS_CALCULATION_FINALIZED_BIT: usize = 2;
     pub const FLAG_HAS_SWEPT_2Z_TOKENS_BIT: usize = 3;
     pub const FLAG_IS_SOLANA_VALIDATOR_DEBT_WRITE_OFF_ENABLED_BIT: usize = 4;
+    pub const FLAG_IS_ERRONEOUS_SOLANA_VALIDATOR_DEBT_ENABLED_BIT: usize = 5;
 
     pub fn find_address(dz_epoch: DoubleZeroEpoch) -> (Pubkey, u8) {
         Pubkey::find_program_address(&[Self::SEED_PREFIX, &dz_epoch.as_seed()], &crate::ID)
@@ -152,6 +164,19 @@ impl Distribution {
     }
 
     #[inline]
+    pub fn is_erroneous_solana_validator_debt_enabled(&self) -> bool {
+        self.flags
+            .bit(Self::FLAG_IS_ERRONEOUS_SOLANA_VALIDATOR_DEBT_ENABLED_BIT)
+    }
+
+    pub fn set_is_erroneous_solana_validator_debt_enabled(&mut self, should_enable: bool) {
+        self.flags.set_bit(
+            Self::FLAG_IS_ERRONEOUS_SOLANA_VALIDATOR_DEBT_ENABLED_BIT,
+            should_enable,
+        );
+    }
+
+    #[inline]
     pub fn has_swept_2z_tokens(&self) -> bool {
         self.flags.bit(Self::FLAG_HAS_SWEPT_2Z_TOKENS_BIT)
     }
@@ -164,6 +189,7 @@ impl Distribution {
     #[inline]
     pub fn checked_total_sol_debt(&self) -> Option<u64> {
         self.total_solana_validator_debt
+            .saturating_add(self.recovered_sol_debt)
             .checked_sub(self.uncollectible_sol_debt)
     }
 
@@ -215,22 +241,60 @@ impl Distribution {
             ..self.processed_solana_validator_debt_end_index as usize
     }
 
+    pub fn checked_processed_solana_validator_debt_bitmap_range(&self) -> Option<Range<usize>> {
+        if self.is_debt_calculation_finalized() {
+            Some(self.processed_solana_validator_debt_bitmap_range())
+        } else {
+            None
+        }
+    }
+
     #[inline]
     pub fn processed_rewards_bitmap_range(&self) -> Range<usize> {
         self.processed_rewards_start_index as usize..self.processed_rewards_end_index as usize
     }
 
+    pub fn checked_processed_rewards_bitmap_range(&self) -> Option<Range<usize>> {
+        if self.is_rewards_calculation_finalized() {
+            Some(self.processed_rewards_bitmap_range())
+        } else {
+            None
+        }
+    }
+
     #[inline]
-    pub fn processed_solana_validator_debt_write_off_bitmap_range(&self) -> Range<usize> {
-        self.processed_solana_validator_debt_write_off_start_index as usize
-            ..self.processed_solana_validator_debt_write_off_end_index as usize
+    pub fn written_off_solana_validator_debt_bitmap_range(&self) -> Range<usize> {
+        self.written_off_solana_validator_debt_start_index as usize
+            ..self.written_off_solana_validator_debt_end_index as usize
+    }
+
+    pub fn checked_written_off_solana_validator_debt_bitmap_range(&self) -> Option<Range<usize>> {
+        if self.is_solana_validator_debt_write_off_enabled() {
+            Some(self.written_off_solana_validator_debt_bitmap_range())
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn erroneous_solana_validator_debt_bitmap_range(&self) -> Range<usize> {
+        self.erroneous_solana_validator_debt_start_index as usize
+            ..self.erroneous_solana_validator_debt_end_index as usize
+    }
+
+    pub fn checked_erroneous_solana_validator_debt_bitmap_range(&self) -> Option<Range<usize>> {
+        if self.is_erroneous_solana_validator_debt_enabled() {
+            Some(self.erroneous_solana_validator_debt_bitmap_range())
+        } else {
+            None
+        }
     }
 
     #[inline]
     pub fn is_all_solana_validator_debt_processed(&self) -> bool {
         self.total_solana_validators
             .saturating_sub(self.solana_validator_payments_count)
-            .saturating_sub(self.solana_validator_write_off_count)
+            .saturating_sub(self.solana_validator_debt_write_off_count)
             == 0
     }
 
@@ -445,9 +509,20 @@ mod tests {
             processed_solana_validator_debt_end_index: 10,
             ..Default::default()
         };
+        assert!(distribution
+            .checked_processed_solana_validator_debt_bitmap_range()
+            .is_none());
+
+        distribution.set_is_debt_calculation_finalized(true);
 
         assert_eq!(
             distribution.processed_solana_validator_debt_bitmap_range(),
+            0..10
+        );
+        assert_eq!(
+            distribution
+                .checked_processed_solana_validator_debt_bitmap_range()
+                .unwrap(),
             0..10
         );
 
@@ -455,6 +530,12 @@ mod tests {
         distribution.processed_solana_validator_debt_end_index = 15;
         assert_eq!(
             distribution.processed_solana_validator_debt_bitmap_range(),
+            5..15
+        );
+        assert_eq!(
+            distribution
+                .checked_processed_solana_validator_debt_bitmap_range()
+                .unwrap(),
             5..15
         );
     }
@@ -465,31 +546,102 @@ mod tests {
             processed_rewards_end_index: 20,
             ..Default::default()
         };
+        assert!(distribution
+            .checked_processed_rewards_bitmap_range()
+            .is_none());
+
+        distribution.set_is_rewards_calculation_finalized(true);
 
         assert_eq!(distribution.processed_rewards_bitmap_range(), 0..20);
+        assert_eq!(
+            distribution
+                .checked_processed_rewards_bitmap_range()
+                .unwrap(),
+            0..20
+        );
 
         distribution.processed_rewards_start_index = 10;
         distribution.processed_rewards_end_index = 30;
         assert_eq!(distribution.processed_rewards_bitmap_range(), 10..30);
+        assert_eq!(
+            distribution
+                .checked_processed_rewards_bitmap_range()
+                .unwrap(),
+            10..30
+        );
     }
 
     #[test]
     fn test_processed_solana_validator_debt_write_off_bitmap_range() {
         let mut distribution = Distribution {
-            processed_solana_validator_debt_write_off_end_index: 5,
+            written_off_solana_validator_debt_end_index: 5,
             ..Default::default()
         };
+        assert!(distribution
+            .checked_written_off_solana_validator_debt_bitmap_range()
+            .is_none());
+
+        distribution.set_is_solana_validator_debt_write_off_enabled(true);
 
         assert_eq!(
-            distribution.processed_solana_validator_debt_write_off_bitmap_range(),
+            distribution.written_off_solana_validator_debt_bitmap_range(),
+            0..5
+        );
+        assert_eq!(
+            distribution
+                .checked_written_off_solana_validator_debt_bitmap_range()
+                .unwrap(),
             0..5
         );
 
-        distribution.processed_solana_validator_debt_write_off_start_index = 1;
-        distribution.processed_solana_validator_debt_write_off_end_index = 2;
+        distribution.written_off_solana_validator_debt_start_index = 1;
+        distribution.written_off_solana_validator_debt_end_index = 2;
         assert_eq!(
-            distribution.processed_solana_validator_debt_write_off_bitmap_range(),
+            distribution.written_off_solana_validator_debt_bitmap_range(),
             1..2
+        );
+        assert_eq!(
+            distribution
+                .checked_written_off_solana_validator_debt_bitmap_range()
+                .unwrap(),
+            1..2
+        );
+    }
+
+    #[test]
+    fn test_erroneous_solana_validator_debt_bitmap_range() {
+        let mut distribution = Distribution {
+            erroneous_solana_validator_debt_end_index: 7,
+            ..Default::default()
+        };
+        assert!(distribution
+            .checked_erroneous_solana_validator_debt_bitmap_range()
+            .is_none());
+
+        distribution.set_is_erroneous_solana_validator_debt_enabled(true);
+
+        assert_eq!(
+            distribution.erroneous_solana_validator_debt_bitmap_range(),
+            0..7
+        );
+        assert_eq!(
+            distribution
+                .checked_erroneous_solana_validator_debt_bitmap_range()
+                .unwrap(),
+            0..7
+        );
+
+        distribution.erroneous_solana_validator_debt_start_index = 1;
+        distribution.erroneous_solana_validator_debt_end_index = 8;
+        assert_eq!(
+            distribution.erroneous_solana_validator_debt_bitmap_range(),
+            1..8
+        );
+        assert_eq!(
+            distribution
+                .checked_erroneous_solana_validator_debt_bitmap_range()
+                .unwrap(),
+            1..8
         );
     }
 
@@ -500,22 +652,22 @@ mod tests {
 
         distribution.total_solana_validators = 10;
         distribution.solana_validator_payments_count = 7;
-        distribution.solana_validator_write_off_count = 3;
+        distribution.solana_validator_debt_write_off_count = 3;
 
         assert!(distribution.is_all_solana_validator_debt_processed());
 
         // 10 - 7 - 2 = 1, not all processed.
-        distribution.solana_validator_write_off_count = 2;
+        distribution.solana_validator_debt_write_off_count = 2;
         assert!(!distribution.is_all_solana_validator_debt_processed());
 
         distribution.solana_validator_payments_count = 8;
-        distribution.solana_validator_write_off_count = 2;
+        distribution.solana_validator_debt_write_off_count = 2;
         assert!(distribution.is_all_solana_validator_debt_processed());
 
         // Test with overflow protection.
         distribution.total_solana_validators = 5;
         distribution.solana_validator_payments_count = 10;
-        distribution.solana_validator_write_off_count = 10;
+        distribution.solana_validator_debt_write_off_count = 10;
         assert!(distribution.is_all_solana_validator_debt_processed());
     }
 }

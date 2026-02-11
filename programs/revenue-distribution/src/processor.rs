@@ -113,6 +113,17 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::WriteOffSolanaValidatorDebt { amount, proof } => {
             try_write_off_solana_validator_debt(accounts, amount, proof)
         }
+        RevenueDistributionInstructionData::EnableErroneousSolanaValidatorDebt => {
+            try_enable_erroneous_solana_validator_debt(accounts)
+        }
+        RevenueDistributionInstructionData::ReclassifyBadSolanaValidatorDebt {
+            amount,
+            proof,
+            classify_erroneous,
+        } => try_reclassify_bad_solana_validator_debt(accounts, amount, proof, classify_erroneous),
+        RevenueDistributionInstructionData::RecoverBadSolanaValidatorDebt { amount, proof } => {
+            try_recover_bad_solana_validator_debt(accounts, amount, proof)
+        }
         RevenueDistributionInstructionData::InitializeSwapDestination => {
             try_initialize_swap_destination(accounts)
         }
@@ -561,6 +572,21 @@ fn try_configure_program(accounts: &[AccountInfo], setting: ProgramConfiguration
                 }
             }
         }
+        ProgramConfiguration::MinimumEpochDurationToRecoverDebt(epoch_duration) => {
+            // If the epoch duration is zero, we treat this as unset.
+            if epoch_duration == 0 {
+                msg!("Minimum epoch duration to recover debt is zero");
+                return Err(ProgramError::InvalidInstructionData);
+            }
+
+            msg!(
+                "Set distribution_parameters.minimum_epoch_duration_to_recover_debt: {}",
+                epoch_duration
+            );
+            program_config
+                .distribution_parameters
+                .minimum_epoch_duration_to_recover_debt = epoch_duration;
+        }
     }
 
     Ok(())
@@ -963,11 +989,7 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a Solana validator has paid.
-    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
-        distribution.total_solana_validators / 8
-    } else {
-        distribution.total_solana_validators / 8 + 1
-    };
+    let additional_data_len = distribution.total_solana_validators.div_ceil(8);
 
     // Set the index of where to find the bits to indicate which Solana
     // validator debt has been processed.
@@ -986,10 +1008,8 @@ fn try_finalize_distribution_debt(accounts: &[AccountInfo]) -> ProgramResult {
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     // Account 3 must be the payer. In order to transfer lamports from the payer
     // to the distribution, this account must be writable.
@@ -1116,15 +1136,8 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a contributor has distributed rewards.
-    // Each bit represents one contributor, so we need ceil(contributors/8)
-    // bytes.
     let total_contributors = distribution.total_contributors;
-    let additional_data_len = if total_contributors % 8 == 0 {
-        total_contributors / 8
-    } else {
-        // Round up for partial byte.
-        total_contributors / 8 + 1
-    };
+    let additional_data_len = total_contributors.div_ceil(8);
 
     // Set the index of where to find the bits start to indicate which rewards
     // have been distributed.
@@ -1144,10 +1157,8 @@ fn try_finalize_distribution_rewards(accounts: &[AccountInfo]) -> ProgramResult 
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     msg!(
         "Increase distribution account size by {} byte{}",
@@ -1234,9 +1245,10 @@ fn try_distribute_rewards(
     // Each bit represents one leaf: 1 = distributed, 0 = not yet distributed.
     let processed_bitmap_range = distribution.processed_rewards_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!("Rewards already distributed");
@@ -1588,13 +1600,11 @@ fn try_verify_distribution_merkle_root(
         DistributionMerkleRootKind::SolanaValidatorDebt(debt) => {
             msg!("Solana validator debt {}", leaf_index);
 
-            let computed_merkle_root =
-                proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-
-            if computed_merkle_root != distribution.solana_validator_debt_merkle_root {
-                msg!("Invalid computed merkle root: {}", computed_merkle_root);
-                return Err(ProgramError::InvalidInstructionData);
-            }
+            distribution.try_verify_solana_validator_debt_merkle_proof(
+                &proof,
+                debt.node_id,
+                debt.amount,
+            )?;
 
             msg!("  node_id: {}", debt.node_id);
             msg!("  amount: {}", debt.amount);
@@ -1747,60 +1757,29 @@ fn try_pay_solana_validator_debt(
     // stored in the distribution's remaining data.
     let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!("Solana validator debt already processed");
     })?;
 
-    let debt = SolanaValidatorDebt {
-        node_id: solana_validator_deposit.node_id,
+    distribution.try_verify_solana_validator_debt_merkle_proof(
+        &proof,
+        solana_validator_deposit.node_id,
         amount,
-    };
-
-    let computed_merkle_root =
-        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-
-    // This merkle root will be used to verify the debt after we determine
-    // the debt has not already been paid.
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    if computed_merkle_root != expected_merkle_root {
-        msg!("Invalid computed merkle root: {}", computed_merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    // Finally, move lamports from the Solana validator deposit to the
-    // Journal. The journal's lamports will be withdrawn from the registered
-    // swap program in exchange for 2Z tokens.
-    let mut solana_validator_deposit_lamports = solana_validator_deposit.info.lamports.borrow_mut();
-
-    // We cannot remove more lamports than the rent exemption.
-    let rent_exemption_lamports = Rent::get()
-        .unwrap()
-        .minimum_balance(zero_copy::data_end::<SolanaValidatorDeposit>());
-
-    if solana_validator_deposit_lamports.saturating_sub(rent_exemption_lamports) < amount {
-        msg!("Insufficient funds in Solana validator deposit to pay debt");
-        return Err(ProgramError::InvalidAccountData);
-    }
+    )?;
 
     // Account 3 must be the journal.
     let mut journal =
         ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
-    **solana_validator_deposit_lamports -= amount;
-    **journal.info.lamports.borrow_mut() += amount;
-
-    journal.total_sol_balance += amount;
-    msg!(
-        "Updated journal's SOL balance to {}",
-        journal.total_sol_balance
-    );
-
-    Ok(())
+    // Finally, move lamports from the Solana validator deposit to the
+    // Journal. The journal's lamports will be withdrawn from the registered
+    // swap program in exchange for 2Z tokens.
+    try_drop_solana_validator_deposit_to_pay_debt(solana_validator_deposit, &mut journal, amount)
 }
 
 fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> ProgramResult {
@@ -1854,18 +1833,14 @@ fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> Progr
 
     // We need to realloc the distribution account to add the number of bits
     // needed to store whether a Solana validator has written off debt.
-    let additional_data_len = if distribution.total_solana_validators % 8 == 0 {
-        distribution.total_solana_validators / 8
-    } else {
-        distribution.total_solana_validators / 8 + 1
-    };
+    let additional_data_len = distribution.total_solana_validators.div_ceil(8);
 
     // Set the index of where to find the bits to indicate which Solana
     // validator debt has been written off.
-    distribution.processed_solana_validator_debt_write_off_start_index =
+    distribution.written_off_solana_validator_debt_start_index =
         distribution.remaining_data.len() as u32;
-    distribution.processed_solana_validator_debt_write_off_end_index = distribution
-        .processed_solana_validator_debt_write_off_start_index
+    distribution.written_off_solana_validator_debt_end_index = distribution
+        .written_off_solana_validator_debt_start_index
         .saturating_add(additional_data_len);
 
     // Avoid borrowing while in mutable borrow state.
@@ -1877,10 +1852,8 @@ fn try_enable_solana_validator_debt_write_off(accounts: &[AccountInfo]) -> Progr
         .saturating_add(additional_data_len as usize);
     distribution_info.resize(new_data_len)?;
 
-    let additional_lamports_for_resize = Rent::get()
-        .unwrap()
-        .minimum_balance(new_data_len)
-        .saturating_sub(distribution_info.lamports());
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
 
     // Account 2 must be the payer. In order to transfer lamports from the payer
     // to the distribution, this account must be writable.
@@ -1950,9 +1923,8 @@ fn try_write_off_solana_validator_debt(
 
     // If there are enough lamports to pay debt, revert.
     let deposit_lamports = solana_validator_deposit_info.lamports();
-    let rent_sysvar = Rent::get().unwrap();
     let rent_exemption_lamports =
-        rent_sysvar.minimum_balance(solana_validator_deposit_info.data_len());
+        compute_rent_exemption_lamports(solana_validator_deposit_info.data_len());
     let excess_lamports = deposit_lamports.saturating_sub(rent_exemption_lamports);
 
     if excess_lamports >= amount {
@@ -1963,21 +1935,18 @@ fn try_write_off_solana_validator_debt(
     // We cannot write off Solana validator debt until write offs have been
     // enabled. This check also ensures that the debt calculation has been
     // finalized.
-    if !distribution.is_solana_validator_debt_write_off_enabled() {
-        msg!("Solana validator debt write off is not enabled yet");
-        return Err(ProgramError::InvalidAccountData);
-    }
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
 
-    distribution.solana_validator_write_off_count += 1;
+    distribution.solana_validator_debt_write_off_count += 1;
 
     // Bits indicating whether debt has been written off for specific leaf
     // indices are stored in the distribution's remaining data.
-    let write_off_bitmap_range =
-        distribution.processed_solana_validator_debt_write_off_bitmap_range();
+    let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[write_off_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!(
@@ -1991,9 +1960,10 @@ fn try_write_off_solana_validator_debt(
     // not) must be marked as processed.
     let processed_bitmap_range = distribution.processed_solana_validator_debt_bitmap_range();
 
-    try_process_remaining_data_leaf_index(
+    try_set_leaf_bit(
         &mut distribution.remaining_data[processed_bitmap_range],
         leaf_index,
+        true,
     )
     .inspect_err(|_| {
         msg!(
@@ -2002,18 +1972,7 @@ fn try_write_off_solana_validator_debt(
         );
     })?;
 
-    let debt = SolanaValidatorDebt { node_id, amount };
-    let computed_merkle_root =
-        proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
-
-    // This merkle root will be used to verify the debt after we determine
-    // the debt has not already been processed.
-    let expected_merkle_root = distribution.solana_validator_debt_merkle_root;
-
-    if computed_merkle_root != expected_merkle_root {
-        msg!("Invalid computed merkle root: {}", computed_merkle_root);
-        return Err(ProgramError::InvalidInstructionData);
-    }
+    distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
 
     // We should drop the reference to this account just in case the write-off
     // distribution is the same as the distribution above.
@@ -2063,7 +2022,7 @@ fn try_write_off_solana_validator_debt(
     // By tracking the uncollectible debt here, the rewards paid to contributors
     // will be reduced for this distribution by the amount of SOL debt that was
     // written off.
-    write_off_distribution.uncollectible_sol_debt += debt.amount;
+    write_off_distribution.uncollectible_sol_debt += amount;
 
     // Double-check that the uncollectible debt does not exceed the total debt
     // for this distribution.
@@ -2078,6 +2037,333 @@ fn try_write_off_solana_validator_debt(
         "Updated uncollectible SOL debt to {} for distribution epoch {}",
         write_off_distribution.uncollectible_sol_debt,
         write_off_distribution.dz_epoch
+    );
+
+    Ok(())
+}
+
+fn try_enable_erroneous_solana_validator_debt(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Enable erroneous Solana validator debt");
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Distribution.
+    // - 2: Payer.
+    // - 3: System program.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
+
+    // Account 1 must be the distribution.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
+
+    if distribution.is_erroneous_solana_validator_debt_enabled() {
+        msg!("Erroneous Solana validator debt is already enabled");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    distribution.set_is_erroneous_solana_validator_debt_enabled(true);
+
+    // Debt calculation must have write-offs enabled before erroneous debt can
+    // be enabled.
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
+
+    // We need to realloc the distribution account to add the number of bits
+    // needed to store whether a Solana validator has erroneous debt.
+    let additional_data_len = distribution.total_solana_validators.div_ceil(8);
+
+    // Set the index of where to find the bits to indicate which Solana
+    // validator debt is erroneous.
+    distribution.erroneous_solana_validator_debt_start_index =
+        distribution.remaining_data.len() as u32;
+    distribution.erroneous_solana_validator_debt_end_index = distribution
+        .erroneous_solana_validator_debt_start_index
+        .saturating_add(additional_data_len);
+
+    // Avoid borrowing while in mutable borrow state.
+    let distribution_info = distribution.info;
+    drop(distribution);
+
+    let new_data_len = distribution_info
+        .data_len()
+        .saturating_add(additional_data_len as usize);
+    distribution_info.resize(new_data_len)?;
+
+    let additional_lamports_for_resize =
+        compute_rent_exemption_lamports(new_data_len).saturating_sub(distribution_info.lamports());
+
+    // Account 2 must be the payer. In order to transfer lamports from the payer
+    // to the distribution, this account must be writable.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    let transfer_ix = system_instruction::transfer(
+        payer_info.key,
+        distribution_info.key,
+        additional_lamports_for_resize,
+    );
+
+    invoke_signed_unchecked(&transfer_ix, accounts, &[])?;
+
+    msg!(
+        "Increase distribution account size by {} byte{}",
+        additional_data_len,
+        if additional_data_len == 1 { "" } else { "s" }
+    );
+
+    Ok(())
+}
+
+fn try_reclassify_bad_solana_validator_debt(
+    accounts: &[AccountInfo],
+    amount: u64,
+    proof: MerkleProof,
+    should_classify_erroneous: bool,
+) -> ProgramResult {
+    msg!("Reclassify bad Solana validator debt");
+
+    // Enforce that the merkle proof uses an indexed tree. This index will be
+    // referenced later in this instruction processor.
+    let leaf_index = try_leaf_index(&proof)?;
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Debt accountant.
+    // - 2: Distribution with bad debt.
+    // - 3: Solana validator deposit.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Accounts 0 and 1 must be the program config and debt accountant.
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
+    let program_config = authorized_use.program_config;
+
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
+
+    // Account 2 must be the distribution with bad debt.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    let dz_epoch = distribution.dz_epoch;
+    msg!("DZ epoch: {}", dz_epoch);
+
+    // Write-offs must be enabled on this distribution since this is the only
+    // kind of debt that can be resolved.
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
+
+    // Account 3 must be the Solana validator deposit.
+    let mut solana_validator_deposit =
+        ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
+            &mut accounts_iter,
+            Some(&ID),
+        )?;
+    let node_id = solana_validator_deposit.node_id;
+    msg!("Node ID: {}", node_id);
+
+    distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
+
+    let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
+
+    // Debt resolution can only be done with written off debt.
+    if !is_leaf_bit_set(
+        &distribution.remaining_data[write_off_bitmap_range.clone()],
+        leaf_index,
+    )? {
+        msg!(
+            "Solana validator debt was not written off for epoch {}",
+            dz_epoch
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    let classification_label = if should_classify_erroneous {
+        "erroneous"
+    } else {
+        "unpaid"
+    };
+
+    let erroneous_bitmap_range = distribution
+        .checked_erroneous_solana_validator_debt_bitmap_range()
+        .ok_or_else(|| {
+            msg!("Erroneous Solana validator debt is not enabled yet");
+            ProgramError::InvalidAccountData
+        })?;
+
+    // Set the erroneous debt bit and update erroneous SOL debt accounting.
+    try_set_leaf_bit(
+        &mut distribution.remaining_data[erroneous_bitmap_range],
+        leaf_index,
+        should_classify_erroneous,
+    )
+    .inspect_err(|_| {
+        msg!("Debt already marked as {}", classification_label);
+    })?;
+
+    if should_classify_erroneous {
+        distribution.erroneous_sol_debt += amount;
+        solana_validator_deposit.erroneous_sol_debt += amount;
+    } else {
+        // Amount was previously added by reclassifying as erroneous debt, so no
+        // need for checked subtraction.
+        distribution.erroneous_sol_debt -= amount;
+        solana_validator_deposit.erroneous_sol_debt -= amount;
+    }
+    msg!("Reclassified debt as {}", classification_label);
+    msg!(
+        "Updated erroneous SOL debt to {} for node {}",
+        solana_validator_deposit.erroneous_sol_debt,
+        node_id,
+    );
+
+    Ok(())
+}
+
+fn try_recover_bad_solana_validator_debt(
+    accounts: &[AccountInfo],
+    amount: u64,
+    proof: MerkleProof,
+) -> ProgramResult {
+    msg!("Recover bad Solana validator debt");
+
+    // Enforce that the merkle proof uses an indexed tree. This index will be
+    // referenced later in this instruction processor.
+    let leaf_index = try_leaf_index(&proof)?;
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Debt accountant.
+    // - 2: Distribution with bad debt.
+    // - 3: Solana validator deposit.
+    // - 4: Journal.
+    // - 5: Windfall distribution.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Accounts 0 and 1 must be the program config and debt accountant.
+    let authorized_use =
+        VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::DebtAccountant)?;
+    let program_config = authorized_use.program_config;
+
+    // Make sure the program is not paused.
+    program_config.try_require_unpaused()?;
+
+    // Account 2 must be the distribution with bad debt.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    let dz_epoch = distribution.dz_epoch;
+    msg!("DZ epoch: {}", dz_epoch);
+
+    // Write-offs must be enabled on this distribution since this is the only
+    // kind of debt that can be resolved.
+    distribution.try_require_solana_validator_debt_write_offs_enabled()?;
+
+    // Account 3 must be the Solana validator deposit.
+    let mut solana_validator_deposit =
+        ZeroCopyMutAccount::<SolanaValidatorDeposit>::try_next_accounts(
+            &mut accounts_iter,
+            Some(&ID),
+        )?;
+    let node_id = solana_validator_deposit.node_id;
+    msg!("Node ID: {}", node_id);
+
+    distribution.try_verify_solana_validator_debt_merkle_proof(&proof, node_id, amount)?;
+
+    let write_off_bitmap_range = distribution.written_off_solana_validator_debt_bitmap_range();
+
+    // Debt resolution can only be done with written off debt.
+    if !is_leaf_bit_set(
+        &distribution.remaining_data[write_off_bitmap_range.clone()],
+        leaf_index,
+    )? {
+        msg!(
+            "Solana validator debt was not written off for epoch {}",
+            dz_epoch
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Ensure debt is not marked as erroneous. If erroneous debt was not
+    // enabled yet, we are safe to recover the debt.
+    if let Some(erroneous_bitmap_range) =
+        distribution.checked_erroneous_solana_validator_debt_bitmap_range()
+    {
+        if is_leaf_bit_set(
+            &distribution.remaining_data[erroneous_bitmap_range],
+            leaf_index,
+        )? {
+            msg!("Cannot recover erroneous debt for epoch {}", dz_epoch);
+            return Err(ProgramError::InvalidAccountData);
+        }
+    }
+
+    // Ensure enough epochs have passed since the distribution was created
+    // before allowing debt recovery.
+    let min_duration_to_recover = program_config
+        .checked_minimum_epoch_duration_to_recover_debt()
+        .ok_or_else(|| {
+            msg!("Minimum epoch duration to recover debt is not configured");
+            ProgramError::InvalidAccountData
+        })?;
+    let minimum_dz_epoch_to_recover = dz_epoch.saturating_add_duration(min_duration_to_recover);
+
+    if minimum_dz_epoch_to_recover > program_config.next_completed_dz_epoch {
+        msg!(
+            "DZ epoch must be at least {} (currently {}) to recover debt",
+            minimum_dz_epoch_to_recover,
+            program_config.next_completed_dz_epoch
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Clear the write-off bitmap bit.
+    try_set_leaf_bit(
+        &mut distribution.remaining_data[write_off_bitmap_range],
+        leaf_index,
+        false,
+    )?;
+
+    // Update deposit account tracking.
+    solana_validator_deposit.recovered_sol_debt += amount;
+    distribution.solana_validator_debt_recovery_count += 1;
+
+    // Account 4 must be the journal.
+    let mut journal =
+        ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    try_drop_solana_validator_deposit_to_pay_debt(solana_validator_deposit, &mut journal, amount)?;
+
+    // Account 5 must be the windfall distribution.
+    let mut windfall_distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    let windfall_dz_epoch = windfall_distribution.dz_epoch;
+    msg!("Windfall DZ epoch: {}", windfall_dz_epoch);
+
+    if windfall_dz_epoch <= dz_epoch {
+        msg!("Windfall distribution's epoch must be greater than the epoch of the bad debt distribution");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    // Windfall distribution must have not swept 2Z tokens, which means the
+    // total SOL debt has not been accounted for.
+    windfall_distribution
+        .try_require_has_not_swept_2z_tokens()
+        .inspect_err(|_| {
+            msg!(
+                "Windfall epoch {} has already swept 2Z tokens",
+                windfall_dz_epoch
+            );
+        })?;
+
+    windfall_distribution.recovered_sol_debt += amount;
+    msg!(
+        "Updated recovered SOL debt to {} for windfall epoch {}",
+        windfall_distribution.recovered_sol_debt,
+        windfall_dz_epoch,
     );
 
     Ok(())
@@ -2745,6 +3031,43 @@ fn try_leaf_index(proof: &MerkleProof) -> Result<u32, ProgramError> {
     })
 }
 
+#[inline(always)]
+fn try_drop_solana_validator_deposit_to_pay_debt(
+    solana_validator_deposit: ZeroCopyMutAccount<SolanaValidatorDeposit>,
+    journal: &mut ZeroCopyMutAccount<Journal>,
+    amount: u64,
+) -> ProgramResult {
+    let solana_validator_deposit_info = solana_validator_deposit.info;
+    drop(solana_validator_deposit);
+
+    let solana_validator_deposit_data_len = solana_validator_deposit_info.data_len();
+    let mut solana_validator_deposit_lamports = solana_validator_deposit_info.lamports.borrow_mut();
+
+    let rent_exemption_lamports =
+        compute_rent_exemption_lamports(solana_validator_deposit_data_len);
+
+    if solana_validator_deposit_lamports.saturating_sub(rent_exemption_lamports) < amount {
+        msg!("Insufficient funds in Solana validator deposit to pay debt");
+        return Err(ProgramError::InvalidAccountData);
+    }
+
+    **solana_validator_deposit_lamports -= amount;
+    **journal.info.lamports.borrow_mut() += amount;
+
+    journal.total_sol_balance += amount;
+    msg!(
+        "Updated journal's SOL balance to {}",
+        journal.total_sol_balance
+    );
+
+    Ok(())
+}
+
+#[inline(always)]
+fn compute_rent_exemption_lamports(data_len: usize) -> u64 {
+    Rent::get().unwrap().minimum_balance(data_len)
+}
+
 impl ProgramConfig {
     #[inline(always)]
     fn try_require_unpaused(&self) -> ProgramResult {
@@ -2759,6 +3082,25 @@ impl ProgramConfig {
 
 impl Distribution {
     #[inline(always)]
+    fn try_verify_solana_validator_debt_merkle_proof(
+        &self,
+        proof: &MerkleProof,
+        node_id: Pubkey,
+        amount: u64,
+    ) -> ProgramResult {
+        let debt = SolanaValidatorDebt { node_id, amount };
+        let computed_merkle_root =
+            proof.root_from_pod_leaf(&debt, Some(SolanaValidatorDebt::LEAF_PREFIX));
+
+        if computed_merkle_root != self.solana_validator_debt_merkle_root {
+            msg!("Invalid computed merkle root: {}", computed_merkle_root);
+            return Err(ProgramError::InvalidInstructionData);
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
     fn try_require_unfinalized_debt_calculation(&self) -> ProgramResult {
         if self.is_debt_calculation_finalized() {
             msg!("Distribution debt calculation has already been finalized");
@@ -2772,6 +3114,16 @@ impl Distribution {
     fn try_require_finalized_debt_calculation(&self) -> ProgramResult {
         if !self.is_debt_calculation_finalized() {
             msg!("Distribution debt calculation is not finalized yet");
+            return Err(ProgramError::InvalidAccountData);
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn try_require_solana_validator_debt_write_offs_enabled(&self) -> ProgramResult {
+        if !self.is_solana_validator_debt_write_off_enabled() {
+            msg!("Solana validator debt write off is not enabled yet");
             return Err(ProgramError::InvalidAccountData);
         }
 
@@ -2815,46 +3167,41 @@ impl Distribution {
     }
 }
 
-/// Marks a merkle leaf as processed by setting its corresponding bit in a byte
-/// array. This prevents double-processing of rewards or other merkle-verified
-/// operations.
+/// Returns whether a leaf bit is set in the bitmap.
+fn is_leaf_bit_set(processed_leaf_data: &[u8], leaf_index: u32) -> Result<bool, ProgramError> {
+    let leaf_byte_index = leaf_index as usize / 8;
+    let leaf_byte = processed_leaf_data.get(leaf_byte_index).ok_or_else(|| {
+        msg!("Invalid leaf index");
+        ProgramError::InvalidInstructionData
+    })?;
+    Ok(ByteFlags::new(*leaf_byte).bit(leaf_index as usize % 8))
+}
+
+/// Updates a merkle leaf's bit in a byte array bitmap.
 ///
 /// The leaf indices are stored as a bitfield where each bit represents whether
 /// a leaf at that index has been processed (1 = processed, 0 = not processed).
-fn try_process_remaining_data_leaf_index(
+///
+/// - new_bit == true: Sets bit to 1 and errors if already set.
+/// - new_bit == false: Sets bit to 0 and errors if not set.
+fn try_set_leaf_bit(
     processed_leaf_data: &mut [u8],
     leaf_index: u32,
+    new_bit: bool,
 ) -> ProgramResult {
-    // Calculate which byte contains the bit for this leaf index
-    // (8 bits per byte, so divide by 8)
-    let leaf_byte_index = leaf_index as usize / 8;
-
-    // First, we have to grab the relevant byte from the processed data.
-    let leaf_byte_ref = processed_leaf_data
-        .get_mut(leaf_byte_index)
-        .ok_or_else(|| {
-            msg!("Invalid leaf index");
-            ProgramError::InvalidInstructionData
-        })?;
-
-    // Create ByteFlags from the byte value to check the bit.
-    let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
-
-    // Calculate which bit within the byte corresponds to this leaf
-    // (modulo 8 gives us the bit position within the byte: 0-7)
-    let leaf_bit = leaf_index as usize % 8;
-
-    if leaf_byte.bit(leaf_bit) {
+    if is_leaf_bit_set(processed_leaf_data, leaf_index)? == new_bit {
         msg!(
-            "Merkle leaf index {} has already been processed",
-            leaf_index
+            "Merkle leaf index {} has {} been processed",
+            leaf_index,
+            if new_bit { "already" } else { "not" }
         );
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Set the bit to true to indicate that the leaf has been processed.
-    // This prevents replay attacks using the same merkle proof.
-    leaf_byte.set_bit(leaf_bit, true);
+    let leaf_byte_index = leaf_index as usize / 8;
+    let leaf_byte_ref = &mut processed_leaf_data[leaf_byte_index];
+    let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
+    leaf_byte.set_bit(leaf_index as usize % 8, new_bit);
     *leaf_byte_ref = leaf_byte.into();
 
     Ok(())

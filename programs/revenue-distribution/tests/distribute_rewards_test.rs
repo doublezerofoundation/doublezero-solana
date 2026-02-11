@@ -573,9 +573,9 @@ async fn test_distribute_rewards() {
     expected_distribution.distributed_2z_amount = 6_210_000_000;
     expected_distribution.burned_2z_amount = 690_000_000;
     expected_distribution.processed_solana_validator_debt_end_index = total_solana_validators / 8;
-    expected_distribution.processed_solana_validator_debt_write_off_start_index =
+    expected_distribution.written_off_solana_validator_debt_start_index =
         total_solana_validators / 8;
-    expected_distribution.processed_solana_validator_debt_write_off_end_index =
+    expected_distribution.written_off_solana_validator_debt_end_index =
         2 * (total_solana_validators / 8);
     expected_distribution.processed_rewards_start_index = 2 * (total_solana_validators / 8);
     expected_distribution.processed_rewards_end_index =
@@ -586,7 +586,7 @@ async fn test_distribute_rewards() {
         .await
         .unix_timestamp
         .saturating_sub(60) as u32;
-    expected_distribution.solana_validator_write_off_count = 1;
+    expected_distribution.solana_validator_debt_write_off_count = 1;
     assert_eq!(distribution, expected_distribution);
     assert_eq!(
         distribution.distributed_2z_amount + distribution.burned_2z_amount,
@@ -599,8 +599,8 @@ async fn test_distribute_rewards() {
     assert_eq!(processed_debt_bitmap, [0b11111111]);
 
     // Second byte reflects write off tracking.
-    let write_off_bitmap = &remaining_distribution_data
-        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    let write_off_bitmap =
+        &remaining_distribution_data[distribution.written_off_solana_validator_debt_bitmap_range()];
     assert_eq!(write_off_bitmap, [0b00000100]);
 
     // Third and fourth bytes reflect rewards tracking.
