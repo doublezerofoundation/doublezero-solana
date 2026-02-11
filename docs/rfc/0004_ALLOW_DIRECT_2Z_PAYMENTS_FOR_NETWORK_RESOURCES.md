@@ -45,7 +45,7 @@ new network user should be a separate RFC.
 
 Direct 2Z payments is a new term introduced to the protocol. This type of
 payment is neither a resource-scoped mechanism nor tied to any onchain
-enforcement. These payments are aggregated into latest distribution and is
+enforcement. These payments are aggregated into the latest distribution and are
 subject to the same rewards deferral period.
 
 ## Alternatives Considered
