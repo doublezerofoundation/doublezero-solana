@@ -2206,7 +2206,7 @@ fn try_reclassify_bad_solana_validator_debt(
     msg!("DZ epoch: {}", dz_epoch);
 
     // Write-offs must be enabled on this distribution since this is the only
-    // kind of debt that can be resolved.
+    // kind of debt that can be reclassified.
     distribution.try_require_solana_validator_debt_write_offs_enabled()?;
 
     // Account 3 must be the Solana validator deposit.
@@ -2311,7 +2311,7 @@ fn try_recover_bad_solana_validator_debt(
     msg!("DZ epoch: {}", dz_epoch);
 
     // Write-offs must be enabled on this distribution since this is the only
-    // kind of debt that can be resolved.
+    // kind of debt that can be recovered.
     distribution.try_require_solana_validator_debt_write_offs_enabled()?;
 
     // Account 3 must be the Solana validator deposit.
@@ -2400,13 +2400,15 @@ fn try_recover_bad_solana_validator_debt(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // Windfall distribution must have not swept 2Z tokens, which means the
-    // total SOL debt has not been accounted for.
+    // Windfall distribution must have not finalized rewards calculation, which
+    // would then require a rewards calculation to be performed. In the case
+    // where the calculated debt for a future distribution is zero, this
+    // windfall amount would produce rewards for network contributors.
     windfall_distribution
-        .try_require_has_not_swept_2z_tokens()
+        .try_require_unfinalized_rewards_calculation()
         .inspect_err(|_| {
             msg!(
-                "Windfall epoch {} has already swept 2Z tokens",
+                "Windfall epoch {} has already finalized rewards calculation",
                 windfall_dz_epoch
             );
         })?;
