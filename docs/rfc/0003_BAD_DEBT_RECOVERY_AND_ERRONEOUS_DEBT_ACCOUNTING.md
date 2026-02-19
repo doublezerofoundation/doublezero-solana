@@ -199,7 +199,7 @@ Both instructions require the following accounts:
    be set to true if `classify_erroneous` is true and false if
    `classify_erroneous` is false.
 
-   The distribution account must have already had rewards finalized or the
+   The distribution account must have already had debt finalized or the
    instruction will revert.
 
 4. Solana validator deposit account. For the recover instruction, the
