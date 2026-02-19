@@ -36,7 +36,13 @@ pub struct DistributionParameters {
     /// This field is used to ensure that rewards are not finalized (and
     /// distributed) too early.
     pub minimum_epoch_duration_to_finalize_rewards: u8,
-    _padding: [u8; 3],
+
+    /// The minimum duration that must pass before debt can be recovered from a
+    /// past distribution. This allows the debt accountant to reclassify debt
+    /// as erroneous while blocking recovery operations during a review period.
+    pub minimum_epoch_duration_to_recover_debt: u8,
+
+    _padding: [u8; 2],
 
     pub community_burn_rate_parameters: CommunityBurnRateParameters,
 

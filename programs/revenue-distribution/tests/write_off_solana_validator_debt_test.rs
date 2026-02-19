@@ -394,9 +394,9 @@ async fn test_write_off_solana_validator_debt() {
     expected_distribution.uncollectible_sol_debt = debt_write_off_first;
     expected_distribution.collected_solana_validator_payments = paid_debt.amount;
     expected_distribution.processed_solana_validator_debt_end_index = total_solana_validators / 8;
-    expected_distribution.processed_solana_validator_debt_write_off_start_index =
+    expected_distribution.written_off_solana_validator_debt_start_index =
         total_solana_validators / 8;
-    expected_distribution.processed_solana_validator_debt_write_off_end_index =
+    expected_distribution.written_off_solana_validator_debt_end_index =
         2 * (total_solana_validators / 8);
     expected_distribution.distribute_rewards_relay_lamports = distribute_rewards_relay_lamports;
     expected_distribution.calculation_allowed_timestamp = test_setup
@@ -404,7 +404,7 @@ async fn test_write_off_solana_validator_debt() {
         .await
         .unix_timestamp
         .saturating_sub(60) as u32;
-    expected_distribution.solana_validator_write_off_count = total_solana_validators - 1;
+    expected_distribution.solana_validator_debt_write_off_count = total_solana_validators - 1;
     assert_eq!(distribution, expected_distribution);
 
     // First two bytes reflect debt tracking.
@@ -413,8 +413,8 @@ async fn test_write_off_solana_validator_debt() {
     assert_eq!(processed_bitmap, [0b11111111, 0b11111111]);
 
     // Third and fourth bytes reflect write off tracking.
-    let write_off_bitmap = &remaining_distribution_data
-        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    let write_off_bitmap =
+        &remaining_distribution_data[distribution.written_off_solana_validator_debt_bitmap_range()];
     assert_eq!(write_off_bitmap, [0b11110111, 0b11111111]);
 
     let (distribution_key, distribution, remaining_distribution_data, _, _) =
@@ -446,8 +446,8 @@ async fn test_write_off_solana_validator_debt() {
         &remaining_distribution_data[distribution.processed_solana_validator_debt_bitmap_range()];
     assert_eq!(processed_bitmap, [0; 2]);
 
-    let write_off_bitmap = &remaining_distribution_data
-        [distribution.processed_solana_validator_debt_write_off_bitmap_range()];
+    let write_off_bitmap =
+        &remaining_distribution_data[distribution.written_off_solana_validator_debt_bitmap_range()];
     assert!(write_off_bitmap.is_empty());
 
     let (_, journal, _) = test_setup.fetch_journal().await;

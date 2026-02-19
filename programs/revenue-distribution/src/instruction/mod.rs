@@ -42,6 +42,7 @@ pub enum ProgramConfiguration {
         feature: ProgramFeatureConfiguration,
         activation_epoch: DoubleZeroEpoch,
     },
+    MinimumEpochDurationToRecoverDebt(u8),
 }
 
 #[derive(Debug, BorshDeserialize, BorshSerialize, Clone, PartialEq, Eq)]
@@ -107,6 +108,16 @@ pub enum RevenueDistributionInstructionData {
         amount: u64,
         proof: MerkleProof,
     },
+    EnableErroneousSolanaValidatorDebt,
+    ReclassifyBadSolanaValidatorDebt {
+        amount: u64,
+        proof: MerkleProof,
+        classify_erroneous: bool,
+    },
+    RecoverBadSolanaValidatorDebt {
+        amount: u64,
+        proof: MerkleProof,
+    },
     InitializeSwapDestination,
     SweepDistributionTokens,
     WithdrawSol(u64),
@@ -151,6 +162,12 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::enable_solana_validator_debt_write_off");
     pub const WRITE_OFF_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::write_off_solana_validator_debt");
+    pub const ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::enable_erroneous_solana_validator_debt");
+    pub const RECLASSIFY_BAD_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::reclassify_bad_solana_validator_debt");
+    pub const RECOVER_BAD_SOLANA_VALIDATOR_DEBT: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::recover_bad_solana_validator_debt");
     pub const INITIALIZE_SWAP_DESTINATION: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::initialize_swap_destination");
     pub const WITHDRAW_SOL: Discriminator<DISCRIMINATOR_LEN> =
@@ -243,6 +260,26 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
 
                 Ok(Self::WriteOffSolanaValidatorDebt { amount, proof })
             }
+            Self::ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT => {
+                Ok(Self::EnableErroneousSolanaValidatorDebt)
+            }
+            Self::RECLASSIFY_BAD_SOLANA_VALIDATOR_DEBT => {
+                let amount = BorshDeserialize::deserialize_reader(reader)?;
+                let proof = BorshDeserialize::deserialize_reader(reader)?;
+                let classify_erroneous = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::ReclassifyBadSolanaValidatorDebt {
+                    amount,
+                    proof,
+                    classify_erroneous,
+                })
+            }
+            Self::RECOVER_BAD_SOLANA_VALIDATOR_DEBT => {
+                let amount = BorshDeserialize::deserialize_reader(reader)?;
+                let proof = BorshDeserialize::deserialize_reader(reader)?;
+
+                Ok(Self::RecoverBadSolanaValidatorDebt { amount, proof })
+            }
             Self::INITIALIZE_SWAP_DESTINATION => Ok(Self::InitializeSwapDestination),
             Self::SWEEP_DISTRIBUTION_TOKENS_V1 => Ok(Self::SweepDistributionTokens),
             Self::WITHDRAW_SOL => {
@@ -334,6 +371,24 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::WriteOffSolanaValidatorDebt { amount, proof } => {
                 Self::WRITE_OFF_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
+                amount.serialize(writer)?;
+                proof.serialize(writer)
+            }
+            Self::EnableErroneousSolanaValidatorDebt => {
+                Self::ENABLE_ERRONEOUS_SOLANA_VALIDATOR_DEBT.serialize(writer)
+            }
+            Self::ReclassifyBadSolanaValidatorDebt {
+                amount,
+                proof,
+                classify_erroneous,
+            } => {
+                Self::RECLASSIFY_BAD_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
+                amount.serialize(writer)?;
+                proof.serialize(writer)?;
+                classify_erroneous.serialize(writer)
+            }
+            Self::RecoverBadSolanaValidatorDebt { amount, proof } => {
+                Self::RECOVER_BAD_SOLANA_VALIDATOR_DEBT.serialize(writer)?;
                 amount.serialize(writer)?;
                 proof.serialize(writer)
             }
