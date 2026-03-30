@@ -40,6 +40,16 @@ use crate::{
     DOUBLEZERO_MINT_KEY, ID,
 };
 
+// These compile-time checks ensure that if these consts were to change, that it
+// would be intentional (and should be associated with a program account
+// migration).
+//
+// Note: We do not need to check the program config or journal because 10kb was
+// allocated to each of those accounts.
+const _: () = assert!(size_of::<ContributorRewards>() == 600);
+const _: () = assert!(size_of::<Distribution>() == 448);
+const _: () = assert!(size_of::<SolanaValidatorDeposit>() == 96);
+
 solana_program_entrypoint::entrypoint!(try_process_instruction);
 
 fn try_process_instruction(
