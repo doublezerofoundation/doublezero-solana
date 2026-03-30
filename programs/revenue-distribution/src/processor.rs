@@ -134,6 +134,9 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::WithdrawSol(amount) => {
             try_withdraw_sol(accounts, amount)
         }
+        RevenueDistributionInstructionData::SetDistributionEconomicBurnRate(burn_rate_value) => {
+            try_set_distribution_economic_burn_rate(accounts, burn_rate_value)
+        }
     }
 }
 
@@ -2610,6 +2613,51 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
 
     **journal.info.lamports.borrow_mut() -= amount;
     **sol_destination_info.lamports.borrow_mut() += amount;
+
+    Ok(())
+}
+
+fn try_set_distribution_economic_burn_rate(
+    accounts: &[AccountInfo],
+    burn_rate_value: u32,
+) -> ProgramResult {
+    msg!("Set distribution economic burn rate");
+
+    let burn_rate = BurnRate::new(burn_rate_value).ok_or_else(|| {
+        msg!("Invalid burn rate value");
+        ProgramError::InvalidAccountData
+    })?;
+
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+    // - 1: Rewards accountant.
+    // - 2: Distribution.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    // Account 1 must be the rewards accountant.
+    //
+    // This call ensures that the rewards accountant is a signer and is the same
+    // rewards accountant encoded in the program config.
+    let authorized_use = VerifiedProgramAuthority::try_next_accounts(
+        &mut accounts_iter,
+        Authority::RewardsAccountant,
+    )?;
+
+    // Make sure the program is not paused.
+    authorized_use.program_config.try_require_unpaused()?;
+
+    // Account 2 must be the distribution.
+    let mut distribution =
+        ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    // Cannot set an economic burn rate if the rewards calculation has already
+    // been finalized.
+    distribution.try_require_unfinalized_rewards_calculation()?;
+
+    distribution.economic_burn_rate = burn_rate;
+
+    msg!("Economic burn rate is now {}", burn_rate);
 
     Ok(())
 }
