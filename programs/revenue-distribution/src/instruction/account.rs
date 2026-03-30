@@ -944,6 +944,57 @@ impl From<WithdrawSolAccounts> for Vec<AccountMeta> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetVersionAccounts;
+
+impl From<GetVersionAccounts> for Vec<AccountMeta> {
+    fn from(_accounts: GetVersionAccounts) -> Self {
+        vec![]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetCurrentDzEpochAccounts {
+    pub program_config_key: Pubkey,
+}
+
+impl GetCurrentDzEpochAccounts {
+    pub fn new() -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+        }
+    }
+}
+
+impl From<GetCurrentDzEpochAccounts> for Vec<AccountMeta> {
+    fn from(accounts: GetCurrentDzEpochAccounts) -> Self {
+        let GetCurrentDzEpochAccounts { program_config_key } = accounts;
+
+        vec![AccountMeta::new_readonly(program_config_key, false)]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GetDistributionBurnRateAccounts {
+    pub distribution_key: Pubkey,
+}
+
+impl GetDistributionBurnRateAccounts {
+    pub fn new(dz_epoch: DoubleZeroEpoch) -> Self {
+        Self {
+            distribution_key: Distribution::find_address(dz_epoch).0,
+        }
+    }
+}
+
+impl From<GetDistributionBurnRateAccounts> for Vec<AccountMeta> {
+    fn from(accounts: GetDistributionBurnRateAccounts) -> Self {
+        let GetDistributionBurnRateAccounts { distribution_key } = accounts;
+
+        vec![AccountMeta::new_readonly(distribution_key, false)]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

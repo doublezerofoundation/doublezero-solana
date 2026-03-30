@@ -14,7 +14,7 @@ use doublezero_program_tools::{
 };
 use ruint::Uint;
 use solana_account_info::{AccountInfo, MAX_PERMITTED_DATA_INCREASE};
-use solana_cpi::invoke_signed_unchecked;
+use solana_cpi::{invoke_signed_unchecked, set_return_data};
 use solana_msg::msg;
 use solana_program_error::{ProgramError, ProgramResult};
 use solana_program_pack::Pack;
@@ -36,7 +36,7 @@ use crate::{
         ProgramConfig, RecipientShare, RecipientShares, RelayParameters, SolanaValidatorDeposit,
         SolanaValidatorFeeParameters,
     },
-    types::{BurnRate, ByteFlags, RewardShare, SolanaValidatorDebt, ValidatorFee},
+    types::{BurnRate, ByteFlags, RewardShare, SolanaValidatorDebt, ValidatorFee, Version},
     DOUBLEZERO_MINT_KEY, ID,
 };
 
@@ -134,9 +134,11 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::WithdrawSol(amount) => {
             try_withdraw_sol(accounts, amount)
         }
-        RevenueDistributionInstructionData::GetVersion => try_get_version(accounts),
+        RevenueDistributionInstructionData::GetVersion => try_get_version(),
         RevenueDistributionInstructionData::GetCurrentDzEpoch => try_get_current_dz_epoch(accounts),
-        RevenueDistributionInstructionData::GetBurnRate => try_get_burn_rate(accounts),
+        RevenueDistributionInstructionData::GetDistributionBurnRate => {
+            try_get_distribution_burn_rate(accounts)
+        }
     }
 }
 
@@ -2617,22 +2619,54 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     Ok(())
 }
 
-fn try_get_version(_accounts: &[AccountInfo]) -> ProgramResult {
+fn try_get_version() -> ProgramResult {
     msg!("Get version");
 
-    todo!()
+    // We should expect parsing these values to succeed. Although, if any of
+    // these values do happen to exceed u32, this instruction will panic.
+    let version = Version {
+        major: env!("CARGO_PKG_VERSION_MAJOR").parse().unwrap(),
+        minor: env!("CARGO_PKG_VERSION_MINOR").parse().unwrap(),
+        patch: env!("CARGO_PKG_VERSION_PATCH").parse().unwrap(),
+    };
+    set_return_data(bytemuck::bytes_of(&version));
+
+    Ok(())
 }
 
-fn try_get_current_dz_epoch(_accounts: &[AccountInfo]) -> ProgramResult {
+fn try_get_current_dz_epoch(accounts: &[AccountInfo]) -> ProgramResult {
     msg!("Get current DZ epoch");
 
-    todo!()
+    // We expect the following accounts for this instruction:
+    // - 0: Program config.
+
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the program config.
+    let program_config =
+        ZeroCopyAccount::<ProgramConfig>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let current_dz_epoch = program_config.next_completed_dz_epoch;
+    set_return_data(bytemuck::bytes_of(&current_dz_epoch));
+
+    Ok(())
 }
 
-fn try_get_burn_rate(_accounts: &[AccountInfo]) -> ProgramResult {
-    msg!("Get burn rate");
+fn try_get_distribution_burn_rate(accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Get distribution burn rate");
 
-    todo!()
+    // We expect the following accounts for this instruction:
+    // - 0: Distribution.
+    let mut accounts_iter = accounts.iter().enumerate();
+
+    // Account 0 must be the distribution.
+    let distribution =
+        ZeroCopyAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+
+    let burn_rate = distribution.burn_rate(None);
+    set_return_data(bytemuck::bytes_of(&burn_rate));
+
+    Ok(())
 }
 
 //

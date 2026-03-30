@@ -10,8 +10,8 @@ use doublezero_revenue_distribution::{
             ConfigureDistributionRewardsAccounts, ConfigureProgramAccounts,
             DistributeRewardsAccounts, EnableSolanaValidatorDebtWriteOffAccounts,
             FinalizeDistributionDebtAccounts, FinalizeDistributionRewardsAccounts,
-            InitializeContributorRewardsAccounts, InitializeDistributionAccounts,
-            InitializeJournalAccounts, InitializeProgramAccounts,
+            GetVersionAccounts, InitializeContributorRewardsAccounts,
+            InitializeDistributionAccounts, InitializeJournalAccounts, InitializeProgramAccounts,
             InitializeSolanaValidatorDepositAccounts, InitializeSwapDestinationAccounts,
             PaySolanaValidatorDebtAccounts, SetAdminAccounts, SetRewardsManagerAccounts,
             SweepDistributionTokensAccounts, VerifyDistributionMerkleRootAccounts,
@@ -23,7 +23,7 @@ use doublezero_revenue_distribution::{
     state::{
         self, ContributorRewards, Distribution, Journal, ProgramConfig, SolanaValidatorDeposit,
     },
-    types::{DoubleZeroEpoch, RewardShare, SolanaValidatorDebt},
+    types::{DoubleZeroEpoch, RewardShare, SolanaValidatorDebt, Version},
     DOUBLEZERO_MINT_KEY, ID,
 };
 use solana_loader_v3_interface::{get_program_data_address, state::UpgradeableLoaderState};
@@ -907,6 +907,40 @@ impl ProgramTestWithOwner {
         .await?;
 
         Ok(self)
+    }
+
+    //
+    // Getters.
+    //
+
+    pub async fn simulate_get_version(&mut self) -> Result<Version, BanksClientError> {
+        let get_version_ix = try_build_instruction(
+            &ID,
+            GetVersionAccounts,
+            &RevenueDistributionInstructionData::GetVersion,
+        )
+        .unwrap();
+
+        let recent_blockhash = self.get_latest_blockhash().await.unwrap();
+
+        let payer_signer = &self.context.payer;
+        let transaction = new_transaction(&[get_version_ix], &[payer_signer], recent_blockhash);
+
+        let simulated_tx = self
+            .context
+            .banks_client
+            .simulate_transaction(transaction)
+            .await?;
+
+        let details = simulated_tx
+            .simulation_details
+            .ok_or_else(|| BanksClientError::ClientError("no simulation details"))?;
+
+        let transaction_return_data = details
+            .return_data
+            .ok_or_else(|| BanksClientError::ClientError("no return data"))?;
+
+        Ok(*bytemuck::from_bytes(&transaction_return_data.data))
     }
 
     //

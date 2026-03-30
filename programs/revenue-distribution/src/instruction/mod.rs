@@ -114,7 +114,7 @@ pub enum RevenueDistributionInstructionData {
     // Getters.
     GetVersion,
     GetCurrentDzEpoch,
-    GetBurnRate,
+    GetDistributionBurnRate,
 }
 
 impl RevenueDistributionInstructionData {
@@ -164,8 +164,8 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::get_version");
     pub const GET_CURRENT_DZ_EPOCH: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::get_current_dz_epoch");
-    pub const GET_BURN_RATE: Discriminator<DISCRIMINATOR_LEN> =
-        Discriminator::new_sha2(b"dz::ix::get_burn_rate");
+    pub const GET_DISTRIBUTION_BURN_RATE: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::get_distribution_burn_rate");
 
     //
     // Versioned instruction selectors.
@@ -261,7 +261,7 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             }
             Self::GET_VERSION => Ok(Self::GetVersion),
             Self::GET_CURRENT_DZ_EPOCH => Ok(Self::GetCurrentDzEpoch),
-            Self::GET_BURN_RATE => Ok(Self::GetBurnRate),
+            Self::GET_DISTRIBUTION_BURN_RATE => Ok(Self::GetDistributionBurnRate),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid discriminator",
@@ -359,7 +359,7 @@ impl BorshSerialize for RevenueDistributionInstructionData {
             }
             Self::GetVersion => Self::GET_VERSION.serialize(writer),
             Self::GetCurrentDzEpoch => Self::GET_CURRENT_DZ_EPOCH.serialize(writer),
-            Self::GetBurnRate => Self::GET_BURN_RATE.serialize(writer),
+            Self::GetDistributionBurnRate => Self::GET_DISTRIBUTION_BURN_RATE.serialize(writer),
         }
     }
 }

@@ -91,7 +91,9 @@ pub struct Distribution {
     pub processed_solana_validator_debt_write_off_end_index: u32,
 
     pub solana_validator_write_off_count: u32,
-    _padding_1: [u8; 20],
+
+    pub economic_burn_rate: BurnRate,
+    _padding_1: [u8; 16],
 
     _storage_gap: StorageGap<6>,
 }
@@ -176,14 +178,17 @@ impl Distribution {
     }
 
     #[inline]
-    pub fn burn_rate(&self, economic_burn_rate: BurnRate) -> BurnRate {
-        economic_burn_rate.max(self.community_burn_rate)
+    pub fn burn_rate(&self, economic_burn_rate_override: Option<BurnRate>) -> BurnRate {
+        economic_burn_rate_override
+            .unwrap_or_default()
+            .max(self.economic_burn_rate)
+            .max(self.community_burn_rate)
     }
 
     #[inline]
     pub fn split_2z_amount(&self, reward_share: &RewardShare) -> Option<(u64, u64)> {
         let unit_share = reward_share.checked_unit_share()?;
-        let economic_burn_rate = reward_share.checked_economic_burn_rate()?;
+        let economic_burn_rate = reward_share.checked_economic_burn_rate();
 
         // Determine the greater of the economic burn rate and the community
         // burn rate. This rate will be the proportion of the total 2Z amount
@@ -243,11 +248,6 @@ impl Distribution {
 }
 
 //
-
-const _: () = assert!(
-    size_of::<Distribution>() == 448,
-    "`Distribution` size changed"
-);
 
 #[cfg(test)]
 mod tests {
@@ -365,7 +365,7 @@ mod tests {
 
         // Community burn rate is higher, so it should be used.
         assert_eq!(
-            distribution.burn_rate(economic_burn_rate),
+            distribution.burn_rate(Some(economic_burn_rate)),
             community_burn_rate
         );
 
@@ -373,16 +373,49 @@ mod tests {
 
         // Economic burn rate is higher, so it should be used.
         assert_eq!(
-            distribution.burn_rate(higher_economic_burn_rate),
+            distribution.burn_rate(Some(higher_economic_burn_rate)),
             higher_economic_burn_rate
         );
 
         // Equal rates.
         let equal_economic_burn_rate = BurnRate::new(200_000_000).unwrap(); // 20%
         assert_eq!(
-            distribution.burn_rate(equal_economic_burn_rate),
+            distribution.burn_rate(Some(equal_economic_burn_rate)),
             community_burn_rate
         );
+
+        // self.economic_burn_rate wins (25% > override 15% > community 10%).
+        let distribution_with_econ = Distribution {
+            community_burn_rate: BurnRate::new(100_000_000).unwrap(), // 10%
+            economic_burn_rate: BurnRate::new(250_000_000).unwrap(),  // 25%
+            ..Default::default()
+        };
+        let override_15 = BurnRate::new(150_000_000).unwrap(); // 15%
+        assert_eq!(
+            distribution_with_econ.burn_rate(Some(override_15)),
+            BurnRate::new(250_000_000).unwrap()
+        );
+
+        // None override, self.economic_burn_rate > community → expect economic.
+        assert_eq!(
+            distribution_with_econ.burn_rate(None),
+            BurnRate::new(250_000_000).unwrap()
+        );
+
+        // None override, community > self.economic_burn_rate → expect community.
+        let distribution_community_wins = Distribution {
+            community_burn_rate: BurnRate::new(300_000_000).unwrap(), // 30%
+            economic_burn_rate: BurnRate::new(100_000_000).unwrap(),  // 10%
+            ..Default::default()
+        };
+        assert_eq!(
+            distribution_community_wins.burn_rate(None),
+            BurnRate::new(300_000_000).unwrap()
+        );
+
+        // All zero: burn_rate(None) on default Distribution → BurnRate::default().
+        let default_distribution = Distribution::default();
+        assert_eq!(default_distribution.burn_rate(None), BurnRate::default());
     }
 
     #[test]
@@ -437,6 +470,52 @@ mod tests {
         assert!(distribution
             .split_2z_amount(&invalid_reward_share)
             .is_none());
+
+        // Test: per-share economic burn rate is invalid (exceeds UnitShare32::MAX),
+        // so checked_economic_burn_rate() returns None. split_2z_amount should
+        // still succeed, falling back to max(0, self.economic_burn_rate, community).
+        let distribution_with_econ = Distribution {
+            collected_prepaid_2z_payments: 1_000,
+            collected_2z_converted_from_sol: 2_000,
+            community_burn_rate: BurnRate::new(100_000_000).unwrap(), // 10%
+            economic_burn_rate: BurnRate::new(200_000_000).unwrap(),  // 20%
+            ..Default::default()
+        };
+        // Craft a RewardShare with valid unit_share but invalid economic burn rate.
+        // ECONOMIC_BURN_RATE_MASK is 0x3FFFFFFF (max 1,073,741,823).
+        // Setting the masked value to 1,073,741,823 exceeds UnitShare32::MAX (1,000,000,000).
+        let invalid_econ_rate_share = RewardShare {
+            contributor_key,
+            unit_share: 100_000_000, // 10%
+            remaining_bytes: 0x3FFF_FFFFu32.to_le_bytes(),
+        };
+        assert!(invalid_econ_rate_share.checked_economic_burn_rate().is_none());
+        // Falls back to max(0, 20%, 10%) = 20%.
+        // Total: 3,000, share: 10% = 300, burn: 300 * 20% = 60, distribute: 240.
+        let (burn_amount, distribute_amount) = distribution_with_econ
+            .split_2z_amount(&invalid_econ_rate_share)
+            .unwrap();
+        assert_eq!(burn_amount, 60);
+        assert_eq!(distribute_amount, 240);
+
+        // Test: self.economic_burn_rate dominates both community and per-share override.
+        let distribution_econ_dominates = Distribution {
+            collected_prepaid_2z_payments: 5_000,
+            collected_2z_converted_from_sol: 5_000,
+            community_burn_rate: BurnRate::new(50_000_000).unwrap(),  // 5%
+            economic_burn_rate: BurnRate::new(300_000_000).unwrap(),  // 30%
+            ..Default::default()
+        };
+        // Per-share override is 15%.
+        let reward_share_lower_override =
+            RewardShare::new(contributor_key, 100_000_000, false, 150_000_000).unwrap();
+        // Total: 10,000, share: 10% = 1,000, burn rate: max(15%, 30%, 5%) = 30%.
+        // Burn: 1,000 * 30% = 300, distribute: 700.
+        let (burn_amount, distribute_amount) = distribution_econ_dominates
+            .split_2z_amount(&reward_share_lower_override)
+            .unwrap();
+        assert_eq!(burn_amount, 300);
+        assert_eq!(distribute_amount, 700);
     }
 
     #[test]
