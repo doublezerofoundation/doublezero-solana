@@ -134,6 +134,9 @@ fn try_process_instruction(
         RevenueDistributionInstructionData::WithdrawSol(amount) => {
             try_withdraw_sol(accounts, amount)
         }
+        RevenueDistributionInstructionData::GetVersion => try_get_version(accounts),
+        RevenueDistributionInstructionData::GetCurrentDzEpoch => try_get_current_dz_epoch(accounts),
+        RevenueDistributionInstructionData::GetBurnRate => try_get_burn_rate(accounts),
     }
 }
 
@@ -2612,6 +2615,24 @@ fn try_withdraw_sol(accounts: &[AccountInfo], amount: u64) -> ProgramResult {
     **sol_destination_info.lamports.borrow_mut() += amount;
 
     Ok(())
+}
+
+fn try_get_version(_accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Get version");
+
+    todo!()
+}
+
+fn try_get_current_dz_epoch(_accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Get current DZ epoch");
+
+    todo!()
+}
+
+fn try_get_burn_rate(_accounts: &[AccountInfo]) -> ProgramResult {
+    msg!("Get burn rate");
+
+    todo!()
 }
 
 //

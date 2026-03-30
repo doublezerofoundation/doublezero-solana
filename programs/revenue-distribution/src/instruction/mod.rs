@@ -110,6 +110,11 @@ pub enum RevenueDistributionInstructionData {
     InitializeSwapDestination,
     SweepDistributionTokens,
     WithdrawSol(u64),
+
+    // Getters.
+    GetVersion,
+    GetCurrentDzEpoch,
+    GetBurnRate,
 }
 
 impl RevenueDistributionInstructionData {
@@ -155,6 +160,12 @@ impl RevenueDistributionInstructionData {
         Discriminator::new_sha2(b"dz::ix::initialize_swap_destination");
     pub const WITHDRAW_SOL: Discriminator<DISCRIMINATOR_LEN> =
         Discriminator::new_sha2(b"dz::ix::withdraw_sol");
+    pub const GET_VERSION: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::get_version");
+    pub const GET_CURRENT_DZ_EPOCH: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::get_current_dz_epoch");
+    pub const GET_BURN_RATE: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::ix::get_burn_rate");
 
     //
     // Versioned instruction selectors.
@@ -248,6 +259,9 @@ impl BorshDeserialize for RevenueDistributionInstructionData {
             Self::WITHDRAW_SOL => {
                 BorshDeserialize::deserialize_reader(reader).map(Self::WithdrawSol)
             }
+            Self::GET_VERSION => Ok(Self::GetVersion),
+            Self::GET_CURRENT_DZ_EPOCH => Ok(Self::GetCurrentDzEpoch),
+            Self::GET_BURN_RATE => Ok(Self::GetBurnRate),
             _ => Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 "Invalid discriminator",
@@ -343,6 +357,9 @@ impl BorshSerialize for RevenueDistributionInstructionData {
                 Self::WITHDRAW_SOL.serialize(writer)?;
                 amount.serialize(writer)
             }
+            Self::GetVersion => Self::GET_VERSION.serialize(writer),
+            Self::GetCurrentDzEpoch => Self::GET_CURRENT_DZ_EPOCH.serialize(writer),
+            Self::GetBurnRate => Self::GET_BURN_RATE.serialize(writer),
         }
     }
 }

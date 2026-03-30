@@ -296,6 +296,16 @@ impl From<ByteFlags> for u8 {
     }
 }
 
+#[derive(
+    Debug, BorshDeserialize, BorshSerialize, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable,
+)]
+#[repr(C, align(4))]
+pub struct Version {
+    pub major: u32,
+    pub minor: u32,
+    pub patch: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
