@@ -181,7 +181,7 @@ async fn test_set_distribution_economic_burn_rate() {
         TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
     assert_eq!(
-        program_logs.get(2).unwrap(),
+        program_logs.get(3).unwrap(),
         "Program log: Distribution rewards have already been finalized"
     );
 }
