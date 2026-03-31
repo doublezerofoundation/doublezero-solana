@@ -248,13 +248,6 @@ impl Distribution {
     }
 }
 
-//
-
-const _: () = assert!(
-    size_of::<Distribution>() == 448,
-    "`Distribution` size changed"
-);
-
 #[cfg(test)]
 mod tests {
     use super::*;

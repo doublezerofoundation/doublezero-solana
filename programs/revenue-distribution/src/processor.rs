@@ -2625,7 +2625,7 @@ fn try_set_distribution_economic_burn_rate(
 
     let burn_rate = BurnRate::new(burn_rate_value).ok_or_else(|| {
         msg!("Invalid burn rate value");
-        ProgramError::InvalidAccountData
+        ProgramError::InvalidInstructionData
     })?;
 
     // We expect the following accounts for this instruction:
@@ -2650,6 +2650,7 @@ fn try_set_distribution_economic_burn_rate(
     // Account 2 must be the distribution.
     let mut distribution =
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
+    msg!("DZ epoch: {}", distribution.dz_epoch);
 
     // Cannot set an economic burn rate if the rewards calculation has already
     // been finalized.
