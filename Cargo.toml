@@ -43,7 +43,7 @@ svm-hash = ">=0.1,<=0.2"
 
 ### Please keep these packages pinned for now.
 sha2-const-stable = "=0.1.0"
-solana-program-test = "=3.0.12"
+solana-program-test = "=3.1.12"
 solana-sdk = "=3.0"
 
 [workspace.dependencies.doublezero-passport]
