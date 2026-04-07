@@ -2673,6 +2673,7 @@ fn try_withdraw_solana_validator_deposit(accounts: &[AccountInfo]) -> ProgramRes
     // - 0: Program config.
     // - 1: Solana validator deposit.
     // - 2: Validator node.
+    // - 3: Beneficiary (optional).
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Account 0 must be the program config.
@@ -2702,6 +2703,22 @@ fn try_withdraw_solana_validator_deposit(accounts: &[AccountInfo]) -> ProgramRes
         );
         return Err(ProgramError::InvalidAccountData);
     }
+
+    // Account 3 may be the beneficiary of the excess lamports. If provided, the
+    // validator node must be a signer to act as an authority for the
+    // beneficiary. Otherwise, the validator node is the destination.
+    let beneficiary_info = match try_next_enumerated_account(&mut accounts_iter, Default::default())
+    {
+        Ok((_, specified_beneficiary_info)) => {
+            if !validator_node_info.is_signer {
+                msg!("Validator node must be a signer when a beneficiary is provided");
+                return Err(ProgramError::MissingRequiredSignature);
+            }
+
+            specified_beneficiary_info
+        }
+        Err(_) => validator_node_info,
+    };
 
     let written_off_sol_debt = solana_validator_deposit.written_off_sol_debt;
     let solana_validator_deposit_info = solana_validator_deposit.info;
@@ -2738,7 +2755,7 @@ fn try_withdraw_solana_validator_deposit(accounts: &[AccountInfo]) -> ProgramRes
     };
 
     **solana_validator_deposit_info.lamports.borrow_mut() -= withdrawn_lamports;
-    **validator_node_info.lamports.borrow_mut() += withdrawn_lamports;
+    **beneficiary_info.lamports.borrow_mut() += withdrawn_lamports;
 
     Ok(())
 }

@@ -960,22 +960,30 @@ impl ProgramTestWithOwner {
 
     pub async fn withdraw_solana_validator_deposit(
         &mut self,
-        node_id: &Pubkey,
+        node_signer: &Keypair,
+        beneficiary_key: Option<&Pubkey>,
     ) -> Result<&mut Self, BanksClientError> {
         let payer_signer = &self.context.payer;
+        let node_id = node_signer.pubkey();
 
         let withdraw_solana_validator_deposit_ix = try_build_instruction(
             &ID,
-            WithdrawSolanaValidatorDepositAccounts::new(node_id),
+            WithdrawSolanaValidatorDepositAccounts::new(&node_id, beneficiary_key),
             &RevenueDistributionInstructionData::WithdrawSolanaValidatorDeposit,
         )
         .unwrap();
+
+        let signers = if beneficiary_key.is_some() {
+            vec![payer_signer, node_signer]
+        } else {
+            vec![payer_signer]
+        };
 
         self.context.last_blockhash = process_instructions_for_test(
             &mut self.context.banks_client,
             &self.context.last_blockhash,
             &[withdraw_solana_validator_deposit_ix],
-            &[payer_signer],
+            &signers,
         )
         .await?;
 
