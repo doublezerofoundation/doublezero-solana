@@ -977,6 +977,39 @@ impl From<SetDistributionEconomicBurnRateAccounts> for Vec<AccountMeta> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WithdrawSolanaValidatorDepositAccounts {
+    pub program_config_key: Pubkey,
+    pub solana_validator_deposit_key: Pubkey,
+    pub validator_node_key: Pubkey,
+}
+
+impl WithdrawSolanaValidatorDepositAccounts {
+    pub fn new(node_id: &Pubkey) -> Self {
+        Self {
+            program_config_key: ProgramConfig::find_address().0,
+            solana_validator_deposit_key: SolanaValidatorDeposit::find_address(node_id).0,
+            validator_node_key: *node_id,
+        }
+    }
+}
+
+impl From<WithdrawSolanaValidatorDepositAccounts> for Vec<AccountMeta> {
+    fn from(accounts: WithdrawSolanaValidatorDepositAccounts) -> Self {
+        let WithdrawSolanaValidatorDepositAccounts {
+            program_config_key,
+            solana_validator_deposit_key,
+            validator_node_key,
+        } = accounts;
+
+        vec![
+            AccountMeta::new_readonly(program_config_key, false),
+            AccountMeta::new(solana_validator_deposit_key, false),
+            AccountMeta::new(validator_node_key, false),
+        ]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
