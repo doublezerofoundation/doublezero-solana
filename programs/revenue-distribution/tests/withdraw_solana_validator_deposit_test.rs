@@ -251,6 +251,30 @@ async fn test_cannot_withdraw_solana_validator_deposit_with_delinquent_debt() {
 }
 
 #[tokio::test]
+async fn test_cannot_withdraw_solana_validator_deposit_without_excess() {
+    let WithdrawSolanaValidatorDepositSetup {
+        mut test_setup,
+        node_signer,
+        ..
+    } = setup_for_withdraw_solana_validator_deposit().await;
+
+    let node_id = node_signer.pubkey();
+
+    // Cannot withdraw when there are no excess lamports (only rent exemption).
+    let (tx_err, program_logs) = simulate_program_revert(&mut test_setup, &node_id, None, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
+    );
+    assert_eq!(
+        program_logs.get(3).unwrap(),
+        "Program log: No excess lamports to withdraw. Delinquent debt: 0"
+    );
+}
+
+#[tokio::test]
 async fn test_cannot_withdraw_solana_validator_deposit_to_beneficiary_without_signer() {
     let WithdrawSolanaValidatorDepositSetup {
         mut test_setup,
@@ -482,6 +506,65 @@ async fn test_withdraw_solana_validator_deposit_with_written_off_debt() {
             "Program log: No excess lamports to withdraw. Delinquent debt: {}",
             debt_amount
         )
+    );
+}
+
+#[tokio::test]
+async fn test_withdraw_solana_validator_deposit_with_written_off_debt_to_beneficiary() {
+    let WithdrawDelinquentDepositSetup {
+        mut test_setup,
+        node_signer,
+        deposit_key,
+        deposit_rent_exemption,
+        debt_amount,
+    } = setup_with_written_off_debt().await;
+
+    let beneficiary_key = Pubkey::new_unique();
+
+    // Fund extra lamports beyond rent + written_off_sol_debt.
+    let extra_lamports = 3_000_000_000;
+    test_setup
+        .transfer_lamports(&deposit_key, extra_lamports)
+        .await
+        .unwrap();
+
+    // Withdraw to beneficiary: should only get extra_lamports - written_off_sol_debt.
+    let beneficiary_balance_before = test_setup
+        .context
+        .banks_client
+        .get_balance(beneficiary_key)
+        .await
+        .unwrap();
+
+    test_setup
+        .withdraw_solana_validator_deposit(&node_signer, Some(&beneficiary_key))
+        .await
+        .unwrap();
+
+    let beneficiary_balance_after = test_setup
+        .context
+        .banks_client
+        .get_balance(beneficiary_key)
+        .await
+        .unwrap();
+
+    let expected_withdrawal = extra_lamports - debt_amount;
+    assert_eq!(
+        beneficiary_balance_after - beneficiary_balance_before,
+        expected_withdrawal
+    );
+
+    // Remaining lamports = rent_exemption + written_off_sol_debt.
+    let deposit_account = test_setup
+        .context
+        .banks_client
+        .get_account(deposit_key)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        deposit_account.lamports,
+        deposit_rent_exemption + debt_amount
     );
 }
 
