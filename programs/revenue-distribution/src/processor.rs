@@ -2726,33 +2726,22 @@ fn try_withdraw_solana_validator_deposit(accounts: &[AccountInfo]) -> ProgramRes
 
     let solana_validator_deposit_lamports = solana_validator_deposit_info.lamports();
 
-    // The account can be closed because there is no outstanding debt.
-    let withdrawn_lamports = if written_off_sol_debt == 0 {
-        msg!("Closing deposit account");
+    // Withdraw the excess lamports beyond rent exemption and written-off debt.
+    let rent_exemption_lamports = Rent::get()
+        .unwrap()
+        .minimum_balance(zero_copy::data_end::<SolanaValidatorDeposit>());
 
-        solana_validator_deposit_lamports
+    let withdrawn_lamports = solana_validator_deposit_lamports
+        .saturating_sub(rent_exemption_lamports)
+        .saturating_sub(written_off_sol_debt);
+
+    if withdrawn_lamports == 0 {
+        msg!(
+            "No excess lamports to withdraw. Delinquent debt: {}",
+            written_off_sol_debt
+        );
+        return Err(ProgramError::InvalidAccountData);
     }
-    // Otherwise, only withdraw the excess lamports beyond rent exemption and
-    // written-off debt.
-    else {
-        let rent_exemption_lamports = Rent::get()
-            .unwrap()
-            .minimum_balance(zero_copy::data_end::<SolanaValidatorDeposit>());
-
-        let excess_lamports = solana_validator_deposit_lamports
-            .saturating_sub(rent_exemption_lamports)
-            .saturating_sub(written_off_sol_debt);
-
-        if excess_lamports == 0 {
-            msg!(
-                "No excess lamports to withdraw. Delinquent debt: {}",
-                written_off_sol_debt
-            );
-            return Err(ProgramError::InvalidAccountData);
-        }
-
-        excess_lamports
-    };
 
     **solana_validator_deposit_info.lamports.borrow_mut() -= withdrawn_lamports;
     **beneficiary_info.lamports.borrow_mut() += withdrawn_lamports;

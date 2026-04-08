@@ -320,8 +320,8 @@ async fn test_withdraw_solana_validator_deposit() {
         .await
         .unwrap();
 
-    // Withdraw with written_off_sol_debt == 0: account should be closed and
-    // all lamports (rent + extra) transferred to the node.
+    // Withdraw with written_off_sol_debt == 0: only excess lamports beyond
+    // rent exemption should be transferred to the node.
     let node_balance_before = test_setup
         .context
         .banks_client
@@ -341,19 +341,17 @@ async fn test_withdraw_solana_validator_deposit() {
         .await
         .unwrap();
 
-    assert_eq!(
-        node_balance_after - node_balance_before,
-        deposit_rent_exemption + extra_lamports
-    );
+    assert_eq!(node_balance_after - node_balance_before, extra_lamports);
 
-    // Account should be closed.
+    // Account should still exist with rent-exemption lamports.
     let deposit_account = test_setup
         .context
         .banks_client
         .get_account(deposit_key)
         .await
+        .unwrap()
         .unwrap();
-    assert!(deposit_account.is_none());
+    assert_eq!(deposit_account.lamports, deposit_rent_exemption);
 }
 
 #[tokio::test]
@@ -375,8 +373,8 @@ async fn test_withdraw_solana_validator_deposit_to_beneficiary() {
         .await
         .unwrap();
 
-    // Withdraw to beneficiary with written_off_sol_debt == 0: account should
-    // be closed and all lamports transferred to the beneficiary.
+    // Withdraw to beneficiary with written_off_sol_debt == 0: only excess
+    // lamports beyond rent exemption should be transferred to the beneficiary.
     let beneficiary_balance_before = test_setup
         .context
         .banks_client
@@ -398,17 +396,18 @@ async fn test_withdraw_solana_validator_deposit_to_beneficiary() {
 
     assert_eq!(
         beneficiary_balance_after - beneficiary_balance_before,
-        deposit_rent_exemption + extra_lamports
+        extra_lamports
     );
 
-    // Account should be closed.
+    // Account should still exist with rent-exemption lamports.
     let deposit_account = test_setup
         .context
         .banks_client
         .get_account(deposit_key)
         .await
+        .unwrap()
         .unwrap();
-    assert!(deposit_account.is_none());
+    assert_eq!(deposit_account.lamports, deposit_rent_exemption);
 }
 
 #[tokio::test]
