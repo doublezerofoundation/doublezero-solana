@@ -210,15 +210,12 @@ async fn test_initialize_rewards_integration_already_registered() {
         &integration_program_id,
     );
 
-    // The create-account CPI fails because the PDA is already owned by this
-    // program. Assert the transaction failed at our instruction; the specific
-    // error code comes from the create-account helper.
     let (tx_err, _) = test_setup
         .unwrap_simulation_error(&[ix], &[&admin_signer])
         .await
         .unwrap();
     assert_eq!(
         tx_err,
-        TransactionError::InstructionError(0, InstructionError::Custom(0))
+        TransactionError::InstructionError(0, InstructionError::InvalidAccountData)
     );
 }
