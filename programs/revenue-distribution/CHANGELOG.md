@@ -3,6 +3,7 @@
 ## Unreleased
 
 - withdraw deposited SOL (#111)
+- register rewards integrations (#113)
 
 ## [v0.3.3]
 
