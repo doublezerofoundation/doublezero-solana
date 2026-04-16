@@ -1,16 +1,21 @@
 use bytemuck::{Pod, Zeroable};
-use doublezero_program_tools::{types::StorageGap, Discriminator, PrecomputedDiscriminator};
+use doublezero_program_tools::{
+    types::{Flags, StorageGap},
+    Discriminator, PrecomputedDiscriminator,
+};
 use solana_pubkey::Pubkey;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C, align(8))]
 pub struct RewardsIntegration {
+    pub program_id: Pubkey,
     pub bump_seed: u8,
     _padding: [u8; 7],
 
-    pub program_id: Pubkey,
+    // Reserved for future flags.
+    _flags: Flags,
 
-    _storage_gap: StorageGap<1>,
+    _storage_gap: StorageGap<4>,
 }
 
 impl PrecomputedDiscriminator for RewardsIntegration {

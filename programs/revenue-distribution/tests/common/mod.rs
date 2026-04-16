@@ -881,6 +881,7 @@ impl ProgramTestWithOwner {
             &ID,
             InitializeRewardsIntegrationAccounts::new(
                 &admin_signer.pubkey(),
+                &payer_signer.pubkey(),
                 integration_program_id,
             ),
             &RevenueDistributionInstructionData::InitializeRewardsIntegration(

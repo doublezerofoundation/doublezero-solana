@@ -21,8 +21,6 @@ use solana_sdk::{
 // Setup.
 //
 
-const ADMIN_FUNDING_LAMPORTS: u64 = 1_000_000_000;
-
 struct InitializeRewardsIntegrationSetup {
     test_setup: common::ProgramTestWithOwner,
     admin_signer: Keypair,
@@ -33,12 +31,6 @@ async fn setup_for_initialize_rewards_integration() -> InitializeRewardsIntegrat
     let mut test_setup = common::start_test().await;
 
     let configured = test_setup.setup_configured_program().await.unwrap();
-
-    // Admin funds the new rewards integration PDA, so it needs lamports.
-    test_setup
-        .transfer_lamports(&configured.admin_signer.pubkey(), ADMIN_FUNDING_LAMPORTS)
-        .await
-        .unwrap();
 
     InitializeRewardsIntegrationSetup {
         test_setup,
@@ -102,14 +94,12 @@ async fn test_initialize_rewards_integration_unauthorized() {
     } = setup_for_initialize_rewards_integration().await;
 
     let impostor_signer = Keypair::new();
-    test_setup
-        .transfer_lamports(&impostor_signer.pubkey(), ADMIN_FUNDING_LAMPORTS)
-        .await
-        .unwrap();
+    let payer_key = test_setup.payer_signer().pubkey();
 
     let ix = build_initialize_rewards_integration_ix(
         InitializeRewardsIntegrationAccounts::new(
             &impostor_signer.pubkey(),
+            &payer_key,
             &integration_program_id,
         ),
         &integration_program_id,
@@ -139,10 +129,12 @@ async fn test_initialize_rewards_integration_not_executable() {
 
     // The 2Z mint exists in the test bank but is not executable.
     let non_executable_program_id = DOUBLEZERO_MINT_KEY;
+    let payer_key = test_setup.payer_signer().pubkey();
 
     let ix = build_initialize_rewards_integration_ix(
         InitializeRewardsIntegrationAccounts::new(
             &admin_signer.pubkey(),
+            &payer_key,
             &non_executable_program_id,
         ),
         &non_executable_program_id,
@@ -171,8 +163,12 @@ async fn test_initialize_rewards_integration_wrong_seeds() {
     } = setup_for_initialize_rewards_integration().await;
 
     // Overwrite the computed PDA with a random key.
-    let mut accounts =
-        InitializeRewardsIntegrationAccounts::new(&admin_signer.pubkey(), &integration_program_id);
+    let payer_key = test_setup.payer_signer().pubkey();
+    let mut accounts = InitializeRewardsIntegrationAccounts::new(
+        &admin_signer.pubkey(),
+        &payer_key,
+        &integration_program_id,
+    );
     accounts.new_rewards_integration_key = Pubkey::new_unique();
 
     let ix = build_initialize_rewards_integration_ix(accounts, &integration_program_id);
@@ -204,8 +200,13 @@ async fn test_initialize_rewards_integration_already_registered() {
         .await
         .unwrap();
 
+    let payer_key = test_setup.payer_signer().pubkey();
     let ix = build_initialize_rewards_integration_ix(
-        InitializeRewardsIntegrationAccounts::new(&admin_signer.pubkey(), &integration_program_id),
+        InitializeRewardsIntegrationAccounts::new(
+            &admin_signer.pubkey(),
+            &payer_key,
+            &integration_program_id,
+        ),
         &integration_program_id,
     );
 
@@ -216,5 +217,8 @@ async fn test_initialize_rewards_integration_already_registered() {
         .unwrap_simulation_error(&[ix], &[&admin_signer])
         .await
         .unwrap();
-    assert!(matches!(tx_err, TransactionError::InstructionError(0, _)));
+    assert_eq!(
+        tx_err,
+        TransactionError::InstructionError(0, InstructionError::Custom(0))
+    );
 }

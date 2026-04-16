@@ -48,7 +48,7 @@ use crate::{
 // allocated to each of those accounts.
 const _: () = assert!(size_of::<ContributorRewards>() == 600);
 const _: () = assert!(size_of::<Distribution>() == 448);
-const _: () = assert!(size_of::<RewardsIntegration>() == 72);
+const _: () = assert!(size_of::<RewardsIntegration>() == 176);
 const _: () = assert!(size_of::<SolanaValidatorDeposit>() == 96);
 
 solana_program_entrypoint::entrypoint!(try_process_instruction);
@@ -1780,20 +1780,26 @@ fn try_initialize_rewards_integration(
 
     // We expect the following accounts for this instruction:
     // - 0: Program config.
-    // - 1: Admin (also funds the new account).
-    // - 2: New rewards integration.
-    // - 3: Integration program (must be executable).
-    // - 4: System program.
+    // - 1: Admin.
+    // - 2: Payer (funder for new account).
+    // - 3: New rewards integration.
+    // - 4: Integration program (must be executable).
+    // - 5: System program.
     let mut accounts_iter = accounts.iter().enumerate();
 
     // Accounts 0 and 1 must be the program config and admin. This call ensures
     // that the admin is a signer and is the same admin encoded in the program
-    // config. The admin also funds the new rewards integration account.
-    let authorized_use =
+    // config.
+    let _authorized_use =
         VerifiedProgramAuthority::try_next_accounts(&mut accounts_iter, Authority::Admin)?;
-    let payer_info = authorized_use._authority.1;
 
-    // Account 2 must be the new rewards integration account. The create-account
+    // Account 2 must be a signer and writable because it will send lamports to
+    // the new rewards integration account. We do not check these fields because
+    // the create-account workflow requires that this account is writable and a
+    // signer.
+    let (_, payer_info) = try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+
+    // Account 3 must be the new rewards integration account. The create-account
     // workflow requires that this account does not exist yet and is writable.
     let (account_index, new_rewards_integration_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
@@ -1809,7 +1815,7 @@ fn try_initialize_rewards_integration(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    // Account 3 must be the integration program. Its pubkey must match the
+    // Account 4 must be the integration program. Its pubkey must match the
     // program ID carried in the instruction data and it must be executable.
     let (account_index, integration_program_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;

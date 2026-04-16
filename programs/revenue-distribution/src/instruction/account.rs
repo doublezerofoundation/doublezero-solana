@@ -1025,15 +1025,17 @@ impl From<WithdrawSolanaValidatorDepositAccounts> for Vec<AccountMeta> {
 pub struct InitializeRewardsIntegrationAccounts {
     pub program_config_key: Pubkey,
     pub admin_key: Pubkey,
+    pub payer_key: Pubkey,
     pub new_rewards_integration_key: Pubkey,
     pub integration_program_key: Pubkey,
 }
 
 impl InitializeRewardsIntegrationAccounts {
-    pub fn new(admin_key: &Pubkey, integration_program_id: &Pubkey) -> Self {
+    pub fn new(admin_key: &Pubkey, payer_key: &Pubkey, integration_program_id: &Pubkey) -> Self {
         Self {
             program_config_key: ProgramConfig::find_address().0,
             admin_key: *admin_key,
+            payer_key: *payer_key,
             new_rewards_integration_key: RewardsIntegration::find_address(integration_program_id).0,
             integration_program_key: *integration_program_id,
         }
@@ -1045,13 +1047,15 @@ impl From<InitializeRewardsIntegrationAccounts> for Vec<AccountMeta> {
         let InitializeRewardsIntegrationAccounts {
             program_config_key,
             admin_key,
+            payer_key,
             new_rewards_integration_key,
             integration_program_key,
         } = accounts;
 
         vec![
             AccountMeta::new_readonly(program_config_key, false),
-            AccountMeta::new(admin_key, true),
+            AccountMeta::new_readonly(admin_key, true),
+            AccountMeta::new(payer_key, true),
             AccountMeta::new(new_rewards_integration_key, false),
             AccountMeta::new_readonly(integration_program_key, false),
             AccountMeta::new_readonly(system_program::ID, false),
