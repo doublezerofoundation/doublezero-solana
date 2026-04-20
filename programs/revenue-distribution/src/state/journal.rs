@@ -35,7 +35,8 @@ pub struct Journal {
 
     pub lifetime_swapped_2z_amount: Uint<128, 2>,
 
-    pub integrations_count: u64,
+    pub integrations_count: u16,
+    _padding_1: [u8; 6],
 }
 
 impl PrecomputedDiscriminator for Journal {

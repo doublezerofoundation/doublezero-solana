@@ -885,15 +885,7 @@ fn try_initialize_distribution(accounts: &[AccountInfo]) -> ProgramResult {
     // `DistributeRewards` can later gate on "all of these integrations have
     // been collected from". New integrations registered after this point do
     // not retroactively block this distribution.
-    distribution.integrations_count_snapshot = journal
-        .integrations_count
-        .try_into()
-        .expect("Journal.integrations_count exceeds u32");
-
-    // NOTE: The Journal's 2Z token account (not ATA) is not used in this
-    // instruction. Its purpose is for prepaid 2Z payments when they are
-    // implemented (as opposed to the ATA, which is used for direct 2Z payments
-    // not enforceable onchain).
+    distribution.integrations_count_snapshot = journal.integrations_count.into();
 
     // Account 8 must be the journal's 2Z token account.
     let (_, _journal_2z_token_pda_info, _) = try_next_2z_token_pda_info(

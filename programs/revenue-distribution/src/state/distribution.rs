@@ -189,10 +189,11 @@ impl Distribution {
 
     /// Returns true once every integration that was registered at the time
     /// this distribution was initialized has had its contributor-share 2Z
-    /// collected. `DistributeRewards` gates on this.
+    /// collected. `DistributeRewards` gates on this. Uses `>=` so the gate
+    /// can't deadlock if the collected count ever drifts above the snapshot.
     #[inline]
     pub fn are_all_integrations_collected(&self) -> bool {
-        self.integrations_collected_count == self.integrations_count_snapshot
+        self.integrations_collected_count >= self.integrations_count_snapshot
     }
 
     #[inline]

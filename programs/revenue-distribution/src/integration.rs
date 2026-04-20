@@ -1,5 +1,10 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use doublezero_program_tools::account_info::{
+    try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts,
+};
+use solana_account_info::AccountInfo;
 use solana_instruction::AccountMeta;
+use solana_program_error::ProgramError;
 use solana_pubkey::Pubkey;
 
 /// Instructions rev-distr CPIs integration programs with. Integration
@@ -8,21 +13,34 @@ use solana_pubkey::Pubkey;
 pub enum IntegrationInstructionData {
     /// Transfer the epoch's contributor-share 2Z from the integration's
     /// bucket to the destination and flip `is_collected = true`. See
-    /// [`IntegrationAccounts`] for the account list.
+    /// [`WithdrawIntegrationRewardsAccounts`] for the account list.
+    ///
+    /// Two timing rules apply:
+    ///
+    /// - Admins must register the integration (via
+    ///   `InitializeRewardsIntegration`) **before** the target `Distribution`
+    ///   is initialized. Each `Distribution` snapshots the registry count at
+    ///   creation, so late-registered integrations are skipped for that
+    ///   epoch and any revenue they've already accumulated for it stays
+    ///   with the integration.
+    /// - Handlers must succeed on an empty bucket (zero-transfer). If
+    ///   rev-distr invokes this on an integration that hasn't yet
+    ///   accumulated revenue, the handler must still flip `is_collected`
+    ///   or `DistributeRewards` deadlocks.
     WithdrawIntegrationRewards,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IntegrationAccounts {
+pub struct WithdrawIntegrationRewardsAccounts {
     pub integration_distribution_key: Pubkey,
     pub integration_2z_bucket_key: Pubkey,
     pub destination_token_account_key: Pubkey,
     pub rev_distr_distribution_key: Pubkey,
 }
 
-impl From<IntegrationAccounts> for Vec<AccountMeta> {
-    fn from(accounts: IntegrationAccounts) -> Self {
-        let IntegrationAccounts {
+impl From<WithdrawIntegrationRewardsAccounts> for Vec<AccountMeta> {
+    fn from(accounts: WithdrawIntegrationRewardsAccounts) -> Self {
+        let WithdrawIntegrationRewardsAccounts {
             integration_distribution_key,
             integration_2z_bucket_key,
             destination_token_account_key,
@@ -35,6 +53,61 @@ impl From<IntegrationAccounts> for Vec<AccountMeta> {
             AccountMeta::new(destination_token_account_key, false),
             AccountMeta::new_readonly(rev_distr_distribution_key, true),
         ]
+    }
+}
+
+/// Handler-side view of [`WithdrawIntegrationRewardsAccounts`]. Integration
+/// programs peel this out of their `accounts_iter` in one call, which
+/// enforces the slot ordering and contract-level writable/signer flags.
+/// Integration-specific checks (PDA seed derivation, epoch match) are left
+/// to the caller.
+pub struct WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
+    pub integration_distribution: (usize, &'a AccountInfo<'b>),
+    pub integration_2z_bucket: (usize, &'a AccountInfo<'b>),
+    pub destination_token_account: (usize, &'a AccountInfo<'b>),
+    pub rev_distr_distribution: (usize, &'a AccountInfo<'b>),
+}
+
+impl<'a, 'b> TryNextAccounts<'a, 'b, ()> for WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
+    fn try_next_accounts(
+        accounts_iter: &mut EnumeratedAccountInfoIter<'a, 'b>,
+        _: (),
+    ) -> Result<Self, ProgramError> {
+        let integration_distribution = try_next_enumerated_account(
+            accounts_iter,
+            NextAccountOptions {
+                must_be_writable: true,
+                ..Default::default()
+            },
+        )?;
+        let integration_2z_bucket = try_next_enumerated_account(
+            accounts_iter,
+            NextAccountOptions {
+                must_be_writable: true,
+                ..Default::default()
+            },
+        )?;
+        let destination_token_account = try_next_enumerated_account(
+            accounts_iter,
+            NextAccountOptions {
+                must_be_writable: true,
+                ..Default::default()
+            },
+        )?;
+        let rev_distr_distribution = try_next_enumerated_account(
+            accounts_iter,
+            NextAccountOptions {
+                must_be_signer: true,
+                ..Default::default()
+            },
+        )?;
+
+        Ok(Self {
+            integration_distribution,
+            integration_2z_bucket,
+            destination_token_account,
+            rev_distr_distribution,
+        })
     }
 }
 
@@ -62,8 +135,8 @@ mod tests {
     }
 
     #[test]
-    fn integration_accounts_into_meta_preserves_order_and_flags() {
-        let accounts = IntegrationAccounts {
+    fn withdraw_integration_rewards_accounts_into_meta_preserves_order_and_flags() {
+        let accounts = WithdrawIntegrationRewardsAccounts {
             integration_distribution_key: Pubkey::new_unique(),
             integration_2z_bucket_key: Pubkey::new_unique(),
             destination_token_account_key: Pubkey::new_unique(),
