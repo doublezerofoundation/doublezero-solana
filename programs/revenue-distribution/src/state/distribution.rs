@@ -93,7 +93,28 @@ pub struct Distribution {
     pub solana_validator_write_off_count: u32,
 
     pub economic_burn_rate: BurnRate,
-    _padding_1: [u8; 16],
+
+    /// Snapshot of [Journal::integrations_count] taken at this distribution's
+    /// creation time. Fixes the set of integrations that must be collected
+    /// from before [DistributeRewards] can run for this epoch.
+    ///
+    /// [DistributeRewards]: crate::instruction::RevenueDistributionInstructionData::DistributeRewards
+    /// [Journal::integrations_count]: crate::state::Journal::integrations_count
+    pub integrations_count_snapshot: u32,
+
+    /// Number of integrations whose contributor-share 2Z has already been
+    /// pulled into this distribution via `CollectIntegrationRewards`. When
+    /// this equals [integrations_count_snapshot], `DistributeRewards` is
+    /// unblocked.
+    ///
+    /// [integrations_count_snapshot]: Self::integrations_count_snapshot
+    pub integrations_collected_count: u32,
+
+    /// Running total of 2Z collected from integrations for this epoch.
+    /// Folded into [total_collected_2z_tokens] for split math.
+    ///
+    /// [total_collected_2z_tokens]: Self::total_collected_2z_tokens
+    pub collected_2z_from_integrations: u64,
 
     _storage_gap: StorageGap<6>,
 }
@@ -175,6 +196,16 @@ impl Distribution {
         self.collected_prepaid_2z_payments
             .checked_add(self.collected_2z_converted_from_sol)
             .unwrap()
+            .checked_add(self.collected_2z_from_integrations)
+            .unwrap()
+    }
+
+    /// Returns true once every integration that was registered at the time
+    /// this distribution was initialized has had its contributor-share 2Z
+    /// collected. `DistributeRewards` gates on this.
+    #[inline]
+    pub fn are_all_integrations_collected(&self) -> bool {
+        self.integrations_collected_count == self.integrations_count_snapshot
     }
 
     #[inline]
@@ -347,9 +378,32 @@ mod tests {
         distribution.collected_2z_converted_from_sol = 200;
         assert_eq!(distribution.total_collected_2z_tokens(), 300);
 
+        distribution.collected_2z_from_integrations = 500;
+        assert_eq!(distribution.total_collected_2z_tokens(), 800);
+
         distribution.collected_prepaid_2z_payments = 50;
         distribution.collected_2z_converted_from_sol = 75;
-        assert_eq!(distribution.total_collected_2z_tokens(), 125);
+        distribution.collected_2z_from_integrations = 25;
+        assert_eq!(distribution.total_collected_2z_tokens(), 150);
+    }
+
+    #[test]
+    fn test_are_all_integrations_collected() {
+        let mut distribution = Distribution::default();
+        // Both counters default to 0 → gate open.
+        assert!(distribution.are_all_integrations_collected());
+
+        // Snapshot > collected → gate closed.
+        distribution.integrations_count_snapshot = 2;
+        assert!(!distribution.are_all_integrations_collected());
+
+        // Partial progress → still closed.
+        distribution.integrations_collected_count = 1;
+        assert!(!distribution.are_all_integrations_collected());
+
+        // All collected → gate open.
+        distribution.integrations_collected_count = 2;
+        assert!(distribution.are_all_integrations_collected());
     }
 
     #[test]

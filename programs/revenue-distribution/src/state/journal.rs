@@ -34,6 +34,8 @@ pub struct Journal {
     pub next_dz_epoch_to_sweep_tokens: DoubleZeroEpoch,
 
     pub lifetime_swapped_2z_amount: Uint<128, 2>,
+
+    pub integrations_count: u64,
 }
 
 impl PrecomputedDiscriminator for Journal {
