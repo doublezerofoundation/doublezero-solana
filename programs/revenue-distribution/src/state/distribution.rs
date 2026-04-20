@@ -94,26 +94,13 @@ pub struct Distribution {
 
     pub economic_burn_rate: BurnRate,
 
-    /// Snapshot of [Journal::integrations_count] taken at this distribution's
-    /// creation time. Fixes the set of integrations that must be collected
-    /// from before [DistributeRewards] can run for this epoch.
-    ///
-    /// [DistributeRewards]: crate::instruction::RevenueDistributionInstructionData::DistributeRewards
-    /// [Journal::integrations_count]: crate::state::Journal::integrations_count
+    /// Snapshot of `Journal.integrations_count` at init time.
     pub integrations_count_snapshot: u32,
 
-    /// Number of integrations whose contributor-share 2Z has already been
-    /// pulled into this distribution via `CollectIntegrationRewards`. When
-    /// this equals [integrations_count_snapshot], `DistributeRewards` is
-    /// unblocked.
-    ///
-    /// [integrations_count_snapshot]: Self::integrations_count_snapshot
+    /// Number of integrations already collected this epoch. When equal to
+    /// `integrations_count_snapshot`, `DistributeRewards` is unblocked.
     pub integrations_collected_count: u32,
 
-    /// Running total of 2Z collected from integrations for this epoch.
-    /// Folded into [total_collected_2z_tokens] for split math.
-    ///
-    /// [total_collected_2z_tokens]: Self::total_collected_2z_tokens
     pub collected_2z_from_integrations: u64,
 
     _storage_gap: StorageGap<6>,
