@@ -15,7 +15,9 @@ pub struct Journal {
 
     /// Cache this seed to validate token PDA address.
     pub token_2z_pda_bump_seed: u8,
-    _padding: [u8; 6],
+
+    pub integrations_count: u16,
+    _padding: [u8; 4],
 
     pub total_sol_balance: u64,
 
@@ -34,9 +36,6 @@ pub struct Journal {
     pub next_dz_epoch_to_sweep_tokens: DoubleZeroEpoch,
 
     pub lifetime_swapped_2z_amount: Uint<128, 2>,
-
-    pub integrations_count: u16,
-    _padding_1: [u8; 6],
 }
 
 impl PrecomputedDiscriminator for Journal {

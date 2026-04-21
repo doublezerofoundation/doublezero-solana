@@ -1,11 +1,17 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use doublezero_program_tools::account_info::{
-    try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts,
+use doublezero_program_tools::{
+    account_info::{
+        try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts,
+    },
+    zero_copy::ZeroCopyAccount,
 };
 use solana_account_info::AccountInfo;
 use solana_instruction::AccountMeta;
+use solana_msg::msg;
 use solana_program_error::ProgramError;
 use solana_pubkey::Pubkey;
+
+use crate::state::Distribution;
 
 /// Instructions rev-distr CPIs integration programs with. Integration
 /// programs deserialize this before their own instruction enum.
@@ -35,7 +41,7 @@ pub struct WithdrawIntegrationRewardsAccounts {
     pub integration_distribution_key: Pubkey,
     pub integration_2z_bucket_key: Pubkey,
     pub destination_token_account_key: Pubkey,
-    pub rev_distr_distribution_key: Pubkey,
+    pub parent_distribution_key: Pubkey,
 }
 
 impl From<WithdrawIntegrationRewardsAccounts> for Vec<AccountMeta> {
@@ -44,14 +50,14 @@ impl From<WithdrawIntegrationRewardsAccounts> for Vec<AccountMeta> {
             integration_distribution_key,
             integration_2z_bucket_key,
             destination_token_account_key,
-            rev_distr_distribution_key,
+            parent_distribution_key,
         } = accounts;
 
         vec![
             AccountMeta::new(integration_distribution_key, false),
             AccountMeta::new(integration_2z_bucket_key, false),
             AccountMeta::new(destination_token_account_key, false),
-            AccountMeta::new_readonly(rev_distr_distribution_key, true),
+            AccountMeta::new_readonly(parent_distribution_key, true),
         ]
     }
 }
@@ -62,10 +68,10 @@ impl From<WithdrawIntegrationRewardsAccounts> for Vec<AccountMeta> {
 /// Integration-specific checks (PDA seed derivation, epoch match) are left
 /// to the caller.
 pub struct WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
-    pub integration_distribution: (usize, &'a AccountInfo<'b>),
-    pub integration_2z_bucket: (usize, &'a AccountInfo<'b>),
-    pub destination_token_account: (usize, &'a AccountInfo<'b>),
-    pub rev_distr_distribution: (usize, &'a AccountInfo<'b>),
+    pub integration_distribution_info: (usize, &'a AccountInfo<'b>),
+    pub integration_2z_bucket_info: (usize, &'a AccountInfo<'b>),
+    pub destination_token_account_info: (usize, &'a AccountInfo<'b>),
+    pub parent_distribution: ZeroCopyAccount<'a, 'b, Distribution>,
 }
 
 impl<'a, 'b> TryNextAccounts<'a, 'b, ()> for WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
@@ -73,40 +79,39 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, ()> for WithdrawIntegrationRewardsHandlerAc
         accounts_iter: &mut EnumeratedAccountInfoIter<'a, 'b>,
         _: (),
     ) -> Result<Self, ProgramError> {
-        let integration_distribution = try_next_enumerated_account(
+        let integration_distribution_info = try_next_enumerated_account(
             accounts_iter,
             NextAccountOptions {
                 must_be_writable: true,
                 ..Default::default()
             },
         )?;
-        let integration_2z_bucket = try_next_enumerated_account(
+        let integration_2z_bucket_info = try_next_enumerated_account(
             accounts_iter,
             NextAccountOptions {
                 must_be_writable: true,
                 ..Default::default()
             },
         )?;
-        let destination_token_account = try_next_enumerated_account(
+        let destination_token_account_info = try_next_enumerated_account(
             accounts_iter,
             NextAccountOptions {
                 must_be_writable: true,
                 ..Default::default()
             },
         )?;
-        let rev_distr_distribution = try_next_enumerated_account(
-            accounts_iter,
-            NextAccountOptions {
-                must_be_signer: true,
-                ..Default::default()
-            },
-        )?;
+        let parent_distribution =
+            ZeroCopyAccount::<Distribution>::try_next_accounts(accounts_iter, Some(&crate::ID))?;
+        if !parent_distribution.info.is_signer {
+            msg!("Account {} must be signer", parent_distribution.index);
+            return Err(ProgramError::MissingRequiredSignature);
+        }
 
         Ok(Self {
-            integration_distribution,
-            integration_2z_bucket,
-            destination_token_account,
-            rev_distr_distribution,
+            integration_distribution_info,
+            integration_2z_bucket_info,
+            destination_token_account_info,
+            parent_distribution,
         })
     }
 }
@@ -140,13 +145,13 @@ mod tests {
             integration_distribution_key: Pubkey::new_unique(),
             integration_2z_bucket_key: Pubkey::new_unique(),
             destination_token_account_key: Pubkey::new_unique(),
-            rev_distr_distribution_key: Pubkey::new_unique(),
+            parent_distribution_key: Pubkey::new_unique(),
         };
         let keys = [
             accounts.integration_distribution_key,
             accounts.integration_2z_bucket_key,
             accounts.destination_token_account_key,
-            accounts.rev_distr_distribution_key,
+            accounts.parent_distribution_key,
         ];
 
         let metas: Vec<AccountMeta> = accounts.into();

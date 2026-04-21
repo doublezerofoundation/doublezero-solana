@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- scaffold rev-distr for integration harvesting (#1057)
+- scaffold integration harvesting (#115)
 - register rewards integrations (#113)
 
 ## [v0.3.4]

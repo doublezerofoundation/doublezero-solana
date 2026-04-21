@@ -95,11 +95,12 @@ pub struct Distribution {
     pub economic_burn_rate: BurnRate,
 
     /// Snapshot of `Journal.integrations_count` at init time.
-    pub integrations_count_snapshot: u32,
+    pub integrations_count_snapshot: u16,
 
     /// Number of integrations already collected this epoch. When equal to
     /// `integrations_count_snapshot`, `DistributeRewards` is unblocked.
-    pub integrations_collected_count: u32,
+    pub integrations_collected_count: u16,
+    _padding_1: [u8; 4],
 
     pub collected_2z_from_integrations: u64,
 
