@@ -5,7 +5,10 @@ use doublezero_program_tools::{
     zero_copy::{self, ZeroCopyMutAccount},
 };
 use doublezero_revenue_distribution::{
-    integration::{IntegrationInstructionData, WithdrawIntegrationRewardsHandlerAccounts},
+    integration::{
+        IntegrationInstructionData, WithdrawIntegrationRewardsHandlerAccounts,
+        INTEGRATION_DISTRIBUTION_SEED_PREFIX,
+    },
     types::DoubleZeroEpoch,
 };
 use solana_account_info::AccountInfo;
@@ -80,7 +83,7 @@ fn try_initialize_integration_distribution(
         Invoker::Pda {
             key: &expected_key,
             signer_seeds: &[
-                MockIntegrationDistribution::SEED_PREFIX,
+                INTEGRATION_DISTRIBUTION_SEED_PREFIX,
                 &dz_epoch.as_seed(),
                 &[bump_seed],
             ],
@@ -166,7 +169,7 @@ fn try_withdraw_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         &token_transfer_ix,
         accounts,
         &[&[
-            MockIntegrationDistribution::SEED_PREFIX,
+            INTEGRATION_DISTRIBUTION_SEED_PREFIX,
             &dz_epoch.as_seed(),
             &[bump_seed],
         ]],

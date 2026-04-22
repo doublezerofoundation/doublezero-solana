@@ -3,7 +3,9 @@ use doublezero_program_tools::{
     types::{Flags, StorageGap},
     Discriminator, PrecomputedDiscriminator,
 };
-use doublezero_revenue_distribution::types::DoubleZeroEpoch;
+use doublezero_revenue_distribution::{
+    integration::INTEGRATION_DISTRIBUTION_SEED_PREFIX, types::DoubleZeroEpoch,
+};
 use solana_pubkey::Pubkey;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Pod, Zeroable)]
@@ -26,9 +28,10 @@ impl PrecomputedDiscriminator for MockIntegrationDistribution {
 }
 
 impl MockIntegrationDistribution {
-    pub const SEED_PREFIX: &'static [u8] = b"mock_integration_distribution";
-
     pub fn find_address(dz_epoch: DoubleZeroEpoch) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&[Self::SEED_PREFIX, &dz_epoch.as_seed()], &crate::ID)
+        Pubkey::find_program_address(
+            &[INTEGRATION_DISTRIBUTION_SEED_PREFIX, &dz_epoch.as_seed()],
+            &crate::ID,
+        )
     }
 }

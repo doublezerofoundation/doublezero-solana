@@ -13,6 +13,10 @@ use solana_pubkey::Pubkey;
 
 use crate::state::Distribution;
 
+/// Seed prefix every integration program must use for its per-epoch
+/// "integration distribution" PDA (seeded as `[PREFIX, dz_epoch.as_seed()]`).
+pub const INTEGRATION_DISTRIBUTION_SEED_PREFIX: &[u8] = b"integration_distribution";
+
 /// Instructions rev-distr CPIs integration programs with. Integration
 /// programs deserialize this before their own instruction enum.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
@@ -58,6 +62,7 @@ impl From<WithdrawIntegrationRewardsAccounts> for Vec<AccountMeta> {
             AccountMeta::new(integration_2z_bucket_key, false),
             AccountMeta::new(destination_token_account_key, false),
             AccountMeta::new_readonly(parent_distribution_key, true),
+            AccountMeta::new_readonly(spl_token_interface::ID, false),
         ]
     }
 }
@@ -152,10 +157,11 @@ mod tests {
             accounts.integration_2z_bucket_key,
             accounts.destination_token_account_key,
             accounts.parent_distribution_key,
+            spl_token_interface::ID,
         ];
 
         let metas: Vec<AccountMeta> = accounts.into();
-        assert_eq!(metas.len(), 4);
+        assert_eq!(metas.len(), 5);
         for (i, meta) in metas.iter().enumerate() {
             assert_eq!(meta.pubkey, keys[i]);
         }
@@ -169,5 +175,9 @@ mod tests {
         // Slot 3 (rev-distr Distribution) is read-only signer.
         assert!(!metas[3].is_writable);
         assert!(metas[3].is_signer);
+
+        // Slot 4 (SPL Token program) is read-only, not signer.
+        assert!(!metas[4].is_writable);
+        assert!(!metas[4].is_signer);
     }
 }

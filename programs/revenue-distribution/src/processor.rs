@@ -1895,10 +1895,12 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
     // - 1: Distribution (writable).
     // - 2: Rewards integration (whitelist entry for the target integration).
     // - 3: Integration's distribution account (writable, opaque to rev-distr).
-    // - 4: Integration's 2Z bucket (writable, the source of the transfer).
+    // - 4: Integration's 2Z bucket (writable).
     // - 5: Destination 2Z token account (writable, the distribution's 2Z PDA).
-    // - 6: Integration program (executable, must match
-    //      rewards_integration.program_id).
+    // - 6: Integration program (CPI target; required by the runtime when the
+    //      CPI below runs — no check needed here).
+    // - 7: SPL Token program (required so the integration's own token CPI
+    //      can resolve).
     let mut accounts_iter = accounts.iter().enumerate();
 
     let program_config =
@@ -1909,8 +1911,8 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         ZeroCopyMutAccount::<Distribution>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Refuse once every registered integration has already been collected
-    // for this epoch (`integrations_collected_count == integrations_count_snapshot`).
-    if distribution.integrations_collected_count >= distribution.integrations_count_snapshot {
+    // for this epoch.
+    if distribution.are_all_integrations_collected() {
         msg!("All integrations already collected for this epoch");
         return Err(ProgramError::InvalidAccountData);
     }
@@ -1923,23 +1925,12 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         ZeroCopyAccount::<RewardsIntegration>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
     // Accounts 3 and 4 are opaque to rev-distr and forwarded to the CPI. The
-    // integration enforces its own layout on these slots. They must be
-    // writable because the integration will mutate its own distribution and
-    // drain the bucket.
-    let (_, integration_distribution_info) = try_next_enumerated_account(
-        &mut accounts_iter,
-        NextAccountOptions {
-            must_be_writable: true,
-            ..Default::default()
-        },
-    )?;
-    let (_, integration_2z_bucket_info) = try_next_enumerated_account(
-        &mut accounts_iter,
-        NextAccountOptions {
-            must_be_writable: true,
-            ..Default::default()
-        },
-    )?;
+    // integration enforces its own layout on these slots. The outer ix's
+    // AccountMeta already declares them writable — no need to re-check here.
+    let (_, integration_distribution_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
+    let (_, integration_2z_bucket_info) =
+        try_next_enumerated_account(&mut accounts_iter, Default::default())?;
 
     // Account 5 must be this distribution's 2Z token PDA.
     let (_, destination_token_account_info, _) = try_next_2z_token_pda_info(
@@ -1949,22 +1940,10 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         Some(distribution.token_2z_pda_bump_seed),
     )?;
 
-    // Account 6 must be the integration program (CPI target). Its key must
-    // match the whitelisted program ID.
-    let (account_index, integration_program_info) = try_next_enumerated_account(
-        &mut accounts_iter,
-        NextAccountOptions {
-            must_be_executable: true,
-            ..Default::default()
-        },
-    )?;
-    if integration_program_info.key != &rewards_integration.program_id {
-        msg!(
-            "Integration program key mismatch (account {})",
-            account_index
-        );
-        return Err(ProgramError::InvalidAccountData);
-    }
+    // The integration program is passed as account 6 (so the CPI below can
+    // resolve it) but rev-distr doesn't need to read it — an incorrect or
+    // missing program would make `invoke_signed_unchecked` fail with
+    // `MissingAccount`.
 
     // Snapshot destination balance pre-CPI so we can measure the transferred
     // amount via delta.
@@ -1973,28 +1952,17 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
     )?
     .amount;
 
-    // Build the CPI AccountMeta list from the shared 4-account interface,
-    // then append the SPL Token program as a trailing read-only slot. The
-    // integration's typed view still peels the first four via
-    // `WithdrawIntegrationRewardsHandlerAccounts`; the trailing slot only
-    // exists so the integration's own SPL Token CPI can resolve the program.
-    let mut withdraw_ix_accounts: Vec<solana_instruction::AccountMeta> =
+    let withdraw_ix = try_build_instruction(
+        &rewards_integration.program_id,
         WithdrawIntegrationRewardsAccounts {
             integration_distribution_key: *integration_distribution_info.key,
             integration_2z_bucket_key: *integration_2z_bucket_info.key,
             destination_token_account_key: *destination_token_account_info.key,
             parent_distribution_key: *distribution.info.key,
-        }
-        .into();
-    withdraw_ix_accounts.push(solana_instruction::AccountMeta::new_readonly(
-        spl_token_interface::ID,
-        false,
-    ));
-    let withdraw_ix = solana_instruction::Instruction {
-        program_id: rewards_integration.program_id,
-        accounts: withdraw_ix_accounts,
-        data: borsh::to_vec(&IntegrationInstructionData::WithdrawIntegrationRewards).unwrap(),
-    };
+        },
+        &IntegrationInstructionData::WithdrawIntegrationRewards,
+    )
+    .unwrap();
 
     let distribution_signer_seeds = &[
         Distribution::SEED_PREFIX,
