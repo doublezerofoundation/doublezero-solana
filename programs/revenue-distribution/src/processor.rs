@@ -1917,16 +1917,29 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // The zero-copy deserialize here doubles as the whitelist check: owner +
-    // discriminator prove the account was created via
-    // `InitializeRewardsIntegration`, which in turn means
-    // `rewards_integration.program_id` is trusted.
     let rewards_integration =
         ZeroCopyAccount::<RewardsIntegration>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
 
+    let registration_index = rewards_integration.registration_index;
+    let already_collected = distribution
+        .checked_is_integration_collected(registration_index)
+        .ok_or_else(|| {
+            msg!(
+                "Integration registration index {} exceeds bitmap capacity",
+                registration_index
+            );
+            ProgramError::InvalidAccountData
+        })?;
+    if already_collected {
+        msg!(
+            "Integration {} already collected this epoch",
+            rewards_integration.program_id
+        );
+        return Err(ProgramError::InvalidAccountData);
+    }
+
     // Accounts 3 and 4 are opaque to rev-distr and forwarded to the CPI. The
-    // integration enforces its own layout on these slots. The outer ix's
-    // AccountMeta already declares them writable — no need to re-check here.
+    // integration enforces its own layout on these slots.
     let (_, integration_distribution_info) =
         try_next_enumerated_account(&mut accounts_iter, Default::default())?;
     let (_, integration_2z_bucket_info) =
@@ -1939,11 +1952,6 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         "distribution's",
         Some(distribution.token_2z_pda_bump_seed),
     )?;
-
-    // The integration program is passed as account 6 (so the CPI below can
-    // resolve it) but rev-distr doesn't need to read it — an incorrect or
-    // missing program would make `invoke_signed_unchecked` fail with
-    // `MissingAccount`.
 
     // Snapshot destination balance pre-CPI so we can measure the transferred
     // amount via delta.
@@ -1988,6 +1996,15 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
         .integrations_collected_count
         .checked_add(1)
         .expect("Distribution.integrations_collected_count overflowed");
+    distribution
+        .checked_set_integration_collected(registration_index)
+        .ok_or_else(|| {
+            msg!(
+                "Integration registration index {} exceeds bitmap capacity",
+                registration_index
+            );
+            ProgramError::InvalidAccountData
+        })?;
 
     msg!(
         "Collected {} 2Z from integration {}",

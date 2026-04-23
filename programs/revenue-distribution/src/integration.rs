@@ -22,21 +22,15 @@ pub const INTEGRATION_DISTRIBUTION_SEED_PREFIX: &[u8] = b"integration_distributi
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub enum IntegrationInstructionData {
     /// Transfer the epoch's contributor-share 2Z from the integration's
-    /// bucket to the destination and flip `is_collected = true`. See
-    /// [`WithdrawIntegrationRewardsAccounts`] for the account list.
+    /// bucket to the destination. See [`WithdrawIntegrationRewardsAccounts`]
+    /// for the account list.
     ///
-    /// Two timing rules apply:
-    ///
-    /// - Admins must register the integration (via
-    ///   `InitializeRewardsIntegration`) **before** the target `Distribution`
-    ///   is initialized. Each `Distribution` snapshots the registry count at
-    ///   creation, so late-registered integrations are skipped for that
-    ///   epoch and any revenue they've already accumulated for it stays
-    ///   with the integration.
-    /// - Handlers must succeed on an empty bucket (zero-transfer). If
-    ///   rev-distr invokes this on an integration that hasn't yet
-    ///   accumulated revenue, the handler must still flip `is_collected`
-    ///   or `DistributeRewards` deadlocks.
+    /// Admins must register the integration (via
+    /// `InitializeRewardsIntegration`) **before** the target `Distribution`
+    /// is initialized. Each `Distribution` snapshots the registry count at
+    /// creation, so late-registered integrations are skipped for that epoch
+    /// and any revenue they've already accumulated for it stays with the
+    /// integration.
     WithdrawIntegrationRewards,
 }
 

@@ -2,7 +2,7 @@ use borsh::BorshDeserialize;
 use doublezero_program_tools::{
     account_info::{try_next_enumerated_account, TryNextAccounts},
     recipe::{create_account::try_create_account, Invoker},
-    zero_copy::{self, ZeroCopyMutAccount},
+    zero_copy::{self, ZeroCopyAccount},
 };
 use doublezero_revenue_distribution::{
     integration::{
@@ -121,8 +121,8 @@ fn try_withdraw_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
     let (_, destination_token_account_info) = interface.destination_token_account_info;
     let parent_distribution = interface.parent_distribution;
 
-    let mut integration_distribution =
-        ZeroCopyMutAccount::<MockIntegrationDistribution>::try_from_account_info(
+    let integration_distribution =
+        ZeroCopyAccount::<MockIntegrationDistribution>::try_from_account_info(
             integration_distribution_index,
             integration_distribution_info,
             Some(&ID),
@@ -133,13 +133,6 @@ fn try_withdraw_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
             "DZ epoch mismatch: integration={}, parent={}",
             integration_distribution.dz_epoch,
             parent_distribution.dz_epoch,
-        );
-        return Err(ProgramError::InvalidAccountData);
-    }
-    if integration_distribution.is_collected != 0 {
-        msg!(
-            "Integration already collected for DZ epoch {}",
-            integration_distribution.dz_epoch,
         );
         return Err(ProgramError::InvalidAccountData);
     }
@@ -174,8 +167,6 @@ fn try_withdraw_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
             &[bump_seed],
         ]],
     )?;
-
-    integration_distribution.is_collected = 1;
 
     msg!(
         "Integration transferred {} 2Z for DZ epoch {}",

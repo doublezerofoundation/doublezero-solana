@@ -38,18 +38,8 @@ async fn setup_for_collect_integration_rewards() -> CollectIntegrationRewardsSet
 
     let configured = test_setup.setup_configured_program().await.unwrap();
 
-    // Register two integrations so the distribution's
-    // `integrations_count_snapshot` is 2. This ensures a second collect of
-    // the same integration triggers the integration's own `is_collected`
-    // check (tested below) rather than rev-distr's saturation gate.
-    // `mock_swap_sol_2z` is never actually collected — it's just registered
-    // to bump the counter.
     test_setup
         .initialize_rewards_integration(&configured.admin_signer, &mock_rewards_integration::ID)
-        .await
-        .unwrap();
-    test_setup
-        .initialize_rewards_integration(&configured.admin_signer, &mock_swap_sol_2z::ID)
         .await
         .unwrap();
 
@@ -230,8 +220,8 @@ async fn test_cannot_collect_integration_rewards_when_epoch_mismatched() {
 }
 
 //
-// Second collect for the same (epoch, integration) is rejected by the
-// integration's `is_collected` flag — the error bubbles up.
+// Second collect for the same (epoch, integration) is rejected by rev-distr's
+// bitmap check.
 //
 
 #[tokio::test]

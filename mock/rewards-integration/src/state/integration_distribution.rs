@@ -12,9 +12,8 @@ use solana_pubkey::Pubkey;
 #[repr(C, align(8))]
 pub struct MockIntegrationDistribution {
     pub dz_epoch: DoubleZeroEpoch,
-    pub is_collected: u8,
     pub bump_seed: u8,
-    _padding: [u8; 6],
+    _padding: [u8; 7],
 
     // Reserved for future flags.
     _flags: Flags,
