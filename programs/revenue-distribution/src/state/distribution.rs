@@ -2,10 +2,10 @@ use std::ops::Range;
 
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{
-    bitmap,
     types::{Flags, StorageGap},
     {Discriminator, PrecomputedDiscriminator},
 };
+use ruint::Uint;
 use solana_pubkey::Pubkey;
 use svm_hash::sha2::Hash;
 
@@ -101,13 +101,14 @@ pub struct Distribution {
     /// Number of integrations already collected this epoch. When equal to
     /// `integrations_count_snapshot`, `DistributeRewards` is unblocked.
     pub integrations_collected_count: u16,
+    _padding_1: [u8; 4],
 
     /// Indexed by `RewardsIntegration.registration_index`.
-    pub collected_integrations_bitmap: [u8; 4],
+    pub collected_integrations_bitmap: Uint<512, 8>,
 
     pub collected_2z_from_integrations: u64,
 
-    _storage_gap: StorageGap<6>,
+    _storage_gap: StorageGap<4>,
 }
 
 impl PrecomputedDiscriminator for Distribution {
@@ -202,16 +203,13 @@ impl Distribution {
 
     #[inline]
     pub fn is_integration_collected(&self, index: u16) -> bool {
-        bitmap::bit_at(&self.collected_integrations_bitmap, index as usize).unwrap_or(false)
+        self.collected_integrations_bitmap.bit(index as usize)
     }
 
     #[inline]
     pub fn set_integration_collected(&mut self, index: u16) {
-        let _ = bitmap::set_bit_at(
-            &mut self.collected_integrations_bitmap,
-            index as usize,
-            true,
-        );
+        self.collected_integrations_bitmap
+            .set_bit(index as usize, true);
     }
 
     #[inline]
@@ -416,22 +414,20 @@ mod tests {
     fn test_integration_bitmap_helpers() {
         let mut distribution = Distribution::default();
 
-        for idx in 0..32 {
+        for idx in [0u16, 1, 127, 255, 383, 511] {
             assert!(!distribution.is_integration_collected(idx));
         }
 
-        for idx in [0u16, 7, 8, 15, 16, 23, 24, 31] {
+        for idx in [0u16, 7, 63, 64, 127, 255, 256, 383, 511] {
             distribution.set_integration_collected(idx);
             assert!(distribution.is_integration_collected(idx));
         }
 
-        for idx in [1u16, 6, 9, 14, 17, 22, 25, 30] {
+        for idx in [6u16, 62, 65, 126, 257, 382, 510] {
             assert!(!distribution.is_integration_collected(idx));
         }
 
-        distribution.set_integration_collected(32);
-        distribution.set_integration_collected(u16::MAX);
-        assert!(!distribution.is_integration_collected(32));
+        assert!(!distribution.is_integration_collected(512));
         assert!(!distribution.is_integration_collected(u16::MAX));
     }
 

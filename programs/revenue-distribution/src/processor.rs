@@ -4,7 +4,6 @@ use doublezero_program_tools::{
         try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions,
         TryNextAccounts, UpgradeAuthority,
     },
-    bitmap,
     instruction::try_build_instruction,
     recipe::{
         create_account::{try_create_account, CreateAccountOptions},
@@ -37,7 +36,7 @@ use crate::{
         ProgramConfig, RecipientShare, RecipientShares, RelayParameters, RewardsIntegration,
         SolanaValidatorDeposit, SolanaValidatorFeeParameters,
     },
-    types::{BurnRate, RewardShare, SolanaValidatorDebt, ValidatorFee},
+    types::{BurnRate, ByteFlags, RewardShare, SolanaValidatorDebt, ValidatorFee},
     DOUBLEZERO_MINT_KEY, ID,
 };
 
@@ -1864,12 +1863,15 @@ fn try_initialize_rewards_integration(
         Default::default(),
     )?;
 
+    // Initialize the rewards integration with the bump seed and the
+    // integration program ID.
     let (mut rewards_integration, _) =
         zero_copy::try_initialize::<RewardsIntegration>(new_rewards_integration_info)?;
     rewards_integration.bump_seed = rewards_integration_bump;
     rewards_integration.program_id = integration_program_id;
 
-    // Account 5 must be the journal.
+    // Account 5 must be the journal. We uptick its integrations counter so
+    // that distributions created from here on will snapshot the new total.
     let mut journal =
         ZeroCopyMutAccount::<Journal>::try_next_accounts(&mut accounts_iter, Some(&ID))?;
     rewards_integration.registration_index = journal.integrations_count;
@@ -3138,13 +3140,26 @@ fn try_process_remaining_data_leaf_index(
     processed_leaf_data: &mut [u8],
     leaf_index: u32,
 ) -> ProgramResult {
-    let leaf_index = leaf_index as usize;
+    // Calculate which byte contains the bit for this leaf index
+    // (8 bits per byte, so divide by 8)
+    let leaf_byte_index = leaf_index as usize / 8;
 
-    let already_processed = bitmap::bit_at(processed_leaf_data, leaf_index).ok_or_else(|| {
-        msg!("Invalid leaf index");
-        ProgramError::InvalidInstructionData
-    })?;
-    if already_processed {
+    // First, we have to grab the relevant byte from the processed data.
+    let leaf_byte_ref = processed_leaf_data
+        .get_mut(leaf_byte_index)
+        .ok_or_else(|| {
+            msg!("Invalid leaf index");
+            ProgramError::InvalidInstructionData
+        })?;
+
+    // Create ByteFlags from the byte value to check the bit.
+    let mut leaf_byte = ByteFlags::new(*leaf_byte_ref);
+
+    // Calculate which bit within the byte corresponds to this leaf
+    // (modulo 8 gives us the bit position within the byte: 0-7)
+    let leaf_bit = leaf_index as usize % 8;
+
+    if leaf_byte.bit(leaf_bit) {
         msg!(
             "Merkle leaf index {} has already been processed",
             leaf_index
@@ -3152,7 +3167,10 @@ fn try_process_remaining_data_leaf_index(
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let _ = bitmap::set_bit_at(processed_leaf_data, leaf_index, true);
+    // Set the bit to true to indicate that the leaf has been processed.
+    // This prevents replay attacks using the same merkle proof.
+    leaf_byte.set_bit(leaf_bit, true);
+    *leaf_byte_ref = leaf_byte.into();
 
     Ok(())
 }

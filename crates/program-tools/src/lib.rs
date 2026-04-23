@@ -1,6 +1,5 @@
 #[cfg(feature = "entrypoint")]
 pub mod account_info;
-pub mod bitmap;
 pub mod instruction;
 #[cfg(feature = "entrypoint")]
 pub mod recipe;
