@@ -202,14 +202,22 @@ impl Distribution {
     }
 
     #[inline]
-    pub fn is_integration_collected(&self, index: u16) -> bool {
-        self.collected_integrations_bitmap.bit(index as usize)
+    pub fn checked_is_integration_collected(&self, index: u16) -> Option<bool> {
+        let idx = index as usize;
+        if idx >= Uint::<512, 8>::BITS {
+            return None;
+        }
+        Some(self.collected_integrations_bitmap.bit(idx))
     }
 
     #[inline]
-    pub fn set_integration_collected(&mut self, index: u16) {
-        self.collected_integrations_bitmap
-            .set_bit(index as usize, true);
+    pub fn checked_set_integration_collected(&mut self, index: u16) -> Option<()> {
+        let idx = index as usize;
+        if idx >= Uint::<512, 8>::BITS {
+            return None;
+        }
+        self.collected_integrations_bitmap.set_bit(idx, true);
+        Some(())
     }
 
     #[inline]
@@ -415,20 +423,40 @@ mod tests {
         let mut distribution = Distribution::default();
 
         for idx in [0u16, 1, 127, 255, 383, 511] {
-            assert!(!distribution.is_integration_collected(idx));
+            assert_eq!(
+                distribution.checked_is_integration_collected(idx),
+                Some(false)
+            );
         }
 
         for idx in [0u16, 7, 63, 64, 127, 255, 256, 383, 511] {
-            distribution.set_integration_collected(idx);
-            assert!(distribution.is_integration_collected(idx));
+            assert_eq!(
+                distribution.checked_set_integration_collected(idx),
+                Some(())
+            );
+            assert_eq!(
+                distribution.checked_is_integration_collected(idx),
+                Some(true)
+            );
         }
 
         for idx in [6u16, 62, 65, 126, 257, 382, 510] {
-            assert!(!distribution.is_integration_collected(idx));
+            assert_eq!(
+                distribution.checked_is_integration_collected(idx),
+                Some(false)
+            );
         }
 
-        assert!(!distribution.is_integration_collected(512));
-        assert!(!distribution.is_integration_collected(u16::MAX));
+        assert_eq!(distribution.checked_is_integration_collected(512), None);
+        assert_eq!(
+            distribution.checked_is_integration_collected(u16::MAX),
+            None
+        );
+        assert_eq!(distribution.checked_set_integration_collected(512), None);
+        assert_eq!(
+            distribution.checked_set_integration_collected(u16::MAX),
+            None
+        );
     }
 
     #[test]
