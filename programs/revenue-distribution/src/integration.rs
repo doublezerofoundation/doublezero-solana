@@ -1,9 +1,12 @@
+use std::io;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use doublezero_program_tools::{
     account_info::{
         try_next_enumerated_account, EnumeratedAccountInfoIter, NextAccountOptions, TryNextAccounts,
     },
     zero_copy::ZeroCopyAccount,
+    Discriminator, DISCRIMINATOR_LEN,
 };
 use solana_account_info::AccountInfo;
 use solana_instruction::AccountMeta;
@@ -17,9 +20,34 @@ use crate::state::Distribution;
 /// "integration distribution" PDA (seeded as `[PREFIX, dz_epoch.as_seed()]`).
 pub const INTEGRATION_DISTRIBUTION_SEED_PREFIX: &[u8] = b"integration_distribution";
 
+/// Derivation of an integration's per-epoch distribution PDA.
+pub fn find_integration_distribution_address(
+    integration_program_id: &Pubkey,
+    dz_epoch: crate::types::DoubleZeroEpoch,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[INTEGRATION_DISTRIBUTION_SEED_PREFIX, &dz_epoch.as_seed()],
+        integration_program_id,
+    )
+}
+
+/// Derivation of an integration's 2Z bucket PDA.
+pub fn find_integration_bucket_address(
+    integration_program_id: &Pubkey,
+    integration_distribution_key: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            crate::state::TOKEN_2Z_PDA_SEED_PREFIX,
+            integration_distribution_key.as_ref(),
+        ],
+        integration_program_id,
+    )
+}
+
 /// Instructions rev-distr CPIs integration programs with. Integration
 /// programs deserialize this before their own instruction enum.
-#[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IntegrationInstructionData {
     /// Transfer the epoch's contributor-share 2Z from the integration's
     /// bucket to the destination. See [`WithdrawIntegrationRewardsAccounts`]
@@ -32,6 +60,33 @@ pub enum IntegrationInstructionData {
     /// and any revenue they've already accumulated for it stays with the
     /// integration.
     WithdrawIntegrationRewards,
+}
+
+impl IntegrationInstructionData {
+    pub const WITHDRAW_INTEGRATION_REWARDS: Discriminator<DISCRIMINATOR_LEN> =
+        Discriminator::new_sha2(b"dz::integration_ix::withdraw_integration_rewards");
+}
+
+impl BorshDeserialize for IntegrationInstructionData {
+    fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        match Discriminator::deserialize_reader(reader)? {
+            Self::WITHDRAW_INTEGRATION_REWARDS => Ok(Self::WithdrawIntegrationRewards),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid discriminator",
+            )),
+        }
+    }
+}
+
+impl BorshSerialize for IntegrationInstructionData {
+    fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        match self {
+            Self::WithdrawIntegrationRewards => {
+                Self::WITHDRAW_INTEGRATION_REWARDS.serialize(writer)
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,9 +118,9 @@ impl From<WithdrawIntegrationRewardsAccounts> for Vec<AccountMeta> {
 
 /// Handler-side view of [`WithdrawIntegrationRewardsAccounts`]. Integration
 /// programs peel this out of their `accounts_iter` in one call, which
-/// enforces the slot ordering and contract-level writable/signer flags.
-/// Integration-specific checks (PDA seed derivation, epoch match) are left
-/// to the caller.
+/// enforces the slot ordering, contract-level writable/signer flags, and
+/// that the parent `Distribution`'s `dz_epoch` matches the integration's
+/// local epoch.
 pub struct WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
     pub integration_distribution_info: (usize, &'a AccountInfo<'b>),
     pub integration_2z_bucket_info: (usize, &'a AccountInfo<'b>),
@@ -73,10 +128,12 @@ pub struct WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
     pub parent_distribution: ZeroCopyAccount<'a, 'b, Distribution>,
 }
 
-impl<'a, 'b> TryNextAccounts<'a, 'b, ()> for WithdrawIntegrationRewardsHandlerAccounts<'a, 'b> {
+impl<'a, 'b> TryNextAccounts<'a, 'b, crate::types::DoubleZeroEpoch>
+    for WithdrawIntegrationRewardsHandlerAccounts<'a, 'b>
+{
     fn try_next_accounts(
         accounts_iter: &mut EnumeratedAccountInfoIter<'a, 'b>,
-        _: (),
+        integration_dz_epoch: crate::types::DoubleZeroEpoch,
     ) -> Result<Self, ProgramError> {
         let integration_distribution_info = try_next_enumerated_account(
             accounts_iter,
@@ -105,6 +162,14 @@ impl<'a, 'b> TryNextAccounts<'a, 'b, ()> for WithdrawIntegrationRewardsHandlerAc
             msg!("Account {} must be signer", parent_distribution.index);
             return Err(ProgramError::MissingRequiredSignature);
         }
+        if parent_distribution.dz_epoch != integration_dz_epoch {
+            msg!(
+                "DZ epoch mismatch: integration={}, parent={}",
+                integration_dz_epoch,
+                parent_distribution.dz_epoch,
+            );
+            return Err(ProgramError::InvalidAccountData);
+        }
 
         Ok(Self {
             integration_distribution_info,
@@ -130,12 +195,12 @@ mod tests {
 
     #[test]
     fn withdraw_integration_rewards_discriminator_is_stable() {
-        // The enum's discriminator is encoded as the first byte (Borsh enum
-        // variant index). Future variants must be appended; existing ones
-        // must keep their index for backward compatibility.
         let serialized =
             borsh::to_vec(&IntegrationInstructionData::WithdrawIntegrationRewards).unwrap();
-        assert_eq!(serialized, vec![0]);
+        let expected =
+            borsh::to_vec(&IntegrationInstructionData::WITHDRAW_INTEGRATION_REWARDS).unwrap();
+        assert_eq!(serialized, expected);
+        assert_eq!(serialized.len(), DISCRIMINATOR_LEN);
     }
 
     #[test]

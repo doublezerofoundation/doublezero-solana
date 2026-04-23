@@ -1955,10 +1955,7 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
 
     // Snapshot destination balance pre-CPI so we can measure the transferred
     // amount via delta.
-    let balance_before = spl_token_interface::state::Account::unpack(
-        &destination_token_account_info.data.borrow()[..],
-    )?
-    .amount;
+    let balance_before = try_token_account_amount(destination_token_account_info)?;
 
     let withdraw_ix = try_build_instruction(
         &rewards_integration.program_id,
@@ -1980,13 +1977,9 @@ fn try_collect_integration_rewards(accounts: &[AccountInfo]) -> ProgramResult {
 
     invoke_signed_unchecked(&withdraw_ix, accounts, &[distribution_signer_seeds])?;
 
-    let balance_after = spl_token_interface::state::Account::unpack(
-        &destination_token_account_info.data.borrow()[..],
-    )?
-    .amount;
-    let collected_amount = balance_after
-        .checked_sub(balance_before)
-        .ok_or(ProgramError::InvalidAccountData)?;
+    let balance_after = try_token_account_amount(destination_token_account_info)?;
+    // No underflow: destination is rev-distr's Distribution 2Z PDA
+    let collected_amount = balance_after - balance_before;
 
     distribution.collected_2z_from_integrations = distribution
         .collected_2z_from_integrations
@@ -3163,6 +3156,11 @@ fn try_next_2z_token_pda_info<'a, 'b>(
     }
 
     Ok((account_index, token_pda_info, token_pda_bump))
+}
+
+#[inline(always)]
+fn try_token_account_amount(info: &AccountInfo) -> Result<u64, ProgramError> {
+    Ok(spl_token_interface::state::Account::unpack(&info.data.borrow()[..])?.amount)
 }
 
 #[inline(always)]

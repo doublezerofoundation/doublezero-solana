@@ -13,8 +13,7 @@ use solana_pubkey::Pubkey;
 
 use crate::{
     account_info::{
-        try_borrow_data, try_borrow_mut_data, try_next_enumerated_account, NextAccountOptions,
-        TryNextAccounts,
+        try_borrow_data, try_borrow_mut_data, try_next_enumerated_account, TryNextAccounts,
     },
     Discriminator, PrecomputedDiscriminator, DISCRIMINATOR_LEN,
 };
@@ -87,13 +86,7 @@ impl<'a, 'b, T: Pod + PrecomputedDiscriminator> TryNextAccounts<'a, 'b, Option<&
         accounts_iter: &mut Enumerate<Iter<'a, AccountInfo<'b>>>,
         program_id: Option<&'a Pubkey>,
     ) -> Result<Self, ProgramError> {
-        let (index, account_info) = try_next_enumerated_account(
-            accounts_iter,
-            NextAccountOptions {
-                owned_by: program_id,
-                ..Default::default()
-            },
-        )?;
+        let (index, account_info) = try_next_enumerated_account(accounts_iter, Default::default())?;
 
         Self::try_from_account_info(index, account_info, program_id)
     }
@@ -175,14 +168,7 @@ impl<'a, 'b, T: Pod + PrecomputedDiscriminator> TryNextAccounts<'a, 'b, Option<&
         accounts_iter: &mut Enumerate<Iter<'a, AccountInfo<'b>>>,
         program_id: Option<&'a Pubkey>,
     ) -> Result<Self, ProgramError> {
-        let (index, account_info) = try_next_enumerated_account(
-            accounts_iter,
-            NextAccountOptions {
-                must_be_writable: true,
-                owned_by: program_id,
-                ..Default::default()
-            },
-        )?;
+        let (index, account_info) = try_next_enumerated_account(accounts_iter, Default::default())?;
 
         Self::try_from_account_info(index, account_info, program_id)
     }

@@ -8,16 +8,14 @@ use doublezero_revenue_distribution::{
         account::CollectIntegrationRewardsAccounts, ProgramConfiguration, ProgramFlagConfiguration,
         RevenueDistributionInstructionData,
     },
+    integration::{find_integration_bucket_address, find_integration_distribution_address},
     types::DoubleZeroEpoch,
-    DOUBLEZERO_MINT_KEY,
 };
-use mock_rewards_integration::state::MockIntegrationDistribution;
 use solana_program_test::tokio;
 use solana_pubkey::Pubkey;
 use solana_sdk::{
     instruction::InstructionError, signature::Keypair, transaction::TransactionError,
 };
-use spl_associated_token_account_interface::address::get_associated_token_address;
 
 //
 // Setup.
@@ -52,21 +50,20 @@ async fn setup_for_collect_integration_rewards() -> CollectIntegrationRewardsSet
         .await
         .unwrap();
 
-    // Initialize the mock's per-epoch integration distribution PDA.
-    let (integration_distribution_key, _) = MockIntegrationDistribution::find_address(dz_epoch);
+    // Initialize the mock's per-epoch integration distribution PDA. The mock
+    // also creates the 2Z bucket PDA as part of this instruction.
+    let (integration_distribution_key, _) =
+        find_integration_distribution_address(&mock_rewards_integration::ID, dz_epoch);
+    let (integration_2z_bucket_key, _) = find_integration_bucket_address(
+        &mock_rewards_integration::ID,
+        &integration_distribution_key,
+    );
     test_setup
         .mock_initialize_integration_distribution(dz_epoch)
         .await
         .unwrap();
 
-    // Create the mock's bucket ATA, owned by its integration distribution
-    // PDA, and seed it with 2Z.
-    test_setup
-        .create_2z_ata(&integration_distribution_key)
-        .await
-        .unwrap();
-    let integration_2z_bucket_key =
-        get_associated_token_address(&integration_distribution_key, &DOUBLEZERO_MINT_KEY);
+    // Seed the bucket with 2Z.
     test_setup
         .transfer_2z(&integration_2z_bucket_key, SEEDED_BUCKET_AMOUNT)
         .await
@@ -190,7 +187,7 @@ async fn test_cannot_collect_integration_rewards_when_epoch_mismatched() {
     // and point the instruction at it.
     let wrong_dz_epoch = DoubleZeroEpoch::new(dz_epoch.value() + 1);
     let (wrong_integration_distribution_key, _) =
-        MockIntegrationDistribution::find_address(wrong_dz_epoch);
+        find_integration_distribution_address(&mock_rewards_integration::ID, wrong_dz_epoch);
 
     test_setup
         .mock_initialize_integration_distribution(wrong_dz_epoch)
