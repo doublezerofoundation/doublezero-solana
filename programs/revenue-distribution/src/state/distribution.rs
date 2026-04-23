@@ -2,6 +2,7 @@ use std::ops::Range;
 
 use bytemuck::{Pod, Zeroable};
 use doublezero_program_tools::{
+    bitmap,
     types::{Flags, StorageGap},
     {Discriminator, PrecomputedDiscriminator},
 };
@@ -100,7 +101,9 @@ pub struct Distribution {
     /// Number of integrations already collected this epoch. When equal to
     /// `integrations_count_snapshot`, `DistributeRewards` is unblocked.
     pub integrations_collected_count: u16,
-    _padding_1: [u8; 4],
+
+    /// Indexed by `RewardsIntegration.registration_index`.
+    pub collected_integrations_bitmap: [u8; 4],
 
     pub collected_2z_from_integrations: u64,
 
@@ -195,6 +198,20 @@ impl Distribution {
     #[inline]
     pub fn are_all_integrations_collected(&self) -> bool {
         self.integrations_collected_count >= self.integrations_count_snapshot
+    }
+
+    #[inline]
+    pub fn is_integration_collected(&self, index: u16) -> bool {
+        bitmap::bit_at(&self.collected_integrations_bitmap, index as usize).unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn set_integration_collected(&mut self, index: u16) {
+        let _ = bitmap::set_bit_at(
+            &mut self.collected_integrations_bitmap,
+            index as usize,
+            true,
+        );
     }
 
     #[inline]
@@ -393,6 +410,29 @@ mod tests {
         // All collected → gate open.
         distribution.integrations_collected_count = 2;
         assert!(distribution.are_all_integrations_collected());
+    }
+
+    #[test]
+    fn test_integration_bitmap_helpers() {
+        let mut distribution = Distribution::default();
+
+        for idx in 0..32 {
+            assert!(!distribution.is_integration_collected(idx));
+        }
+
+        for idx in [0u16, 7, 8, 15, 16, 23, 24, 31] {
+            distribution.set_integration_collected(idx);
+            assert!(distribution.is_integration_collected(idx));
+        }
+
+        for idx in [1u16, 6, 9, 14, 17, 22, 25, 30] {
+            assert!(!distribution.is_integration_collected(idx));
+        }
+
+        distribution.set_integration_collected(32);
+        distribution.set_integration_collected(u16::MAX);
+        assert!(!distribution.is_integration_collected(32));
+        assert!(!distribution.is_integration_collected(u16::MAX));
     }
 
     #[test]
